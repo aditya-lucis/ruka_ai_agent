@@ -1,0 +1,23 @@
+# ---- Rahasia & lingkungan ----
+.env
+.audit/
+# ---- Python ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+# ---- Build & packaging ----
+dist/
+build/
+*.egg-info/
+# ---- Editor & OS ----
+.idea/
+.vscode/
+.DS_Store
+# ---- Artefak runtime Ruka ----
+data/*.sqlite3
+data/rag_index/
+logs/*.jsonl

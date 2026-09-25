@@ -1,0 +1,15 @@
+[project]
+name = "ruka-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+ "google-genai>=1.0",
+ "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", ".."]
+markers = ["integration: panggilan API nyata (jalur manual)"]
