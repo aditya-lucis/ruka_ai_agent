@@ -85,7 +85,7 @@ class MemoryRevisionStrategy:
                         key=lambda pair: -pair[0])
         loser_score, loser = scored[0]
         winner_score = _score(new, now)
-        if winner_score <= loser_score:
+        if winner_score < loser_score:
             # pernyataan baru kalah? tetap simpan, tapi jangan timpa —
             # konflik dikerek ke antrian tinjauan (trace), bukan senyap.
             return ConflictVerdict(winner=loser, loser=new,

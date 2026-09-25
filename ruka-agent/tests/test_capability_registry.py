@@ -9,6 +9,7 @@ from src.capability.registry import (
 
 def test_default_registry_has_core_models():
     reg = default_registry()
+    assert reg.supports("gemini-3.6-flash", "text")
     assert reg.supports("gemini-3.8-flash", "text")
     assert reg.supports("gemini-3.1-flash-live-preview", "live")
     assert reg.supports("gemini-3.1-flash-tts-preview", "audio_output")

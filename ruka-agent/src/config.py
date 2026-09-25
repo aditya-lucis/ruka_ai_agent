@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 VALID_ENVIRONMENTS = frozenset({"development", "staging", "production"})
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview"
 DEFAULT_LIVE_MODEL = "gemini-3.1-flash-live-preview"
 
@@ -80,17 +80,14 @@ def load_settings(env: dict[str, str] | None = None,
     Artinya: developer bisa meng-override satu variabel dari shell tanpa
     menyentuh .env, dan CI tetap deterministik.
     """
-    if dotenv_path is None:
-        dotenv_path = Path(".env")
-    
-    file_env = _load_env_file(dotenv_path)
-    
     if env is not None:
-        overrides = dict(env)
+        e = dict(env)
     else:
+        if dotenv_path is None:
+            dotenv_path = Path(".env")
+        file_env = _load_env_file(dotenv_path)
         overrides = {k: v for k, v in os.environ.items() if v != ""}
-        
-    e = {**file_env, **overrides}
+        e = {**file_env, **overrides}
     api_key = e.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise ConfigError(

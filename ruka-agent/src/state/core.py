@@ -39,6 +39,23 @@ class EmotionalSimState(BaseModel):
     dominance: float = 0.6        # 0..1 (rendah diri..percaya diri)
     updated_at: datetime = Field(default_factory=utcnow)
 
+    @property
+    def mood(self) -> str:
+        """Kategori diskrit dari VAD (calm/neutral/focused/happy/dll)."""
+        if self.valence > 0.4 and self.dominance > 0.6:
+            return "proud" if self.arousal > 0.4 else "smug"
+        if self.valence > 0.3:
+            return "excited" if self.arousal > 0.6 else "happy"
+        if self.arousal > 0.5 and self.dominance > 0.5:
+            return "focused" if self.valence > -0.1 else "serious"
+        if self.arousal > 0.5 and self.valence < -0.2:
+            return "worried"
+        if self.arousal > 0.3 and self.valence < 0.0 and self.dominance < 0.45:
+            return "confused"
+        if self.valence < -0.3 and self.arousal < 0.3:
+            return "cold"
+        return "calm" if self.arousal < 0.3 else "neutral"
+
 class ExpressionState(BaseModel):
     expression: str = "neutral"
     since: datetime = Field(default_factory=utcnow)

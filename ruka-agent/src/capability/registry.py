@@ -78,12 +78,18 @@ class ModelCapability:
     notes: str = ""
 
 REGISTRY: dict[str, ModelCapability] = {
+    "gemini-3.6-flash": ModelCapability(
+        model_id="gemini-3.6-flash", api="interactions",
+        text=True, image_input=True, audio_input=True,
+        function_calling=True, structured_output=True,
+        thinking_levels=("low", "medium", "high"),
+        notes="model kerja utama (reasoning/agentic); BUKAN model Live API"),
     "gemini-3.8-flash": ModelCapability(
         model_id="gemini-3.8-flash", api="interactions",
         text=True, image_input=True, audio_input=True,
         function_calling=True, structured_output=True,
         thinking_levels=("low", "medium", "high"),
-        notes="model kerja utama (reasoning/agentic); BUKAN model Live API"),
+        notes="frontier flash model; reasoning/agentic"),
     "gemini-3.5-flash": ModelCapability(
         model_id="gemini-3.5-flash", api="interactions",
         text=True, image_input=True, audio_input=True,
