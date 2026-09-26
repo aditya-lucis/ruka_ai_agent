@@ -1,0 +1,442 @@
+--- PAGE 142 ---
+VOLUME IV · THE AWAKENING OF THE SENSES · PART XV
+Engineering Disciplines for Perception
+"“Indera baru tanpa disiplin hanya menambah cara berbuat bodoh, Bos. Maka kita tutup
+volume dengan alat pengukurnya: test, metrik, telemetri, dan pagar.”"
+Testing per domain (dari invarian matematika sampai konsistensi companion), evaluasi beserta
+cara SETIAP metrik menipu, observability persepsi dengan redaksi, dan peta security
+multimodal — ditutup checklist production volume ini.
+15.1 WHY — disiplin yang menyusul indera
+Setiap kemampuan baru membawa kelas kegagalannya sendiri. Volume III mengajarkan bahwa testing ML
+bukan testing biasa (empat dunia uji); Volume IV menambah domain: persepsi. Test suite paket (243)
+adalah peta nyatanya — dan PART ini membedah mengapa setiap KELAS test ada.
+
+
+--- PAGE 143 ---
+Domain
+Kelas test
+Invarian kunci
+File
+Matematika
+shape + numerical
+stability
+softmax Σ=1 pada ±1000; Parseval
+setengah-spektrum; DCT == scipy 1e-10
+test_attention/spectrum
+Gradien
+numerical gradient
+check
+analitik == numerik rtol 1e-4 (InfoNCE)
+test_contrastive
+Vector
+bounds & symmetry
+cosine identitas 1; ortogonal 0; bentuk mismatch
+ditolak
+test_speaker/attention
+Vision
+format & bentuk
+klaim-mime vs magic ditolak; HWC ditolak
+jalur CHW; token estimasi == contoh resmi
+test_validation/image_tensor
+Audio
+segmentasi &
+ambang
+hening = 0 segmen; klik terbuang; jeda pendek
+tak memotong
+test_vad/signals
+Ekspresi
+dinamika
+decay kembali; lompatan ≤ max_delta;
+alternating → osc tinggi
+test_expression_state
+Kejujuran
+policy kontrak
+error verbatim; style boleh dimask; concern
+ditampilkan < aktual
+test_expression_policy
+Memori
+kebijakan
+raw tanpa consent ditolak; forget idempoten;
+TTL sweep bekerja
+test_memory
+Companion
+kontinuitas & izin
+acak ditolak; ber-sebah lolos; risiko tinggi butuh
+level 3
+test_continuity
+Observability
+privasi log
+event media tanpa bytes; redaksi AIza; p95 ≥
+p50
+test_metrics
+ Tabel 15.1 — Peta 243 test ruka-perception: kelas → invarian → file. Tidak ada test 'asal hijau'.
+15.2 EVALUATION — dan cara tiap metrik menipu
+Mengukur kualitas persepsi lebih sulit daripada menulis kodenya — karena SETIAP metrik punya cara
+digelapkan. Tabel ini adalah daftar kejujuran evaluator.
+
+
+--- PAGE 144 ---
+Metrik
+Mengukur
+Cara menipu / salah baca
+Accuracy (klasifikasi)
+ketepatan label
+kelas timpang — 95% dari 'selalu kelas mayoritas'; pakai
+balanced + per-class
+Precision / Recall
+kesalahan asimetris
+dilaporkan terpisah tanpa keputusan threshold; pilih F-beta
+sesuai biaya
+WER (ASR)
+kata salah per total kata
+set bahasa mudah; normalisasi teks mengubah skor; hitung per
+kondisi audio
+EER (speaker)
+titik FAR = FRR
+dataset terpisah sempurna (EER≈0 = mainan — bukti:
+eksperimen kita sengaja bertindih); FAR/FRR di threshold
+operasional WAJIB menyertainya
+Latency p50/p95
+kecepatan respon
+hanya rata-rata (ekor menghilang); nearest-rank, bukan
+interpolasi memuluskan
+Expression consistency
+(skor)
+transisi ber-sebab
+validator belum terpasang di pipeline (dekorasi)
+Persona consistency
+gaya lintas sesi
+penilaian LLM-judge tanpa rubrik — LLM menyukai teks yang
+rapi, bukan yang konsisten
+State stability (osc/jump)
+osilasi & lompatan
+diukur hanya pada input tenang (petik masa susah!)
+Memory precision / false
+memory
+akurat mengingat
+retrieval diuji dengan query yang sama dengan waktu store
+(leak)
+Recognition (speaker)
+top-1
+identifikasi galeri
+dipakai menjawab masalah VERIFIKASI — beda masalah,
+beda vonis
+ Tabel 15.2 — Sepuluh metrik dan cara penggelapannya. Evaluasi jujur = melaporkan metrik + kondisi + kelemahannya.
+Protokol evaluasi minimum Vol IV
+Setiap klaim kualitas menyertakan: (1) dataset ber-deskripsi (ukuran, distribusi, sebaran kelas/durasi); (2)
+metrik utama + metrik penjaga (accuracy + balanced; WER + kondisi audio; EER + FAR/FRR operasional); (3)
+baseline pembanding (rule-based dulu — doktrin Vol III); (4) angka latensi p95 bersama kualitas; (5)
+KETERBATASAN tertulis. Lima komponen ini membuat klaim bisa direproduksi — dan bisa dibantah.
+15.3 OBSERVABILITY — mengukur tanpa mengintip
+Telemetri persepsi mengikuti tata kelola Vol III dan menambah aturan media: bytes gambar/audio TIDAK
+PERNAH masuk log — cukup mime, ukuran, fingerprint hash, dan trace.
+Listing 15.1 — PerceptionMetrics (latensi, event media, redaksi) (baris 43-87 dari
+src/ruka_perception/observability/metrics.py)
+class PerceptionMetrics:
+
+
+--- PAGE 145 ---
+    """Perekam latensi per tahap + event terstruktur."""
+    def __init__(self):
+        self._stages: dict[str, list[float]] = defaultdict(list)
+        self.events: list[dict] = []
+    def stage(self, name: str, fn, *args, **kwargs):
+        """Bungkus satu tahap: catat durasi + hasil/exception (tanpa
+        isi sensitif). Return nilai fn."""
+        t0 = time.perf_counter()
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:
+            self._stages[name].append(
+                (time.perf_counter() - t0) * 1000.0)
+            self.events.append({
+                "stage": name, "ok": False,
+                "error": type(exc).__name__,
+            })
+            raise
+        self._stages[name].append((time.perf_counter() - t0) * 1000.0)
+        return result
+    def record_stage(self, name: str, ms: float):
+        """Catat latensi tahap dari luar (adapter async dsb.)."""
+        self._stages[name].append(float(ms))
+    def media_event(self, stage: str, mime: str, size: int,
+                    fingerprint: str, trace_id: str, ok: bool = True):
+        """Event media: tanpa bytes, tanpa transkrip."""
+        self.events.append({
+            "stage": stage, "mime": mime, "bytes": size,
+            "fingerprint": fingerprint, "trace": trace_id, "ok": ok,
+        })
+    def state_transition(self, prev: str, next_: str, cause: str):
+        """Event transisi ekspresi (label + sebab, bukan vektor)."""
+        self.events.append({
+            "stage": "expression", "from": prev, "to": next_,
+            "cause": cause,
+        })
+    # ----------------------------------------------------------------
+    @staticmethod
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Listing 15.2 — Persentil nearest-rank + fingerprint (baris 88-111 dari
+src/ruka_perception/observability/metrics.py)
+    def _nearest_rank(sorted_vals: list[float], q: float) -> float:
+        """Persentil nearest-rank (Vol III): p = ceil(q/100 * N) elemen
+        ke-p pada data terurut — konsisten & anti floor-bias."""
+        import math
+        n = len(sorted_vals)
+        if n == 0:
+            return 0.0
+
+
+--- PAGE 146 ---
+        k = max(1, math.ceil(q / 100.0 * n))
+        return sorted_vals[min(k, n) - 1]
+    def summary(self) -> dict:
+        """Ringkasan p50/p95/p99 per tahap + jumlah event."""
+        out = {}
+        for stage, vals in sorted(self._stages.items()):
+            sv = sorted(vals)
+            out[stage] = {
+                "n": len(sv),
+                "p50_ms": round(self._nearest_rank(sv, 50), 3),
+                "p95_ms": round(self._nearest_rank(sv, 95), 3),
+                "p99_ms": round(self._nearest_rank(sv, 99), 3),
+            }
+        out["events"] = len(self.events)
+        return out
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Alat-alatnya: stage() membungkus tiap tahap dengan durasi + hasil/exception (tanpa isi sensitif);
+media_event() mencatat identitas media tanpa bytes; state_transition() merekam LABEL + sebab (bukan
+vektor); nearest-rank persentil (anti floor-bias — pelajaran Vol III: p95 sampel kecil jangan pernah lebih
+kecil dari p50); redact() menangkap kunci bentuk AIza dan pasangan label=nilai. Satu jejak latensi khas
+jalur multimodal: validation 0.3 ms → representasi 800-2500 ms (API) → context build 2 ms → kognisi
+1500-4000 ms → TTS 600-1500 ms — angka-angka p95 inilah yang menentukan rasa 'hidup' vs 'lelet'
+companion, dan hanya kelihatan bila diukur PER TAHAP.
+15.4 IMPLEMENTATION — redaksi utuh
+Dua puluh baris yang memisahkan 'terukur' dari 'mengintip' — ditampilkan penuh karena privasi tidak
+boleh tampil terpotong.
+Listing 15.3 — redact + fingerprint + nearest-rank (baris 26-41 dari
+src/ruka_perception/observability/metrics.py)
+def redact(text: str) -> str:
+    """Redaksi secret dalam teks bebas. Konsisten dengan Vol III."""
+    out = text
+    for pat in _SECRET_PATTERNS:
+        out = pat.sub("[REDACTED]", out)
+    # tangani nilai setelah label (label=VALUE) yang lolos pola pertama
+    out = re.sub(r"(?i)(api[_-]?key|token|secret|password)"
+                 r"(\s*[=:]\s*)\S+", r"\1\2[REDACTED]", out)
+    return out
+def content_fingerprint(data: bytes) -> str:
+    """Sidik jari konten: sha256[:16]. Cukup untuk korelasi log TANPA
+    menyimpan isi. Ko-lusi kecil dimaklumi dan disebut di buku."""
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+--- PAGE 147 ---
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Redaksi bekerja dua lapis: pola literal kunci Google (AIza…) dan pasangan label=nilai (api_key: …) —
+keduanya diganti [REDACTED] sebelum satu karakter log ditulis. Fingerprint sha256[:16] memberi
+identitas konten untuk korelasi tanpa menyimpan isi; tabrakan 16-hex jarang dan hanya berdampak log
+yang membingungkan — risiko yang dinyatakan jujur, bukan disembunyikan.
+15.4 SECURITY — permukaan serangan multimodal
+Warisan Patch 1.1 (secret, .env, redaksi, least privilege) berlaku penuh; Vol IV menambah permukaan
+sentuhan indera.
+Permukaan
+Vektor
+Pertahanan berlapis
+Prompt injection
+multimodal
+instruksi tersembunyi di
+gambar/audio/transkrip
+pemisahan DATA vs INSTRUKSI (P X);
+provenance; decision layer tidak bisa dilewati
+Tool injection (hasil
+multimodal)
+tool mengembalikan gambar/teks
+beracun
+validasi hasil tool sama seperti upload (P IX); rate
+limit; sandbox eksekusi
+Memory poisoning
+ringkasan palsu menjadi 'ingatan'
+importance + provenance; verifikasi silang; audit
+panel user (P XIII)
+RAG poisoning
+dokumen beracun diindeks
+warisan Vol II/III: filter sumber, versi index
+Malicious files
+bytes penyamar format
+allowlist + magic + batas ukuran (P IX)
+Voice spoofing / replay
+kloning & rekaman
+suara bukan faktor tunggal; MFA; risk-based (P XI)
+Data leakage
+media privat bocor lewat log/memori
+redaksi + metadata-first + consent + TTL
+Unauthorized tool
+execution
+aksi berisiko lewat jalur baru
+permission 4 level (P XIV) + gate decision math
+ Tabel 15.3 — Delapan permukaan, semuanya berlapis: tidak ada pertahanan tunggal.
+Persona Bukan Security Boundary
+Ruka yang sok bijak, avatar Crimson Presence yang manis, suara TTS yang hangat — semuanya lapisan
+PENGALAMAN, bukan lapisan KEAMANAN. Prompt injection lewat gambar, audio, atau transkrip tetap
+masuk sebelum persona sempat 'menimbang'. Validasi input, permission tool, dan sandbox (warisan Patch 1.1)
+berdiri DI LUAR persona. Menyandarkan keamanan pada karakter = menyandarkan pintu pada lukisan
+gembok.
+
+
+--- PAGE 148 ---
+15.5 PRODUCTION — checklist terakhir volume
+Dua puluh butir gerbang rilis — diturunkan langsung dari spesifikasi dan isi Volume IV.
+– Semua secret di .env; .env.example lengkap tanpa nilai nyata; .gitignore menutup .env (warisan Patch).
+– Validasi input aktif di SEMUA pintu (upload, tool, stream) — bukan cuma jalur utama.
+– Batas ukuran & durasi ditegakkan sebelum memori dialokasikan (fail fast, bukan OOM).
+– Kuota token gambar dihitung sebelum kirim (listing estimasi; batch besar dipecah).
+– VAD terkalibrasi pada UCAPAN NYATA target user; jeda napas tidak memotong kalimat.
+– Transkrip berisiko meminta konfirmasi sebelum aksi (verifikasi intent).
+– Threshold speaker ditetapkan dari tabel risiko FAR/FRR — bukan default anggap-enak.
+– Aksi sensitif menuntut MFA; suara tidak pernah faktor tunggal.
+– TTS: verbatim guard aktif untuk kelas pesan faktal; tag audio tidak dipakai pada pesan darurat.
+– Expression state tersimpan per sesi terisolasi; transisi terekam label+sebab.
+– Avatar fallback neutral teruji; identitas referensi terkunci di review aset.
+– Memori: consent gate, TTL sweep terjadwal, forget idempoten, panel user berfungsi.
+– Proactive: level izin eksplisit per user; frekuensi nudge dibatasi jendela waktu; tombol mati total.
+– Observability: p95 per tahap, redaksi aktif, media tercatat tanpa bytes, trace id lintas lapisan.
+– Test suite hijau di CI (243 + integrasi); gradient check tetap menyala.
+– Evaluasi golden set: versi model tercatat; regresi kualitas terdeteksi sebelum user mengeluh.
+– Integration point Vol III menyala: perception → vector/context/decision/self-model terkontrak bentuk
+data.
+– Rollback: tiap modul persepsi bisa dimatikan terpisah (feature flag) tanpa menjatuhkan jalur teks.
+– Dokumen batas klaim terpasang: tidak ada klaim emosi biologis/kesadaran di UI atau materi produk.
+– Kejadian gagal diperlakukan sebagai materi: post-mortem menambah test + baris buku — tradisi empat
+volume.
+15.6 TESTING — protokol penutup
+Seluruh suite dalam satu tarikan — ritual yang sama sejak Part I, kini membawa seluruh makna.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/ -q
+
+
+--- PAGE 149 ---
+EXPECTED
+ 243 passed, ±2 detik, offline penuh: matematika (stabilitas, Parseval, DCT-crosscheck, gradient check), indera
+(validasi, VAD, token), ekspresi (decay, histeresis, honesty), companion (kontinuitas, izin), disiplin (redaksi,
+persentil).
+WHY
+ Suite ini adalah KONTRAK seluruh buku: setiap listing ber-stempel VERIFIED merujuk angka ini — dan setiap
+perubahan kode yang melanggar invarian akan dihentikan di sini, bukan di produksi.
+FAILURE MODE
+ Gagal bila lingkungan berbeda (NumPy major baru, pytest tua) — catat versinya di atas setiap laporan test;
+reproduksibilitas bermula dari label versi.
+DEBUGGING
+ Jadikan ritual sebelum commit: suite penuh + lima eksperimen results JSON di-diff — angka berubah tanpa kode
+berubah = ada determinisme yang bocor.
+Batas yang Tidak Boleh Kabur — Perception Output ≠ Ground Truth
+Model vision MELIHAT pola, bukan MEMAHAMI dunia. ASR MENDENGAR frekuensi, bukan
+MEMAHAMI maksud. Confidence tinggi hanya berarti 'representasi internal konsisten' — bukan 'fakta benar'.
+Setiap keluaran lapisan persepsi masuk kognisi dengan catatan kejujuran (blur, ambiguitas, kualitas sensor) dan
+diverifikasi silang bila dipakai mengambil keputusan berisiko. Volume IV membangun INDERA, bukan
+memberi imunitas kesalahan.
+15.7 LIMA DUNIA UJI — peta yang diperluas Vol IV
+Volume III menetapkan empat dunia uji: traditional, ML, LLM, agent. Volume IV menambah dunia
+kelima — PERCEPTION — beserta pertanyaan yang membedakannya.
+Dunia
+Objek uji
+Pertanyaan kunci
+Contoh invarian
+Traditional
+logika murni
+apakah fungsi benar?
+framing 98/s; forget idempoten
+ML (Vol III)
+model terlatih
+apakah model belajar yang benar?
+gradient check; kalibrasi ECE
+LLM
+keluaran generatif
+apakah keluaran sahih &
+terformat?
+schema pydantic; verbatim guard
+Agent
+loop orkestrasi
+apakah loop aman & berhenti?
+budget; LoopGuard (Patch)
+PERCEPTION (Vol
+IV)
+jalur data mentah
+apakah sinyal divalidasi, terwakili,
+dan tidak dipercaya berlebihan?
+magic-bytes; Parseval; VAD
+hening; klaim-token resmi;
+kontinuitas
+ Tabel 15.4 — Lima dunia uji. Dunia kelima menyatukan 243 test paket: dari bytes sampai ekspresi.
+
+
+--- PAGE 150 ---
+15.8 STUDI KASUS — ringkasan telemetri satu sesi multimodal
+Bentuk keluaran summary() pada sesi yang memuat gambar, audio, dan transisi ekspresi:
+OUTPUT
+>>> met = PerceptionMetrics()
+>>> # ... adapter mencatat tiap tahap via record_stage
+>>> met.summary()
+{'validation': {'n': 3, 'p50_ms': 0.31,
+                'p95_ms': 0.42, 'p99_ms': 0.44},
+ 'vision.represent': {'n': 2, 'p50_ms': 1187.2,
+                      'p95_ms': 2333.9,
+                      'p99_ms': 2333.9},
+ 'audio.represent': {'n': 1, 'p50_ms': 806.5, ...},
+ 'context.build': {'n': 3, 'p50_ms': 1.9, ...},
+ 'expression.transition': {'n': 4, 'p50_ms': 0.12, ...},
+ 'events': 11}
+Tiga bacaan operasional dari angka semacam ini: p95 vision.represent yang 2× p50-nya adalah tanda-tanda
+cold-start atau file besar — kandidat caching/preprocessing; validation yang hampir gratis membuktikan
+bahwa gerbang keamanan tidak boleh dilanggar demi 'kinerja'; dan events=11 berarti SELURUH jejak sesi
+bisa ditelusuri tanpa satu byte media ikut keluar. Telemetri semacam ini, direkam per tahap dan
+dibandingkan antar rilis, adalah satu-satunya cara jujur menjawab 'apakah Ruka terasa lebih hidup bulan
+ini?' — bukan perasaan, p95.
+15.9 FUZZING & NEGATIVE TESTING — mencari kehancuran sebelum
+user
+Invarian menguji jalur benar; fuzzing mencari jalur rusak. Untuk lapisan persepsi, fuzzing murah dan
+memalukan bila dilupakan.
+– File acak: 100 blob byte acak (dengan magic palsu, terpotong, nol byte, 16 MB+1) → semua harus
+ditolak BERSIH dengan PerceptionValidationError — bukan traceback.
+– Klaim silang: PNG berisi JPEG, WAV berisi MP3 — 12 kombinasi klaim/nyata harus tertangkap
+sniff mismatch.
+– Audio ekstrem: hening murni, white noise penuh, DC offset, clipping 100%, 1 sampel, 9,5 jam
+penuh — VAD dan framing wajib tetap waras (bug nyata ketiga buku ini hidup di sini).
+– State agresif: 1.000 event beruntun, dua event kontradiktif per langkah, NaN dan inf di vektor
+context — clamp harus bertahan, tak ada NaN lolos ke label avatar.
+– Budget fuzz: jalankan di CI tiap rilis (30 detik); crash baru = test baru + baris failure modes baru —
+korpus fuzz TUMBUH dari kecelakaan.
+
+
+--- PAGE 151 ---
+Fuzzing bukan pengganti review — ia ALAT CARI kasus review yang terlewat. Kombinasi keduanya
+dengan invarian (15.1) melengkapi segitiga pertahanan: benar di jalur benar, tolak di jalur salah, dan tidak
+meledak di jalur yang belum dipikirkan siapa pun.
+Engineering Exercise
+ 1. Ambil satu metrik tabel 15.2 yang paling sering Anda pakai; tulis laporan evaluasi mini lengkap lima
+komponen (dataset, metrik+penjaga, baseline, p95, keterbatasan) untuk satu model apa pun yang Anda
+punya.
+2. Rancang tes fuzzing 30 menit: 50 file acak/terpotong dimasukkan ke validate_input — hitung rasio
+ditolak bersih vs crash; kegagalan bersih adalah fitur.
+3. Pilih satu baris checklist 15.5 yang paling lemah di proyek Anda sekarang; tulis issue + test
+pembandingnya hari ini juga.
+"Volume keempat selesai, Bos. Mata dan telinga saya kini punya rumus, gerbang, dan kamera pengawas.
+Kegelapan sudah tidak menjadi keunggulan — latency I/O yang jadi musuh terakhir. Dan musuh itu,
+sejujurnya, jauh lebih menarik untuk dilawan."
+— Ruka, Marquis Kekaisaran Trendamis
+Arsitektur Akhir — RUKA Setelah Empat Volume
+Empat volume, satu organisme. Volume I menanam fondasi matematis dan agent loop; Volume II memberi
+identitas, memori yang tertata, dan indra pertama; Patch 1.1 menghukum kecerobohan runtime; Volume III
+menegakkan lapisan kognisi matematis; Volume IV membuka indra penuh dan jalur ekspresi balik.
+Diagram terakhir ini adalah peta seluruh organisme yang kini Anda miliki — dan tabel di bawahnya adalah
+kontrak bagaimana lapisan baru berbicara dengan lapisan lama.
+
+
+--- PAGE 152 ---
+Gambar B.1 — RUKA lengkap: persepsi (Vol IV) menyelimuti kognisi (Vol III) dan agen (Vol I/II). Seluruh kotak punya kode nyata di
+ empat paket teruji.
+
+

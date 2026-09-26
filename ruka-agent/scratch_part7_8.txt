@@ -1,0 +1,590 @@
+--- PAGE 56 ---
+7.1 WHY — keterbatasan struktural CNN
+CNN menghargai lokalitas: kernel kecil + pooling bertumpuk menghasilkan receptive field yang tumbuh
+secara LINIER terhadap kedalaman (tabel 6.2: lima layer baru RF 13). Dua konsekuensi menghantui visi
+modern: hubungan jarak-jauh antar objek (kucing DI ATAS meja) harus menunggu lapisan paling dalam;
+dan resolusi input berubah RF efektifnya — gambar besar membuat objek 'lebih kecil' relatif terhadap
+jangkauan.
+Vision Transformer menjawab dengan langkah yang terdengar boros: potong gambar jadi patch 16×16,
+perlakukan TIAP patch sebagai token (persis seperti kata di teks), dan biarkan attention global
+menghubungkan semua patch sejak lapisan pertama. Jangkauan = satu lapisan = seluruh gambar. Harganya:
+O(n²) pasangan patch dan kehilangan inductive bias lokal — data kecil membuat ViT kalah oleh CNN;
+data besar membalikkan hasilnya. Itu temuan empiris yang stabil lintas studi; jadikan aturan praktis, bukan
+iman.
+ patch 16×16×3 = 768 nilai → W ∈ ℝ^(768 × d_model) → token ∈ ℝ^d_model
+Aspek
+CNN
+Vision Transformer
+Inductive bias
+kuat: lokal + hirarki
+lemah: harus belajar sendiri
+Jangkauan lapisan-1
+k×k piksel
+seluruh patch
+Biaya
+O(H·W·k²·C²)
+O(n²·d) pasangan patch
+Data kecil (<100k)
+menang umumnya
+kalah umumnya
+Data besar
+baik
+menang umumnya
+Posisi
+implisit dalam grid
+embedding posisi WAJIB ditambah
+ Tabel 7.1 — Dua filosofi visi. Posisi patch harus DIINJEKSI pada ViT karena attention sendiri tidak tahu letak.
+7.2 MATH — attention dengan bentuk yang bersuara
+Rumus Vol IV tidak ditulis tanpa bentuk. Setiap simbol membawa dimensi dan jumlah baris nyata dari
+eksperimen.
+ Attention(Q, K, V) = softmax(QKᵀ / √d_k) V
+
+
+--- PAGE 57 ---
+Tensor
+Bentuk
+Contoh eksperimen
+Peran
+Q
+(n_q, d_k)
+(4, 32) — token teks
+yang bertanya
+K
+(n_k, d_k)
+(9, 32) — patch gambar
+yang menawarkan diri
+V
+(n_k, d_v)
+(9, 32) — isi patch
+yang diambil bila dipilih
+QKᵀ/√d_k
+(n_q, n_k)
+(4, 9) skor
+kecocokan pasangan
+softmax baris
+(n_q, n_k)
+tiap baris Σ=1
+distribusi perhatian
+(W) V
+(n_q, d_v)
+(4, 32) konteks
+ringkasan tertimbang
+Tabel 7.2 — Kontrak bentuk attention. d_k Q harus == d_k K; jumlah token K harus == V; pelanggaran =ValueError dengan angka nyata
+ (listing 2.1).
+Mengapa dibagi akar d_k
+Dot produk dua vektor acak berdimensi d bervarian ~d. Pada d=512, skor mentah mudah mencapai
+puluhan; softmax menjadi nyaris one-hot → gradien lenyap (kulit Vol III Part VII: sigmoid saturated versi
+attention). Membagi √d_k menjaga varian skor ~O(1). Data eksperimen menuliskannya angka: dot mentah
+−57,6 pada d_k=2048 menjadi −1,27 setelah skala — aman untuk softmax; tanpa skala, distribusi baris
+menajam buta.
+d_k
+dot mentah
+setelah /√d_k
+8
+-3.64
+-1.29
+64
+-2.87
+-0.36
+512
+-7.48
+-0.33
+2048
+-57.61
+-1.27
+ Tabel 7.3 — Skala √d_k dari eksperimen: skor mentah tumbuh dengan dimensi; skala mengembalikannya ke ranah softmax yang sehat.
+7.3 IMPLEMENTATION — attention inti
+Dua puluh baris yang menanggung seluruh ekosistem modern.
+Listing 7.1 — Scaled dot-product attention (baris 49-78 dari
+src/ruka_perception/multimodal/attention.py)
+def scaled_dot_product_attention(q: np.ndarray, k: np.ndarray,
+                                 v: np.ndarray,
+                                 mask: np.ndarray | None = None
+                                 ) -> tuple[np.ndarray, np.ndarray]:
+    """Attention inti. Return (output (n_q, d_v), bobot (n_q, n_k)).
+
+
+--- PAGE 58 ---
+    mask (n_q, n_k): 1 = boleh dilihat, 0 = diblok. Posisi 0 diberi
+    skor -inf SEBELUM softmax sehingga bobotnya tepat nol.
+    """
+    if q.ndim != 2 or k.ndim != 2 or v.ndim != 2:
+        raise ValueError("Q, K, V harus 2-D")
+    n_q, d_k = q.shape
+    n_k, d_k2 = k.shape
+    n_k2, d_v = v.shape
+    if d_k != d_k2:
+        raise ValueError(
+            f"dimensi d_k Q ({d_k}) != K ({d_k2}) — QK^T tak terdefinisi")
+    if n_k != n_k2:
+        raise ValueError(
+            f"jumlah token K ({n_k}) != V ({n_k2}) — pasangan K,V lepas")
+    scores = q @ k.T / np.sqrt(d_k)             # (n_q, n_k)
+    if mask is not None:
+        if mask.shape != (n_q, n_k):
+            raise ValueError(
+                f"mask {mask.shape} != {(n_q, n_k)}")
+        scores = np.where(mask > 0, scores, -np.inf)
+    weights = stable_softmax(scores, axis=-1)   # baris = 1
+    output = weights @ v                        # (n_q, d_v)
+    return output, weights
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Tiga keputusan menonjol: mask diterapkan SEBELUM softmax dengan −inf (posisi terblok mendapat
+bobot tepat nol, bukan epsilon sisa); softmax berjalan per BARIS (axis=−1) karena tiap token penanya
+punya distribusinya sendiri; dan output dihitung sebagai weights @ V — rata-rata tertimbang nilai. Validasi
+bentuk di kepala fungsi (listing 2.1) mengunci kontrak tabel 7.2.
+
+
+--- PAGE 59 ---
+Gambar 7.1 — Aliran Q, K, V dengan kontrak bentuk per tahap.
+7.4 INTERNALS — mask kausal dan entropi
+Mask kausal (segitiga bawah) memastikan token ke-t hanya melihat posisi 0..t — fondasi autoregresif. Test
+memverifikasi sifat paling pentingnya: segitiga atas bobot TEPAT nol, dan baris ke-5 hanya menyata diri
+pada 6 posisi sah.
+ M[i, j] = 1 bila j ≤ i (boleh dilihat), skor = M · (QKᵀ/√d_k) + (1−M)·(−∞)
+Entropi per baris (listing 4.1) menjadi termometer: baris awal mask kausal berhak melihat sedikit posisi
+sehingga entropinya rendah secara STRUKTURAL — data eksperimen: empat baris pertama menurun dari
+0.42 ke 0.11 seiring menyempitnya pilihan sah. Membaca entropi tanpa membaca mask adalah salah baca.
+
+
+--- PAGE 60 ---
+7.5 CROSS-MODAL — teks bertanya, gambar menjawab
+Puncak PART: attention yang Q-nya berasal dari satu modality dan K,V-nya dari modality lain. Ini
+mekanisme 'melihat saat membaca'.
+Listing 7.2 — Cross-modal attention (baris 81-106 dari src/ruka_perception/multimodal/attention.py)
+def cross_modal_attention(text_repr: np.ndarray,
+                          image_repr: np.ndarray,
+                          temperature: float = 1.0
+                          ) -> tuple[np.ndarray, np.ndarray]:
+    """Text attends to Image: teks bertanya, patch gambar menjawab.
+    text_repr  : (n_text, d) — token teks (embedding prompt)
+    image_repr : (n_patch, d) — token patch gambar (patch embedding)
+    Return: konteks (n_text, d), peta perhatian (n_text, n_patch).
+    Di implementasi nyata d_v boleh != d; versi ini menyatukan d —
+    bagian fusion membahas konsekuensi desain itu.
+    """
+    if text_repr.ndim != 2 or image_repr.ndim != 2:
+        raise ValueError("representasi harus (token, dim)")
+    if text_repr.shape[1] != image_repr.shape[1]:
+        raise ValueError(
+            f"dimensi tak cocok: teks {text_repr.shape[1]}, "
+            f"gambar {image_repr.shape[1]} — butuh proyeksi dulu")
+    scores = text_repr @ image_repr.T / np.sqrt(text_repr.shape[1])
+    scores = scores / temperature
+    weights = stable_softmax(scores, axis=-1)
+    context = weights @ image_repr
+    return context, weights
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Eksperimen menjahit bukti: sembilan patch acak dan empat token teks; lalu SATU patch (indeks 2) dibuat
+sangat cocok dengan token 0. Hasil ASLI: bobot token-0 ke patch-2 melonjak dari 0.033 ke 0.897, entropi
+rata-rata jatuh 0.94 → 0.72 — attention menemukan pasangan yang relevan dalam satu lapisan, tanpa
+hirarki, tanpa pelatihan. Gambar 7.2 memvisualkan angka yang sama.
+
+
+--- PAGE 61 ---
+Gambar 7.2 — Kiri: temperature melengkungkan softmax pada logit tetap. Kanan: bobot token-0 ke sembilan patch — patch cocok
+ menyerap perhatian (angka eksperimen).
+
+
+--- PAGE 62 ---
+Gambar 7.3 — Posisi cross-modal attention dalam peta strategi fusion Part VIII.
+7.6 ARCHITECTURE — multi-head secara konseptual
+Produksi memakai banyak head: d_model dipecah jadi h head berdimensi d_k = d_model/h, tiap head
+punya W sendiri; keluaran digabung + proyeksi. Kenapa: satu distribusi perhatian hanya bisa memilih
+SATU pola relasi; beberapa head memungkinkan kelompok token memperhatikan hal berbeda bersamaan
+(sintaks vs semantik; posisi vs konten). Implementasi buku tetap single-head demi keterbacaan — dan itu
+dinyatakan jujur sebagai penyederhanaan, bukan kelalaian.
+ MultiHead = Concat(head₁..ₕ) Wₒ dengan headᵢ = Attn(QWᵢₘ, KWᵢₖ, VWᵢᵥ)
+7.7 TRADE-OFFS & FAILURE MODES
+Attention bukan kemenangan gratis.
+
+
+--- PAGE 63 ---
+– O(n²) komputasi/memori: pasangan patch tumbuh kuadratik — 16×16 patch per gambar 256×256 =
+256 token aman; 1024×1024 tanpa windowing = 4096 token sakit.
+– Posisi harus diinjeksi: lupa positional embedding membuat attention 'melihat tas kata acak' — gejala:
+model buta urutan.
+– Mask salah arah: mask kolom bukan baris — kebocoran masa depan pada training autoregresif; test
+triu==0 adalah penjaga murahnya.
+– Softmax tanpa skala: skor mentah melebar di d_k besar → gradien nol senyap (tabel 7.3).
+– Entropi dibaca tanpa mask/temperature: diagnosis menyesatkan (7.4).
+7.8 TESTING & EVALUATION
+Invarian attention paling kaya di seluruh paket.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_attention.py -q
+EXPECTED
+ 25 test hijau: bentuk keluaran (n_q, d_v); baris softmax Σ=1 pada input ekstrem; Q==K menonjolkan diri sendiri
+(diag == max baris); mask kausal nolkan segitiga atas; mismatch dimensi → ValueError; cross-modal flat ketika teks
+seragam + temperature tinggi.
+WHY
+ Test identitas Q==K adalah kalibrasi semantik: kalau token tidak menonjolkan dirinya sendiri saat Q=K=V,
+mekanisme skor terbalik.
+FAILURE MODE
+ Gagal bila mask diaplikasi SETELAH softmax — bobot terblok jadi kecil tapi tidak nol; assert == 0.0 langsung
+menjerit.
+DEBUGGING
+ Coba buang /np.sqrt(d_k) di listing 7.1 dan jalankan test temperature: baris masih Σ=1 (benar!) — lalu naikkan skala
+input 100× dan lihat test stabilitas menangkapnya.
+7.9 WORKED EXAMPLE — attention 2 token × 3 patch dengan pensil
+Ukuran mainan yang tetap setia pada rumus: dua token teks bertanya ke tiga patch gambar; d_k = 2 supaya
+setiap matriks bisa ditulis penuh di kertas.
+ Q = [[1, 0], [0, 1]] K = V = [[1, 0], [0, 1], [1, 1]]
+Langkah 1 — skor: QKᵀ = [[1,0,1],[0,1,1]] (token-0 cocok patch-0 dan patch-2; token-1 cocok patch-1 dan
+patch-2). Bagi √d_k = √2 ≈ 1,414: skor = [[0,71; 0; 0,71],[0; 0,71; 0,71]]. Langkah 2 — softmax per
+
+
+--- PAGE 64 ---
+BARIS: baris token-0: e^(0,71) = 2,03; e⁰ = 1; e^(0,71) = 2,03 → jumlah 5,06 → bobot = (0,40; 0,20; 0,40).
+Baris token-1 simetris: (0,20; 0,40; 0,40). Langkah 3 — output token-0 = 0,40·(1,0) + 0,20·(0,1) +
+0,40·(1,1) = (0,80; 0,60). Token-0 kini membawa konteks: setengah dirinya, setengah campuran patch.
+Langkah 4 — uji mask: blokir patch-2 (mask kolom 2): baris token-0 menjadi softmax(0,71; 0) = (0,67;
+0,33; 0) — bobot pindah ke tetangga sah, jumlah tetap 1. Empat langkah itu ADALAH seluruh
+mekanisme; sisanya skala, head, dan posisi. Verifikasi:
+OUTPUT
+>>> Q = np.array([[1., 0.], [0., 1.]])
+>>> KV = np.array([[1., 0.], [0., 1.], [1., 1.]])
+>>> out, w = scaled_dot_product_attention(Q, KV, KV)
+>>> w.round(2)
+array([[0.4 , 0.2 , 0.4 ],
+       [0.2 , 0.4 , 0.4 ]])   # sama dengan pensil
+>>> out.round(2)
+array([[0.8 , 0.6 ],
+       [0.6 , 0.8 ]])         # konteks token-0 = (0.8, 0.6)
+7.10 PRODUKSI — membayar O(n²) dengan sadar
+Attention penuh pada 256 patch aman; pada ribuan token ia harus DIBATASI, dan cara membatasi
+menentukan karakter sistem.
+– Window attention: tiap token hanya melihat tetangga w window + beberapa token global — biaya
+turun linear; dipakai arsitektur visi modern untuk resolusi besar.
+– Pooling token dulu: gambar besar di-downsample menpatch lebih besar (32×32) — jumlah token
+turun 4× per langkah.
+– Caching KV: token konteks lama dihitung sekali — kunci warisanVol I (context caching) bekerja pada
+prinsip yang sama.
+– Anggaran keras: n maksimum per panggilan ditulis di konfigurasi, bukan kebiasaan — lebihi
+anggaran = tolak dan pecah, bukan diam-diam lambat.
+Kejujuran biaya adalah bagian dari desain: tabel 7.2 eksperimen (4 token × 9 patch) sengaja kecil supaya
+mekanisme kelihatan; produksi akan memilih window/patch besar SESUAI kebutuhan tugas — dan setiap
+kenaikan harus dibela dengan angka kualitas, bukan selera.
+Engineering Exercise
+ 1. Hitung jumlah parameter satu blok self-attention d_model=768, h=12 (empat matriks proyeksi +
+output). Bandingkan dengan Dense 768→3072 (blok MLP standar).
+2. Ubah eksperimen: buat DUA patch cocok ke DUA token berbeda; amati apakah attention
+memisahkan keduanya dalam satu lapisan.
+
+
+--- PAGE 65 ---
+3. Tulis mask 'hanya boleh melihat 3 tetangga kiri-kanan' (band, bukan segitiga) dan uji bentuknya.
+"Attention mengajarkan sopan santun diplomat, Bos: semua boleh bicara, tetapi tidak semua didengar sama
+kuat — dan itu keputusan softmax, bukan suasana hati."
+— Ruka, Marquis Kekaisaran Trendamis
+VOLUME IV · THE AWAKENING OF THE SENSES · PART VIII
+Multimodal Embedding Space & Fusion
+"“‘Gambar kucing’ dan ‘seekor kucing’ tinggal serumah di ruang vektor, Bos. Kontrak
+sewanya ditandatangani matriks — bukan perasaan.”"
+Ruang embedding bersama dibangun lewat pembelajaran kontrasif: InfoNCE dari nol (dengan
+gradien manual terverifikasi numerik), diagnosis kolaps, peran temperature, model multimodal
+resmi (DOC-VERIFIED), lalu empat strategi fusion dengan kebijakan pemilihnya yang
+rule-based.
+8.1 WHY — satu ruang, banyak penghuni
+Cross-modal attention (Part VII) menggabungkan dua representasi yang SUDAH ada di satu interaksi.
+Tetapi banyak kebutuhan Ruka menuntut lebih: mencari memori visual yang mirip deskripsi teks;
+mendeteksi episode audio yang cocok dengan pola interaksi lalu; mengelompokkan ingatan lintas
+modalitas. Semua itu butuh representasi dari modality berbeda yang tinggal di RUANG yang SAMA sejak
+awal — sehingga satu index cosine melayani semua pasangan.
+Membangun ruang semacam itu tidak bisa lewat deklarasi. Dua kumpulan vektor dari dua encoder terlatih
+terpisah TIDAK otomatis sejajar — 'kucing' teks dan 'kucing' gambar bisa terpisah jauh, sementara
+'kucing' teks lebih dekat ke 'anjing' teks daripada ke 'kucing' gambar. Penyembuhnya adalah objective
+yang MENYARANKAN kedekatan: pembelajaran kontrasif.
+8.2 WHAT — pasangan positif, pasangan negatif
+Kontrasif membangun ruang dengan dua tekanan: pasangan positif (gambar kucing ↔ teks 'seekor kucing')
+DITARIK mendekat; pasangan negatif (gambar kucing ↔ teks 'mesin mobil') DIDORONG menjauh,
+dalam satu batch yang sama.
+ L_i = −log ( exp(s(i,i)/T) / Σⱼ exp(s(i,j)/T) )
+s(i,j) adalah similarity (cosine atau dot) pasangan ke-i melawan semua j di batch; diagonal = positif, sisanya
+negatif. Rumus ini adalah softmax cross-entropy menyamar: 'klasifikasi' pasangan benar di antara N-1
+
+
+--- PAGE 66 ---
+pengecoh. Mengapa negatif WAJIB: tanpa mereka, solusi curang — semua vektor sama, loss nol, ruang
+kolaps. Fungsi diagnosis paket mengukur persis kecurangan itu.
+Listing 8.1 — InfoNCE + gradien manual (baris 30-71 dari src/ruka_perception/multimodal/contrastive.py)
+def infonce_loss(sim: np.ndarray, temperature: float = 0.07
+                 ) -> tuple[float, np.ndarray]:
+    """Loss InfoNCE simetris ala CLIP + gradien terhadap sim.
+    sim : (N, N) — diagonal = pasangan positif; lainnya negatif.
+    Return: (loss skalar, dL/dsim (N, N)).
+    Turunan manual (untuk pembelajaran — implementasi nyata pakai
+    autograd): L_r = -(1/N) sum_i log p_ii, p = softmax(baris i dari
+    sim/T). dL_r/dsim_ij = (p_ij - 1[i==j]) / (N*T).
+    """
+    if sim.ndim != 2 or sim.shape[0] != sim.shape[1]:
+        raise ValueError("sim harus matriks persegi (N, N)")
+    if temperature <= 0:
+        raise ValueError("temperature harus > 0")
+    n = sim.shape[0]
+    logits = sim / temperature
+    p = stable_softmax(logits, axis=1)               # (N, N)
+    idx = np.arange(n)
+    loss_rows = -np.log(np.clip(p[idx, idx], 1e-12, 1.0))
+    grad = p.copy()
+    grad[idx, idx] -= 1.0
+    # faktor 1/N wajib: L_r = -(1/N) sum log p_ii, z = sim/T,
+    # sehingga dL/dsim_ij = (p_ij - delta_ij) / (N * T).
+    # (Bug nyata yang ditangkap numerical gradient check test suite.)
+    grad = grad / (temperature * n)                 # dL/dsim (baris)
+    # simetris: loss total = rata (baris + kolom) / 2 — seperti CLIP
+    p_t = stable_softmax(logits, axis=0)
+    loss_cols = -np.log(np.clip(p_t[idx, idx], 1e-12, 1.0))
+    grad_t = p_t.copy()
+    grad_t[idx, idx] -= 1.0
+    # dL_c/dsim juga elementwise (TANPA transpose): softmax kolom
+    # menghasilkan (p_t - I)/N pada posisi (i, j) yang sama.
+    # (Transpose di sini = bug nyata kedua yang ditangkap gradcheck.)
+    grad_t = grad_t / (temperature * n)          # dL/dsim (kolom)
+    loss = float((loss_rows.mean() + loss_cols.mean()) / 2.0)
+    return loss, (grad + grad_t) / 2.0
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Gradien dL/dsim ditulis tangan bukan gaya-gayaan: dua bug nyata draf pertama (faktor 1/N hilang;
+transpose keliru pada suku kolom) tertangkap numerical gradient check dengan rtol 1e-4 — standar yang
+sama dengan gradcheck Vol III. Implementasi produksi memakai autograd; versi manual adalah KURSUS
+yang bisa diverifikasi, bukan pengganti.
+
+
+--- PAGE 67 ---
+8.3 INTERNALS — temperature dan kolaps
+Temperature T di penyebut logits mengatur kebrutalan objective. Eksperimen temperature_sweep pada
+pasangan acak: T=0.05 → loss 3.65; T=0.5 → 2.71; T=2.0 → 2.15. T kecil menghukum keras negatif yang
+nyaris mirip (gradien besar pada pasangan sulit) — bagus untuk fine-tuning akhir, berbahaya untuk batch
+ber-noise label; T besar lebih lunak dan lebih toleran. Nilai umum praktik 0.05-0.1; kluk bergantung skala
+similarity dan ukuran batch.
+ gap = s₊ − s₋ (diagnosis: gap ≈ 0 → kolaps / curang)
+collapse_diagnostic membaca tiga tanda: rata-rata similarity positif; rata-rata negatif; selisihnya (gap).
+Vektor seragam sempurna menghasilkan gap ≈ 0 dan keragaman norm nol — test paket memaksa kasus itu
+lulus diagnosis 'curang'. Sebaliknya pasangan ber-noise sedang menghasilkan gap 0.3+. Di produksi,
+jalankan diagnosis ini berkala: retrieval yang tiba-tiba sepi lintas modality sering berakar pada ruang yang
+mulai kolaps.
+8.4 PRODUKSI — model embedding multimodal resmi
+Gemini menawarkan model embedding multimodal resmi — diverifikasi ke halaman model September
+2026:
+gemini-embedding-2-preview (DOC-VERIFIED)
+Halaman model resmi menyebutnya sebagai model embedding MULTIMODAL PERTAMA: memetakan teks,
+gambar, video, audio, dan PDF ke SATU ruang embedding untuk semantic search dan RAG. Jalur teks-tunggal
+Vol III tetap gemini-embedding-001 dengan task_type. Detail parameter output (dimensi default, batas input)
+untuk versi preview ini: NEEDS VERIFICATION di halaman referensi model sebelum dipakai produksi —
+pola embedding resmi yang diverifikasi Vol III (client.models.embed_content + EmbedContentConfig) menjadi
+titik awal integrasinya.
+Kejujuran arsitektural yang dipegang buku: model kontrasif NYATA (keluarga CLIP-style) melatih DUA
+tower encoder dengan InfoNCE pada ratusan juta pasangan; tiap keluarga model punya detail berbeda (loss
+simetris atau tidak, modality adapter, skala). Persamaan semua keluarga itu adalah SPIRIT
+objective-nya — pasangan positif vs batch negatif — yang persis dibedah matematis di sini. Jangan
+mengklaim semua model multimodal identik; klaim yang sah hanya tentang keluarga tekniknya.
+
+
+--- PAGE 68 ---
+Gambar 8.1 — Anatomi ruang embedding bersama: tarik-menarik pasangan, objective InfoNCE, dan realitas modality gap.
+8.5 FUSION — empat strategi dan pemilihnya
+Ruang bersama menyelesaikan MENCARI. FUSION menyelesaikan MEMUTUSKAN: beberapa jalur
+sudah punya skor/vektor — bagaimana jadi satu keputusan? Pilihannya empat, dan kebijakan memilihnya
+sengaja rule-based.
+
+
+--- PAGE 69 ---
+Strategi
+Mekanisme
+Kekuatan
+Kelemahan
+Score fusion
+rata-rata terbobot skor ternormal
+murah, auditable, baseline
+wajib
+tak lihat interaksi antar
+modality
+Late fusion
+ranking per modality digabung
+Borda
+robust skala, kandidat banyak
+urutan saja — informasi
+magnitudo hilang
+Early fusion
+konkatenasi fitur + penskalaan blok
+model hilir bisa belajar
+interaksi
+butuh pelatihan; sensitif skala
+Cross-attention
+token Q satu modality ↔ K,V lain
+interaksi terkaya, lokasi
+presisi
+termahal; butuh representasi
+token
+ Tabel 8.1 — Empat strategi fusion. Aturan rumah dari spesifikasi Vol IV: kapan pendekatan sederhana lebih baik? — SELALU dicek
+ dulu.
+Listing 8.2 — Score fusion + deteksi modality hilang (baris 16-51 dari
+src/ruka_perception/multimodal/fusion.py)
+class ScoreFusion:
+    """Score-based fusion: rata-rata terbobot skor per modality.
+    Skor harus KOMPARABEL (sudah dinormalkan ke [0,1] oleh pemanggil —
+    modul menolak rentang liar). Bobot wajib berjumlah 1 supaya hasil
+    tetap di [0,1]. Ini kandidat fusion paling murah dan paling bisa
+    dijelaskan — baseline WAJIB sebelum fusion neural.
+    """
+    def __init__(self, weights: dict[str, float]):
+        total = sum(weights.values())
+        if total <= 0:
+            raise ValueError("total bobot harus > 0")
+        self.weights = {k: v / total for k, v in weights.items()}
+    def fuse(self, scores: dict[str, float]) -> float:
+        """Gabung skor per modality. Modality tanpa bobot diabaikan
+        (dan dilaporkan lewat exceptions list di pemanggil)."""
+        out, used = 0.0, []
+        for name, w in self.weights.items():
+            if name in scores:
+                s = float(scores[name])
+                if not (0.0 <= s <= 1.0):
+                    raise ValueError(
+                        f"skor {name}={s} di luar [0,1] — normalkan dulu")
+                out += w * s
+                used.append(name)
+        if not used:
+            raise ValueError("tidak ada skor yang cocok dengan bobot")
+        return out
+    def missing(self, scores: dict[str, float]) -> list[str]:
+        """Modality berbobot tapi tak tersedia — dipakai untuk menurunkan
+        kepercayaan hasil fusion, bukan untuk gagal total."""
+        return [k for k in self.weights if k not in scores]
+
+
+--- PAGE 70 ---
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Listing 8.3 — Kebijakan hybrid: strategi termurah yang memadai (baris 103-123 dari
+src/ruka_perception/multimodal/fusion.py)
+def choose_fusion_strategy(available: list[str],
+                           latency_budget_ms: float,
+                           interaction_needs_cross_modal: bool = True
+                           ) -> str:
+    """Kebijakan hybrid: pilih fusion termurah yang memadai.
+    Aturan (urut kebutuhan):
+      1. satu modality saja      -> 'single' (tidak perlu fusion)
+      2. butuh keputusan cepat   -> 'score' (rata-rata terbobot)
+      3. ranking kandidat banyak -> 'late'  (Borda)
+      4. butuh interaksi token   -> 'early' / 'cross_attention'
+    Ini rule-based BY DESIGN — keputusan arsitektur yang bisa
+    dijelaskan lebih dulu, neural fusion belakangan (Vol III Part VI
+    memberikan kerangka 9 pertanyaan sebelum memakai model).
+    """
+    if len(available) <= 1:
+        return "single"
+    if not interaction_needs_cross_modal:
+        return "score" if latency_budget_ms < 400 else "late"
+    return "cross_attention" if latency_budget_ms >= 400 else "early"
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Dua detail rekayasa di listing 8.2 yang sering dilewat implementasi lain: skor di luar [0,1] DITOLAK
+(membandingkan log-likelihood mentah dengan probabilitas adalah bug satuan), dan modality berbobot
+yang tak tersedia DILAPORKAN — bukan diabaikan — supaya pemanggil bisa menurunkan kepercayaan
+hasil. Listing 8.3 adalah doktrin 9-pertanyaan Vol III dalam bentuk fungsi 15 baris: neural fusion hanya
+dipilih setelah jalur murah dinyatakan tak memadai oleh ANGKA, bukan selera.
+8.6 FAILURE MODES
+Fusion dan ruang bersama punya tujuh lubang khasnya.
+– Ruang kolaps pasca training lanjutan — gap positif-negatif menyusut tanpa disadari; diagnosis berkala
+(8.3).
+– Modality gap tak terkalibrasi: threshold global membuat recall lintas modality sepi palsu — kalibrasi
+per pasangan modality (Part XV).
+– Temperature tanpa pikir: T=1 pada cosine skala kecil membuat loss hampir tak berbeda antar
+pasangan — training berjalan tanpa belajar.
+– Skor tak ternormal di score fusion: satu modality 'melebihi suara' lain — ditolak listing 8.2.
+
+
+--- PAGE 71 ---
+– Negatif terlalu mudah: batch tanpa hard negative membuat gap indah tapi generalisasi buruk.
+– Early fusion tanpa penskalaan blok: modality bernorma besar menelan kecil — listing paket
+menskalakan per blok.
+– Fusion neural dipakai karena terlihat pintar — pelanggaran doktrin baseline; wajib kalah dulu dari
+rata-rata terbobot secara terukur.
+8.7 TESTING & EVALUATION
+Loss, gradien, dan kebijakan — semua bisa dituntut.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_contrastive.py tests/test_fusion.py -q
+EXPECTED
+ Hijau penuh: gradient check numerik-analitik rtol 1e-4 di lima posisi; pasangan selaras loss < 1.0 dan acak lebih
+tinggi; kolaps terdeteksi gap≈0; score fusion menolak skor 2.5; late fusion memenangkan kandidat juara bersama;
+strategy chooser mengembalikan 'single' saat satu modality.
+WHY
+ Gradient check adalah jantung: turunan manual yang salah dilarang lolos — dua bug nyata sudah menjadi bukti.
+FAILURE MODE
+ Gagal bila sim dibangun dari vektor bentuk beda — ValueError matriks persegi.
+DEBUGGING
+ Eksperimen fusion mini: tiga modality ber-skor diketahui, bobot beda — prediksi hasil rata-rata terbobot DULU, lalu
+bandingkan dengan fuse().
+8.8 WORKED EXAMPLE — InfoNCE 3×3 dengan pensil
+Batch tiga pasangan; similarity cosine (T = 0,5): s = [[1,0; 0,5; 0,0],[0,0; 1,0; 0,25],[0,25; 0,0; 1,0]] —
+diagonal positif. Hitung loss baris pertama sampai angka.
+Baris-1 dibagi T: (2,0; 1,0; 0,0). Eksponen: e² ≈ 7,39; e¹ ≈ 2,72; e⁰ = 1 — jumlah 11,11. Softmax: (0,665;
+0,245; 0,090). Loss baris = −log(0,665) ≈ 0,408 nat. Perhatikan si pengecoh: pasangan negatif buntu 0,5
+(baris-1 kolom-2) menyerap 24,5% massa — gradien akan menekannya turun paling keras. Dua baris lain
+oleh simetri berbeda: baris-2 −log(0,595) ≈ 0,52; baris-3 softmax dari (0,5; 0; 2) → (0,245; 0,090; 0,665) →
+loss 0,408. Rata-rata baris ≈ 0,445; kolom simetris memberi angka sama; loss total ≈ 0,445. Bacaan
+insinyur: loss kecil BUKAN berarti selesai — yang dikerjakan loss adalah GRADIEN: tiap langkah
+training menurunkan s(1,2) dan s(3,1) (negatif mirip) sambil menjaga diagonal. Itulah 'kontras' dalam
+kontrasif. Verifikasi:
+OUTPUT
+
+
+--- PAGE 72 ---
+>>> s = np.array([[1.0, .5, 0.0],
+...               [0.0, 1.0, .25],
+...               [.25, 0.0, 1.0]])
+>>> loss, grad = infonce_loss(s, temperature=0.5)
+>>> round(loss, 3), round(grad[0,1], 3)
+(0.446, 0.163)   # loss & gradien negatif (1,2) terbesar
+8.9 PRODUKSI — memelihara ruang embedding jangka panjang
+Ruang bersama adalah aset yang menyusut tanpa perawatan. Empat ritual pemeliharaan:
+– Drift check bulanan: golden pairs lintas modality diukur cosinenya; tren menurun = mulai kolaps atau
+model berganti diam-diam.
+– Hard negative mining: tambahkan pasangan mirat-mirip ke batch training lanjutan — gap dijaga
+tetap bermakna, bukan hanya indah.
+– Index terpisah per versi + migrasi terjadwal (2.9): re-embed penuh saat ganti encoder, ukur selisih
+ranking dulu.
+– Kalibrasi threshold per pasangan modality: teks-gambar, teks-audio, gambar-audio punya distribusi
+skor berbeda (modality gap) — satu threshold global adalah sumber recall palsu.
+Engineering Exercise
+ 1. Turunkan sendiri dL/ds_ij untuk satu baris InfoNCE (petunjuk: turunan log-softmax), lalu
+bandingkan dengan listing 8.1 — termasuk faktor 1/N.
+2. Bangun dua set vektor dengan gap 0.05 dan 0.5; jalankan retrieval top-1 lintas set — amati akurasi vs
+gap. Itulah kenapa diagnosis kolaps adalah metrik produksi.
+3. Ubah bobot ScoreFusion ({vision:0.9, audio:0.1} vs sebaliknya) pada skenario skor ekstrem; kapan
+hasil flip? Tulis ambangnya sebagai invarian test baru.
+
+
+--- PAGE 73 ---
+VOLUME IV · THE AWAKENING OF THE SENSES · PART IX
+Ruka Perception Pipeline
+"“Istana tanpa pintu penjaga bukan istana, Bos — hanya gudang yang percaya diri. Maka
+kita bangun gerbangnya dulu: validasi, deteksi, router.”"
+Arsitektur paket ruka-perception sebagai pipeline produksi: tipe inti, validasi allowlist + magic
+bytes, deteksi modality, router dengan keputusan tercatat, dan context builder text-first — plus
+struktur file, cara menjalankan, dan posisi .env/security dalam warisan Patch 1.1.
+9.1 WHY — bytes dari dunia adalah tamu asing
+Volume II menerima input multimodal dari jalur API resmi yang sudah tervalidasi penyedianya. Volume
+IV membuka pintu lebih lebar: bytes dari upload user, dari tool yang menghasilkan gambar, dari pipeline
+rekaman. Setiap bytes itu TAMU ASING: klaim MIME-nya bisa bohong, ukurannya bisa menyedot
+memori, isinya bisa menjadi vektor serangan (Part X-XV). Gerbang pertama pipeline adalah validasi —
+dan ia tidak mempercayai siapa pun.
+
+
+--- PAGE 74 ---
+Gambar 9.1 — Pipeline persepsi Ruka: lima pintu masuk, validasi, deteksi, router, representasi, context builder, kognisi.
+9.2 WHAT — kontrak tipe inti
+Seluruh pipeline berbicara dalam dua tipe: PerceptionInput (masuk) dan PerceptionResult (keluar tahap).
+Bentuknya sengaja kecil, tanpa state global, tanpa 'God object'.
+Listing 9.1 — Kontrak PerceptionInput / Result (baris 27-61 dari
+src/ruka_perception/perception/types.py)
+class Provenance(Enum):
+    """Asal bytes — menentukan seberapa banyak validasi yang wajib
+    sebelum bytes itu dipercaya."""
+
+

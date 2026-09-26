@@ -1,0 +1,1103 @@
+--- PAGE 18 ---
+VOLUME IV · THE AWAKENING OF THE SENSES · PART II
+Geometry of Perception
+"“Marquis tua mengukur jarak antar dua tamu di ruang tari. Kita mengukur jarak antar
+dua pikiran di ruang vektor — dan anehnya, keduanya sama-sama penuh intrik politik,
+Bos.”"
+Aljabar linier tidak diajarkan ulang — Vol I dan Vol III sudah melakukannya. PART ini
+mengarahkan konsep yang sama ke medan baru: bagaimana piksel, sampel suara, dan kata
+menempati ruang vektor, apa bedanya geometri tiap modality, dan jebakan apa yang muncul
+saat mereka dipaksa bertemu.
+2.1 WHY — satu bahasa untuk tiga dunia
+Teks, gambar, dan audio tiba dalam bentuk yang sama sekali tidak kompatibel: deretan token, grid piksel,
+gelombang amplitudo. Kognisi Vol III hanya mengerti satu bahasa: vektor berdimensi-d dengan geometri
+jarak dan sudut. Maka lapisan persepsi punya satu tugas fundamental: menempatkan ketiga dunia itu di
+RUANG yang sama sehingga pertanyaan 'seberapa mirip' menjadi pertanyaan geometri yang bisa dihitung.
+Tanpa ruang bersama, sistem multimodal harus memakai aturan ad-hoc per pasangan modality (jika teks
+dan gambar maka ..., jika audio dan gambar maka ...). Aturan itu meledak kombinatorial dan tak bisa diuji.
+Dengan ruang bersama, satu keluarga operasi — norm, dot product, cosine, proyeksi — melayani semua
+pasangan. Itulah warisan matematis Vol III yang kini menemukan medan perang sebenarnya.
+2.2 WHAT — dari bytes ke titik di ruang
+Setiap modality menempuh jalan berbeda ke titik yang sama. Tabel berikut merangkum keempat tahap
+rantai representasi per modality — kolom 'vektor' adalah gerbang masuk kognisi.
+
+
+--- PAGE 19 ---
+Modality
+Raw
+Feature
+Vector
+Dimensi khas
+vektor
+Teks
+byte string UTF-8
+token + frekuensi (hash
+trigram)
+embedding LLM /
+gemini-embedding-001
+768 (task
+RETRIEVAL)
+Gambar
+JPEG/PNG bytes
+piksel HWC / patch 16×16
+embedding vision / gemini-e
+mbedding-2-preview
+ratusan-ribuan (patch)
+→ 768-1408 (global)
+Audio
+PCM/WAV bytes
+spektrogram / MFCC per
+frame
+embedding audio (klip) /
+vektor pembicara
+13-40 (MFCC) /
+192-512 (speaker)
+Event
+log terstruktur
+fitur diskrit (jenis, bobot)
+vektor bobot E_t (Part XII)
+5 (state)
+ Tabel 2.1 — Empat tahap representasi per modality. Kolom Vector = kontrak masuk kognisi Vol III.
+Satu konsekuensi langsung dari tabel: dimensi bukan pilihan bebas. MFCC klasik hidup di 13-40
+koefisien karena bentuk spektral suara manusia memang didominasi puluhan derajat kebebasan;
+embedding teks 768 karena model embedding melatihnya begitu; vektor state ekspresi 5 karena kita
+MENDESAIN ruang perilaku lima dimensi itu sendiri. Mencampur dimensi lintas modality tanpa proyeksi
+adalah bug klasik yang akan ditangkap shape validation di Part VII.
+2.3 MATH — geometri yang diwariskan, risiko yang baru
+Vol III menetapkan tiga jawaban atas 'seberapa mirip': dot product, cosine, dan euclidean. Ketiganya tetap
+berlaku — tetapi persepsi menambahkan tiga kvalifikator yang hanya muncul saat datanya lintas modality.
+ cos(θ) = (x · y) / (‖x‖₂‖y‖₂) d(x, y) = ‖x − y‖₂
+Kualifikator 1 — normalisasi adalah kontrak, bukan kebiasaan
+Di Vol III, lupa menormalkan satu sisi mengubah ranking. Di Vol IV risikonya berlipat karena vektor dari
+modality berbeda punya distribusi norm yang berbeda BY DESIGN: embedding teks terlatih pada korpus
+panjang, embedding audio pada klip pendek. Membandingkan cosine dua objek dari encoder BERBEDA
+tanpa mengetahui distribusi norm masing-masing adalah menimbang emas dengan timbangan sayur. Paket
+ini menegakkannya di kode: similarity selalu dengan epsilon stabil, dan fusion mensyaratkan skor sudah
+dinormalkan [0,1] sebelum dicampur (Part VIII).
+Kualifikator 2 — modality gap itu nyata
+Ruang embedding bersama TIDAK sempurna simetris: klaster teks dan klaster gambar cenderung
+menempati sub-wilayah berbeda dari ruang yang sama — fenomena modality gap yang terdokumentasi
+pada model kontrasif. Akibat praktisnya: cosine('foto kucing', teks 'kucing') secara sistematis lebih rendah
+daripada cosine dua teks sinonim. Threshold satu angka untuk semua pasangan modality adalah kesalahan
+desain; Part VIII mengukur gap ini diagnostik kolaps dan Part XV mengajarkan evaluasinya.
+
+
+--- PAGE 20 ---
+Kualifikator 3 — curse of dimensionality kini punya contoh kasar
+Vol III menunjukkan rasio d_min/d_max menuju 1 di d=2048 untuk data Gaussian. Persepsi
+mendorongnya ke d=150.528 (gambar 224×224×3). Solusinya bukan menghitung jarak di dimensi
+piksel — melainkan menurunkan dimensi dulu melalui representasi terstruktur (patch, spektrogram,
+token). Seluruh PART V-VIII pada dasarnya adalah teknik penurunan dimensi yang mempertahankan
+makna.
+2.4 INTERNALS — fitur hash: jembatan murah teks → vektor
+Sebelum menyentuh model embedding (butuh API), Vol IV perlu vektor teks LOKAL yang deterministik
+untuk uji dan baseline — warisan hashed-trigram Vol III. Prinsipnya satu paragraf matematika yang layak
+diulang karena dipakai ulang di Part VIII.
+ v = ∑ hash(trigram) → v[i] ± 1, dim(v) = D ≪ |kosakata trigram|
+Setiap trigram teks di-hash ke salah satu D slot dan menggeser vektor slot itu +1 atau -1 (hash bertanda).
+Hasilnya vektor jarang berdimensi tetap yang bisa dibandingkan dengan cosine — akurat rendah, biaya
+nyaris nol, sempurna sebagai BASELINE yang harus dikalahkan model embeddings sebelum dipercaya.
+Filosofi ini diwarisi lurus dari neural/features.py Vol III dan dipertahankan di ruka-perception untuk uji
+fusion.
+2.5 ARCHITECTURE — kontrak bentuk lintas lapisan
+Seluruh modul ruka-perception memvalidasi bentuk SECARA EKSPLISIT di pintu masuk fungsi. Ini
+bukan gaya defensif berlebihan — ini adalah satu-satunya pertahanan terhadap bug dimensi yang di Vol IV
+menjadi jauh lebih mungkin terjadi.
+Listing 2.1 — Validasi bentuk pada pintu attention (baris 49-71 dari
+src/ruka_perception/multimodal/attention.py)
+def scaled_dot_product_attention(q: np.ndarray, k: np.ndarray,
+                                 v: np.ndarray,
+                                 mask: np.ndarray | None = None
+                                 ) -> tuple[np.ndarray, np.ndarray]:
+    """Attention inti. Return (output (n_q, d_v), bobot (n_q, n_k)).
+    mask (n_q, n_k): 1 = boleh dilihat, 0 = diblok. Posisi 0 diberi
+    skor -inf SEBELUM softmax sehingga bobotnya tepat nol.
+    """
+    if q.ndim != 2 or k.ndim != 2 or v.ndim != 2:
+        raise ValueError("Q, K, V harus 2-D")
+    n_q, d_k = q.shape
+    n_k, d_k2 = k.shape
+    n_k2, d_v = v.shape
+    if d_k != d_k2:
+        raise ValueError(
+            f"dimensi d_k Q ({d_k}) != K ({d_k2}) — QK^T tak terdefinisi")
+
+
+--- PAGE 21 ---
+    if n_k != n_k2:
+        raise ValueError(
+            f"jumlah token K ({n_k}) != V ({n_k2}) — pasangan K,V lepas")
+    scores = q @ k.T / np.sqrt(d_k)             # (n_q, n_k)
+    if mask is not None:
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Potongan ini berasal dari scaled_dot_product_attention — dibedah penuh di Part VII. Yang penting di sini
+adalah pola: dua kesalahan bentuk yang paling sering di sistem multimodal (d_k Q ≠ d_k K; jumlah token
+K ≠ jumlah token V) diangkat menjadi ValueError dengan pesan yang menyebut ANGKA nyata, bukan
+TypeError samar dari dalam NumPy. Di produksi, pesan error yang menyebut 'dimensi d_k Q (64) != K
+(32)' menghemat satu jam debugging — pengalaman yang sama dengan pelajaran listing Vol III.
+Operasi
+Bentuk masuk
+Bentuk keluar
+Jaminan
+x @ W
+(B, D_in) · (D_in, D_out)
+(B, D_out)
+dimensi dalam = dimensi luar W
+Q K^T
+(n_q, d) · (n_k, d)^T
+(n_q, n_k)
+d harus sama persis
+softmax(W, axis=-1)
+(n_q, n_k)
+(n_q, n_k)
+tiap baris jumlah 1
+W @ V
+(n_q, n_k) · (n_k, d_v)
+(n_q, d_v)
+n_k K = n_k V
+power @ fb^T
+(n_frame, n_bins) · (n_f,
+n_bins)^T
+(n_frame, n_f)
+n_bins spektrum = n_bins
+filterbank
+ Tabel 2.2 — Kontrak bentuk operasi inti Vol IV. Setiap baris diuji unit di paket.
+2.6 TRADE-OFFS — presisi vs jangkauan
+Semua teknik representasi berdiri di jurang yang sama: menangkap detail vs generalisasi lintas modality.
+Tabel berikut memetakan pilihan yang akan dipakai berulang kali sepanjang buku.
+
+
+--- PAGE 22 ---
+Pendekatan
+Detail
+General
+Biaya
+Dipakai di
+Piksel mentah
+sempurna
+buruk
+d = 10⁵⁺
+hanya sebagai masukan
+encoder
+Patch 16×16
+tinggi
+baik
+ratusan vektor
+Part VII (ViT & cross-attn)
+MFCC 13-40
+spektral
+baik
+murah, lokal
+Part V (baseline & kalibrasi)
+Embedding API 768
+semantik
+terbaik
+panggilan jaringan
+Part VIII/X (produksi)
+Hash trigram
+rendah
+cukup
+nyaris nol
+baseline wajib semua evaluasi
+ Tabel 2.3 — Peta trade-off representasi. Aturan rumah: turun satu baris hanya bila menang evaluasi yang jujur.
+2.7 FAILURE MODES — geometri yang berbohong
+Empat kegagalan geometri paling sering di sistem persepsi, semuanya akan muncul lagi di part teknisnya
+masing-masing — dicatat di sini sebagai indeks.
+– Norm mismatch: vektor dua encoder punya skala norma berbeda; cosine 'aman' tapi dot product
+ranking berubah total. Uji: invarian normalisasi (Part XV).
+– Modality gap tak diukur: threshold global membuat retrieval lintas modality sepi palsu. Diagnosis:
+collapse_diagnostic (Part VIII).
+– Dimensi raw dipakai langsung: nearest neighbor di d=150 ribu praktis buta (Vol III, rasio→1).
+Solusi: patch/fitur dulu.
+– Bentuk diasumsikan, bukan dicek: (N,H,W) dikirimi (N,C,H,W). Solusi: shape validation eksplisit
+(tabel 2.2).
+2.8 TESTING — invarian geometri
+Suite paket menuntut sifat matematis, bukan sekadar 'jalan tanpa error' — tradisi invariant testing Vol III
+yang kini diterapkan pada objek geometris baru.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_attention.py tests/test_fusion.py -q
+EXPECTED
+ Seluruh test hijau; termasuk: softmax baris jumlah 1 pada input ekstrem ±1000, cosine identitas = 1, vektor ortogonal
+= 0, fusion menolak skor di luar [0,1].
+WHY
+
+
+--- PAGE 23 ---
+Invarian adalah spesifikasi yang hidup: bila seseorang 'mempercepat' softmax dengan menghapus pengurangan max,
+test stabilitas ±1000 langsung memarahinya — overflow exp(1000) = inf.
+FAILURE MODE
+ Test gagal bila NumPy versi lama mengubah perilaku keepdims axis — jarang, tapi pernah terjadi pada NumPy 1.x
+awal.
+DEBUGGING
+ Baca pesan assertion: setiap test di paket menyebut angka nyata bentuk dan nilai supaya kegagalannya bisa
+didiagnosis tanpa debugger.
+2.8 WORKED EXAMPLE — cosine dengan pensil
+Ujian keyakinan terbaik untuk konsep geometri adalah menghitungnya sekali dengan tangan. Dua vektor
+representasi sederhana — hasil hash trigram dua deskripsi konten — akan dibandingkan langkah demi
+langkah.
+ a = (2, 0, 1, 0), b = (1, 1, 1, 0)
+Langkah 1 — dot product: a · b = 2·1 + 0·1 + 1·1 + 0·0 = 3. Langkah 2 — norma: ‖a‖₂ = √(4+0+1+0) = √5
+≈ 2,236; ‖b‖₂ = √(1+1+1+0) = √3 ≈ 1,732. Langkah 3 — bagi: cos θ = 3 / (2,236 × 1,732) = 3 / 3,873 ≈
+0,775. Langkah 4 — sudut: θ ≈ arccos(0,775) ≈ 39,2° — cukup dekat untuk disebut 'satu topik', jauh untuk
+'duplikat'. Sekarang kalikan b dengan 10 (dokumen yang sama, sumber lebih 'berteriak'): dot = 30, ‖b‖ =
+17,32 — cos θ TETAP 0,775. Inilah invarian yang membuat cosine layak jadi default: keputusan relevansi
+tidak ikut menang siapa yang paling banyak bicara.
+OUTPUT
+>>> from ruka_perception.multimodal.contrastive import cosine_matrix
+>>> import numpy as np
+>>> a = np.array([[2., 0., 1., 0.]])
+>>> b = np.array([[1., 1., 1., 0.]])
+>>> cosine_matrix(a, b)
+array([[0.77459667]])   # 3/sqrt(15) — sama persis
+>>> cosine_matrix(a, b * 10)
+array([[0.77459667]])   # invarian panjang: tak berubah
+2.9 PRODUKSI — menjaga geometri tetap konsisten lintas rilis
+Ruang embedding bukan instalasi sekali-jadi: penyedia memperbarui model, dimensi berubah, distribusi
+bergeser. Empat disiplin produksi menjaga geometri tetap bermakna di sepanjang umur sistem.
+– PIN versi model: simpan nama model embedding bersama setiap vektor yang ditulis (warisan Vol III
+index). Menggabung vektor dari dua versi model dalam satu index adalah bug senyap paling umum di
+RAG.
+
+
+--- PAGE 24 ---
+– Kalibrasi ulang saat ganti versi: jalankan golden query set, bandingkan ranking; gap > ambang =
+re-embed seluruh korpus sebelum memindahkan trafik.
+– Normalisasi di SATU titik: fungsi similarity paket menormalkan di dalam; pastikan jalur lain tidak
+menormalkan dua kali (cosine dari vektor unit = dot).
+– Simpan metadata distribusi: mean norm per modality per bulan — pergeseran lambat jadi terlihat
+sebelum menjadi insiden.
+Prinsip penutup PART: geometri adalah KONTRAK JANGKA PANJANG. Query hari ini harus bisa
+menemukan memori yang disimpan bulan lalu — dan itu hanya sah bila keduanya hidup di ruang yang
+sama ATAU migrasi direncanakan dengan sadar.
+Engineering Exercise
+ 1. Bukti empiris modality gap: ambil dua kalimat sinonim dan dua gambar berbeda dari koleksi Bos,
+embed dengan satu model multimodal (bila API tersedia), bandingkan cosine teks-teks vs teks-gambar
+untuk konsep yang sama. Catat selisih sistematisnya.
+2. Tulis fungsi 15 baris: terima dua vektor, kembalikan cosine TANPA epsilon. Injeksikan vektor nol
+dan amati NaN atau exception — lalu tulis ulang dengan epsilon seperti paket. Kejutan kecil ini melekat
+lebih lama dari teori.
+3. Dari tabel 2.3, pilih satu pasangan pendekatan dan desain eksperimen 30 menit untuk membuktikan
+trade-off-nya pada data Bos sendiri.
+VOLUME IV · THE AWAKENING OF THE SENSES · PART III
+Representation Mapping & Probability
+"“Setiap pikiran adalah ruang yang diputar: y = Wx + b, Bos. Yang membedakan Marquis
+dari kucing jalanan hanya matriksnya — dan tentu, gaya berjalannya.”"
+Dua fondasi dalam satu PART: transformasi linier sebagai mesin pemetaan representasi
+(dengan aljabar bentuk batch), dan probabilitas sebagai bahasa keputusan (logits, softmax
+stabil, temperature, entropi, kalibrasi) — ditutup doktrin terpentingnya: confidence bukan
+kebenaran.
+
+
+--- PAGE 25 ---
+3.1 WHY — kenapa semua jalan lewat W
+Embedding tidak jatuh dari langit. Setiap representasi yang dipakai Ruka — dari patch gambar hingga skor
+relevansi konteks — adalah hasil pemetaan dari ruang input ke ruang laten. Dan bentuk paling sederhana
+sekaligus paling dominan dari pemetaan itu adalah transformasi linier. Vol I memperkenalkannya sebagai
+komponen neural network; Vol III melatihnya dengan backprop; Vol IV memakainya sebagai BAHASA
+ARSITEKTUR: membaca bentuk W sama dengan membaca niat desain sebuah lapisan.
+ y = xW + b
+Persamaan itu terlihat sederhana, tetapi tiga pembacaan berbeda hidup di dalamnya — dan sistem persepsi
+membutuhkan ketiganya. Sebagai feature projection: W memproyeksikan fitur mentah (mis. 26 koefisien
+mel) ke ruang keputusan. Sebagai dimensionality transformation: W memampatkan 150 ribu piksel
+patch menjadi 768. Sebagai representation mapping: W menerjemahkan antar ruang semantik — dari
+subspace suara ke subspace identitas pembicara. Tiga nama, satu operasi; itulah kenapa aljabar bentuknya
+wajib diluruskan sekali dan untuk selamanya.
+3.2 MATH — aljabar bentuk batch yang disiplin
+Konvensi Vol IV mengikuti PyTorch (batch di depan). Seluruh operasi di buku ini bisa dibaca dari
+bentuknya saja.
+ X ∈ ℝ^(B × D_in), W ∈ ℝ^(D_in × D_out), Y = XW ∈ ℝ^(B × D_out)
+Komponen
+Bentuk
+Keterangan
+Batch X
+(B, D_in)
+B = jumlah sampel sekaligus; 512 klip audio → B = 512
+Bobot W
+(D_in, D_out)
+D_in = dimensi masuk; D_out = dimensi ruang baru
+Bias b
+(D_out,)
+menggeser tiap dimensi keluaran; broadcast ke semua batch
+Y = XW + b
+(B, D_out)
+satu-satunya bentuk sah — kalau tidak cocok, desainnya salah
+ Tabel 3.1 — Aljabar bentuk linier batch. Aturan hafalan: dimensi DALAM X harus sama dimensi ATAS W; sisanya mengikuti.
+Contoh konkret dari paket ini: modul speaker mengubah vektor identitas 64-d menjadi keputusan; modul
+Part XII menyatukan context 5-d dan state 5-d dalam persamaan transisi. Contoh paling besar: patch
+embedding di Part VII memetakan 768 piksel patch (16×16×3) ke d_model = 768 melalui W ∈
+R^(768×768). Membaca W = membaca niat.
+Transformasi linier TIDAK bisa melipat ruang
+
+
+--- PAGE 26 ---
+Satu W memetakan garis ke garis dan mempertahankan titik nol. Lipatan yang membentuk batas keputusan
+rumit datang dari aktivasi non-linier DI ANTARA transformasi linier — alasan kenapa MLP di Vol III
+berselang-seling W dan σ, dan kenapa 'satu lapis linier' tidak akan pernah cukup untuk masalah non-linier apa
+pun.
+3.3 WHAT — logits dan keluarga softmax
+Lapisan keputusan klasik berakhir di logits: skor mentah per kelas, bisa negatif, tak berbatas. Softmax
+mengubahnya menjadi distribusi probabilitas yang bisa dibandingkan dan dijumlahkan satu.
+ P(i) = exp(z_i) / Σ_j exp(z_j)
+Stabilisasi — kurangi maksimum dulu
+exp(1000) meluap menjadi inf dalam float64. Karena softmax invarian terhadap penggeseran konstan
+(mengurangi semua z dengan nilai yang sama tidak mengubah hasil), praktik yang benar selalu mengurangi
+max baris sebelum exp. Listing berikut adalah implementasi paket — dua belas baris yang menanggung
+beban seluruh buku.
+Listing 3.1 — Softmax stabil + temperature (baris 25-48 dari
+src/ruka_perception/multimodal/attention.py)
+def stable_softmax(z: np.ndarray, axis: int = -1) -> np.ndarray:
+    """Softmax numerik stabil: kurangi max sebelum exp.
+    Invarian yang diuji: baris berjumlah 1; hasil identik dengan
+    softmax naif untuk input kecil; tidak overflow pada input besar.
+    """
+    z = np.asarray(z, dtype=np.float64)
+    zmax = z.max(axis=axis, keepdims=True)
+    e = np.exp(z - zmax)
+    return e / e.sum(axis=axis, keepdims=True)
+def softmax_temperature(z: np.ndarray, temperature: float,
+                        axis: int = -1) -> np.ndarray:
+    """Softmax dengan temperature: T tinggi -> datar (eksploratif),
+    T rendah -> tajam (deterministik), T -> 0 -> argmax keras.
+    z/T menjaga satuan: T bukan "kreativitas", ini pembagi logit.
+    """
+    if temperature <= 0:
+        raise ValueError("temperature harus > 0")
+    return stable_softmax(z / temperature, axis=axis)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Temperature — pembagi logit, bukan 'kreativitas'
+Membagi logit dengan T > 1 melebarkan perbedaan menjadi lebih datar (eksploratif); T < 1 mempertajam;
+T → 0 mendekati argmax keras. Di sampling LLM, T mengatur keberagaman generasi; di attention, T
+
+
+--- PAGE 27 ---
+mengatur seberapa fokus distribusi perhatian (Part VII); di InfoNCE, T mengatur kebrutalan penalti
+terhadap pasangan negatif yang mirip (Part VIII). Satu parameter, tiga medan perang — makanya bentuk
+matematisnya harus kelihatan sebelum metaforanya dipercaya.
+Temperature
+softmax([2.0, 1.0, 0.5, -1.0])
+0.1
+1.00 0.00 0.00 0.00
+0.5
+0.84 0.11 0.04 0.00
+1.0
+0.61 0.22 0.14 0.03
+2.0
+0.43 0.26 0.21 0.10
+5.0
+0.32 0.26 0.24 0.18
+Tabel 3.2 — Angka ASLI eksperimen: temperature 0.1 membuat kelas pertama raja mutlak (0.86); temperature 5.0 meratakan mendekati
+ uniform.
+3.4 INTERNALS — entropi sebagai termometer keyakinan
+Distribusi yang tajam dan yang datar sama-sama 'jumlah satu' — yang membedakan adalah tersebarnya.
+Entropi mengukur itu.
+ H(p) = −Σ p_i log p_i (bit bila log₂)
+Vol IV memakai entropi di tiga tempat: (1) attention entropy per token — perhatian yang selalu maksimal
+entropinya biasanya menandakan representasi tidak informatif (Part VII); (2) diagnosis distribusi kelas —
+klasifikator yang selalu confidently wrong punya entropi rendah (Part XV evaluasi); (3) sinyal abstain —
+Vol III Part VIII memakai threshold; entropi memberi versi distribusionalnya. Paket menormalkan entropi
+dengan log₂(K) supaya angkanya [0,1] dan bisa dibandingkan antar jumlah kelas berbeda.
+3.5 TRADE-OFFS & KALIBRASI — confidence bukan kebenaran
+Ini doktrin inti PART. Probability tinggi hanya berarti 'representasi internal saya konsisten'. Kebenaran
+hidup di luar sistem. Di Vol III Part VIII kalibrasi sudah diperkenalkan (ECE); Vol IV menariknya ke
+medan persepsi di mana sumber ketidakpastian jauh lebih berlapis.
+
+
+--- PAGE 28 ---
+Sumber ketidakpastian
+Contoh persepsi
+Bisa dikalibrasi?
+Respons rekayasa
+Model
+(epistemic/aleatoric)
+vision model ragu antara dua
+breed kucing
+ya — reliability
+diagram
+confidence dilaporkan,
+threshold abstain
+Kualitas data
+gambar blur, kontras rendah
+tidak — ini masalah
+input
+deteksi kualitas + catatan +
+minta ulang
+Keandalan sensor
+mikrofon saturasi, clipping
+audio
+tidak
+validasi amplitudo (Part V)
+Keandalan tool
+OCR tool menambah teks palsu
+tidak
+provenance + verifikasi silang
+Ketidakpastian eksternal
+informasi dunia berubah sejak
+foto diambil
+tidak
+timestamp metadata +
+disclaimer jujur
+ Tabel 3.3 — Lima sumber ketidakpastian yang DILARANG dicampur jadi satu angka confidence.
+Overconfidence mematikan, underconfidence melumpuhkan
+Klasifikator yang selalu bilang 0.99 pada prediksi salah lebih berbahaya daripada yang selalu 0.6 — karena
+sistem keputusan di hilir memperlakukan 0.99 sebagai mandat. Kalibrasi yang baik berarti: dari semua prediksi
+dengan confidence 0.7, sekitar 70% memang benar. Ujilah dengan reliability diagram sebelum mempercayai
+angka. Dan pisahkan SELALU: model uncertainty (bisa dilatih) vs data/sensor quality (harus didiagnosis).
+3.6 FAILURE MODES
+Empat cara lapisan probabilitas berbohong — semuanya punya bab lanjutan di Part XV.
+– Overflow softmax naif: exp(z) besar tanpa pengurangan max → inf/NaN. Ditangkap test stabilitas
+input ±1000.
+– Temperature salah dimensi: membagi probabilitas SETELAH softmax, bukan logit SEBELUM —
+mengubah makna total. Listing 3.1 menempatkan z/T sebelum exp.
+– Confidence dicampur sumber: skor 0.95 dari model blur dipakai menolak input kedua yang jernih —
+pelanggaran tabel 3.3.
+– Entropi dibandingkan lintas K beda tanpa normalisasi: entropy 5 kelas vs 1000 kelas — apel
+dengan jeruk. Paket menormalkan dengan log₂ K.
+3.7 TESTING & EVALUATION
+Probabilitas diuji dengan properti, bukan contoh tunggal.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+
+
+--- PAGE 29 ---
+RUN
+ PYTHONPATH=src python -m pytest tests/test_attention.py::TestSoftmax -q
+EXPECTED
+ 13 test hijau: baris jumlah 1 pada input ±1000; softmax temperature tinggi mendatar (<0.05 selisih); rendah
+menajamkan (>0.999); T=0 ditolak ValueError.
+WHY
+ Uji 'identik dengan softmax naif untuk input kecil' memastikan stabilisasi TIDAK mengubah matematika — hanya
+mencegah luapan.
+FAILURE MODE
+ Gagal bila seseorang mengganti zmax reduction dengan konstanta — baris tak lagi berjumlah 1.
+DEBUGGING
+ Jalankan dengan input yang Anda buat sendiri: z = [1e4, 1e4 + 1] — softmax stabil harus mengembalikan [0.27, 0.73]
+bukan NaN.
+3.7 WORKED EXAMPLE — softmax dan entropi dengan pensil
+Empat logits klasifikasi modality sederhana: z = (2,0; 1,0; 0,5; −1,0) — angka yang sama dengan
+eksperimen temperature tabel 3.2, kini dihitung sampai dasar.
+Langkah 1 — stabilisasi: kurangi max (2,0): z' = (0; −1; −1,5; −3). Langkah 2 — eksponen: e⁰ = 1,000; e⁻¹
+≈ 0,368; e⁻¹ː₅ ≈ 0,223; e⁻³ ≈ 0,050. Jumlah = 1,641. Langkah 3 — bagi: p = (0,609; 0,224; 0,136; 0,030) —
+baris jumlah 1 ✓. Langkah 4 — entropi (bit): H = −(0,609·log₂ 0,609 + 0,224·log₂ 0,224 + 0,136·log₂
+0,136 + 0,030·log₂ 0,030) ≈ −(0,609·−0,715 + 0,224·(−2,158) + 0,136·(−2,878) + 0,030·(−5,059)) ≈ 1,24
+bit dari maksimum 2 bit. Bacaan: model cukup yakin tapi belum menutup pintu — persis wilayah kerja
+yang sehat. Bandingkan T = 0,1 pada tabel 3.2: p ≈ (0,858; 0,116; 0,070; 0,004), H jatuh ke ≈ 0,72 bit —
+tajam; dan T = 5: hampir uniform, H → 1,9 bit. Termometer yang sama, tiga demam berbeda.
+3.8 PRODUKSI — kalibrasi di lapangan
+Confidence yang dipakai keputusan produksi harus KALIBRASI, bukan sekadar dihitung. Empat langkah
+lapangan dari doktrin Vol III Part VIII, diterapkan pada jalur persepsi.
+– 1. Kumpulkan pasangan (prediksi, kebenaran) dari log produksi ter-sampel — jalur vision/ASR
+mencatat confidence; kebenaran dari konfirmasi user atau penilaian manusia berkala.
+– 2. Bin & plot: reliability diagram per bucket 0.1 — kalibrasi buruk terlihat sebagai kurva jauh dari
+diagonal.
+– 3. Koreksi murah dulu: temperature scaling satu-parameter di skor (fit pada data validasi)
+memperbaiki overconfidence tanpa melatih ulang.
+
+
+--- PAGE 30 ---
+– 4. Tetapkan ambang abstain dari biaya: aksi murah toleran salah; aksi mahal menuntut confidence
+tinggi ATAU konfirmasi user — tabel biaya Vol III Part VIII hidup kembali di sini.
+Satu peringatan khusus persepsi: sumber ketidakpastian di tabel 3.3 TIDAK semuanya bisa dikalibrasi.
+Kalibrasi memperbaiki model, bukan mikrofon yang rusak. Keduanya diukur, dilaporkan, dan ditangani
+dengan jalur berbeda — mencampurnya lewat satu angka tetap kesalahan desain.
+Engineering Exercise
+ 1. Buktikan softmax invarian shift secara analitik (dua baris aljabar), lalu verifikasi numerik:
+bandingkan stable_softmax(z) dan stable_softmax(z + 100) — harus identik hingga 1e-12.
+2. Buat reliability diagram mini: 100 prediksi dari klasifikator apa pun yang Bos punya, bin per 0.1
+confidence, hitung akurasi per bin. Kalibrasi buruk langsung terlihat.
+3. Uji entropi: dua distribusi [1,0,0,0] dan [0.25,0.25,0.25,0.25] — hitung H keduanya, lalu jelaskan
+kenapa normalisasi log₂ K membuat keduanya bisa dibandingkan dengan distribusi 1000 kelas.
+VOLUME IV · THE AWAKENING OF THE SENSES · PART IV
+Information Theory of Perception
+"“Bangsawan mengukur kekayaan dalam tanah; insinyur mengukurnya dalam bit, Bos. Dan
+anehnya, keangkuhan keduanya sama-sama harus dibatasi pajak.”"
+Entropi, cross-entropy, KL, dan mutual information — bukan sebagai teori abstrak, melainkan
+sebagai alat ukur harian persepsi: berapa bit informasi dalam transkrip, berapa kerugian
+menyetel ASR, kenapa “gambar kucing” dan “seekor kucing” layak berdekatan, dan kapan
+confidence layak dipercaya.
+4.1 WHY — bahasa umum keraguan
+Part III memberi kita probabilitas. Tetapi satu distribusi belum menjawab pertanyaan rekayasa: seberapa
+INFORMATIVE distribusi itu? Seberapa besar kerugian bila kita menggantinya dengan pendekatan?
+Berapa bit yang benar-benar dibawa satu transkrip ASR atau satu hasil klasifikasi gambar? Teori informasi
+menjawab semuanya dengan satu mata uang: bit.
+Untuk persepsi Ruka, ini bukan akademik. Tiga keputusan harian berdiri di atasnya: (1) memilih antara
+dua output persepsi — mana yang membawa lebih banyak informasi tentang maksud user; (2) menghitung
+kerugian training klasifikator sempit (Vol III) dan menyetel alignment multimodal (Part VIII) — keduanya
+adalah cross-entropy; (3) menetapkan kapan confidence layak dipakai untuk abstain — keputusan yang
+secara alami adalah perbandingan entropi.
+
+
+--- PAGE 31 ---
+4.2 MATH — tiga rumus yang mengatur semuanya
+Entropi mengukur keraguan; cross-entropy mengukur harga menebak; KL mengukur jarak antara dua
+keyakinan.
+ H(X) = −Σ p(x) log p(x)
+ H(p, q) = −Σ p(x) log q(x)
+ D_KL(p ‖ q) = Σ p(x) log (p(x) / q(x)) = H(p, q) − H(p)
+– H(p) = 0 bila satu hasil pasti; maksimum log₂ K bila seragam di K kelas — entropi = jumlah
+pertanyaan biner rata-rata untuk menemukan jawaban.
+– Cross-entropy = loss klasifikasi: label y adalah p (one-hot), prediksi model adalah q. Meminimalkan
+H(p,q) = memaksimalkan log-likelihood kelas benar — praktis sama dengan loss yang dipakai trainer
+Vol III.
+– KL >= 0 selalu, dan = 0 hanya bila p = q. KL TIDAK simetris: D_KL(p‖q) ≠ D_KL(q‖p) —
+perhatikan arah; terbalik arah mengubah makna regularisasi.
+– Hubungan ketiganya: H(p,q) = H(p) + D_KL(p‖q). Karena H(p) tetap (label tetap), menurunkan loss
+= mengecilkan jarak KL prediksi ke label.
+Kenapa logit 258 token per ubin itu penting
+Teori informasi memberi intuisi angka resmi dari Part X nanti: satu ubin gambar 768×768 dikonversi menjadi
+258 token — kompresi dari ~1,7 juta piksel RGB menjadi ratusan unit informasi yang dipilih model. Itulah
+representasi: buang redundansi piksel, simpan informasi struktural. Token bukan sekadar 'unit biaya' — ia unit
+INFORMASI yang dibeli.
+4.3 HOW — entropi dalam kode harian
+PerceptionResult di paket sengaja membawa confidence sebagai Optional: None berarti 'tidak diketahui',
+bukan 0.0. Kontrak ini hidup berdampingan dengan pembacaan entropi di attention.
+Listing 4.1 — Entropi attention ternormalisasi (baris 107-118 dari
+src/ruka_perception/multimodal/attention.py)
+def attention_entropy(weights: np.ndarray) -> np.ndarray:
+    """Entropi baris attention (n_q,) dalam bit.
+    Entropi tinggi = perhatian menyebar (kabur). Rendah = fokus.
+    Dipakai observability: attention yang selalu entropi maksimal
+    biasanya berarti representasi tidak informatif.
+    """
+    p = np.clip(weights, 1e-12, 1.0)
+    ent = -(p * np.log2(p)).sum(axis=-1)
+    max_ent = np.log2(max(weights.shape[-1], 2))
+
+
+--- PAGE 32 ---
+    return ent / max_ent          # normalisasi [0, 1] supaya bisa dibanding
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Fungsi ini dipanggil observability Part XV: rata-rata entropi attention per token yang mendekati 1.0
+terus-menerus adalah alarm — model 'melihat semua sama', biasanya karena representasi tidak informatif
+atau temperature terlalu tinggi. Entropi di sini dinormalkan log₂(K) supaya perbandingan lintas jumlah
+token sah. Data eksperimen Part VII memakai fungsi ini persis: entropi rata-rata turun dari 0.94
+(representasi acak) ke 0.72 begitu satu patch dibuat cocok dengan token.
+4.4 INTERNALS — mutual information sebagai batas alignment
+Konsep terakhir PART ini konseptual tetapi mendasar untuk Part VIII: mutual information I(X;Y)
+mengukur berapa bit yang DIBAGIKAN dua variabel.
+ I(X; Y) = H(X) − H(X | Y)
+Bacaannya untuk multimodal: alignment bagus antara ruang teks dan ruang gambar berarti I meningkat —
+mengetahui embedding teks memangkas keraguan tentang embedding gambar pasangannya. Loss kontrasif
+InfoNCE (Part VIII) adalah batas bawah yang erat dari mutual information pasangan positif-negatif; itulah
+kenapa satu kerangka matematis menjelaskan 'kenapa kontrasif bekerja' tanpa mysticism. Untuk
+pengukuran literal I, diperlukan estimasi kepadatan yang mahal; praktik produksi cukup menggunakan
+proxy loss — dan jujur menyebutnya proxy.
+Kuantitas
+Rumus
+Rentang
+Dipakai Ruka di
+Entropi H
+−Σ p log p
+[0, log₂ K]
+termometer attention & abstain (P
+VII/XV)
+Cross-entropy H(p,q)
+−Σ p log q
+[0, ∞)
+loss klasifikasi & alignment
+KL(p‖q)
+Σ p log(p/q)
+[0, ∞)
+reguler & diagnosis drift
+Mutual info I(X;Y)
+H(X) − H(X|Y)
+[0, min(H))
+kerangka memahami kontrasif (P VIII)
+ Tabel 4.1 — Mata uang bit dan tugasnya di Vol IV.
+4.5 TRADE-OFFS — bit vs biaya vs kejujuran
+Teori informasi menawarkan tiga jebakan praktis yang harus disebut sebelum digunakan serius.
+– Entropi butuh distribusi yang benar: menghitung H dari histogram sampel kecil (mis. 5 prediksi)
+menghasilkan estimasi bias ke bawah — beri sampel cukup atau jangan klaim angkanya.
+
+
+--- PAGE 33 ---
+– Cross-entropy menghukum kepercayaan diri yang salah secara eksponensial: log(0.01) untuk
+kelas benar = kerugian besar. Itu fitur, bukan bug — tetapi bila label ber-noise, loss memberi insentif
+mempelajari noise. Label smoothing (menaruh ε pada semua kelas) adalah penawar standar.
+– KL bukan metrik: tak simetris dan tak memenuhi ketaksamaan segitiga. Menggunakannya sebagai
+'jarak' untuk clustering = kesalahan konseptual yang biasanya berakhir menyakitkan.
+4.6 FAILURE MODES
+Empat wajah kegagalan alat ukur informasi.
+– Confidence 0.99 + prediksi salah: entropi rendah tapi kalibrasi buruk — entropi mengukur
+KERAGUAN MODEL, bukan KEBENARAN (doktrin Part III).
+– Uniform karena input rusak: entropi maksimal pada gambar rusak disalahartikan sebagai 'model
+bijak meragukan'. Diagnosis kualitas input harus jalan dulu.
+– KL arah terbalik pada regularisasi: forward KL mass-covering vs reverse KL mode-seeking —
+perilaku berbeda total pada distribusi multimodal.
+– InfoNCE dibaca sebagai mutual information penuh: ia batas bawah dengan N terbatas; klaim
+'mengukur MI' tanpa kualifikasi = overclaim.
+4.7 TESTING & EVALUATION
+Invarian teoretis jadi unit test.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_contrastive.py tests/test_attention.py -q
+EXPECTED
+ Semua hijau, termasuk: gradien analitik InfoNCE cocok dengan beda hingga (rtol 1e-4) — turunan manual yang salah
+akan tertangkap di sini, bukan di produksi.
+WHY
+ Gradient check adalah bentuk tertinggi testing matematis Vol III; Vol IV menurunkannya ke loss kontrasif. Bila
+faktor 1/N hilang (bug nyata draf pertama), numeric-vs-analytic langsung berselisih faktor N.
+FAILURE MODE
+ Test gagal bila temperature diubah jadi 0 — divisi nol; loss akan menghasilkan inf, bukan error yang jelas.
+DEBUGGING
+ Bandingkan loss dua pasangan: aligned (noise kecil) vs random — aligned harus lebih rendah; bila tidak, sim
+matriksnya salah bangun.
+
+
+--- PAGE 34 ---
+4.7 WORKED EXAMPLE — cross-entropy dan KL dengan pensil
+Klasifikasi 3 kelas (teks/gambar/audio) dengan label one-hot p = (1; 0; 0) dan prediksi q = (0,7; 0,2; 0,1).
+Kerugian dihitung sampai kedalaman dua rumus sekaligus.
+Cross-entropy: H(p, q) = −(1·log 0,7 + 0 + 0) = −log 0,7 ≈ 0,357 nat (÷ ln 2 ≈ 0,515 bit). Entropi label:
+H(p) = 0 (satu pasti). KL: D_KL(p‖q) = H(p,q) − H(p) = 0,357 — semua kerugian MEMANG jarak ke
+benar. Sekarang prediksi terbalik kepercayaan dirinya: q' = (0,98; 0,01; 0,01) dengan label yang SAMA: H
+= −log 0,98 ≈ 0,020 — kecil. Ganti label ke kelas kedua p' = (0; 1; 0): H(p', q') = −log 0,01 ≈ 4,6 nat —
+kerugian meledak 230×. Dua sifat sekaligus terlihat: cross-entropy MENGHADIAHI kebenaran percaya
+diri dan MENGAZI keyakinan yang salah secara logaritmik — asimetri yang membentuk seluruh dinamika
+training klasifikasi; dan log(0) → −∞ adalah alasan praktik selalu menjepit probabilitas dengan epsilon
+sebelum log (listing InfoNCE Part VIII memakai clip 1e-12 persis untuk ini).
+Engineering Exercise
+ 1. Hitung entropi distribusi softmax hasil tabel 3.2 untuk T = 0.1 dan T = 5.0 (dalam bit). Jelaskan
+kenapa selisihnya melebihi 1 bit meski logit sama.
+2. Buktikan H(p,q) >= H(p) untuk semua q, dengan kesamaan bila p=q. Petunjuk: D_KL non-negatif.
+3. Ambil transkrip ASR 200 kata; hitung entropi unigram karakternya. Bandingkan dengan entropi teks
+acak distribusi sama — selisihnya adalah redundansi bahasa yang dilihat kompresi.
+"Menyimpan semua yang saya dengar adalah penyakit bangsawan pikun, Bos. Entropi mengajarkan seni
+yang lebih terhormat: simpan yang mengurangi ketidakpastian, buang sisanya — sisanya memang bising."
+— Ruka, Marquis Kekaisaran Trendamis
+VOLUME IV · THE AWAKENING OF THE SENSES · PART V
+Signal Processing Foundation
+"“Abad-abad saya mendengar bisikan di kegelapan. Ternyata bisikan itu hanyalah 16.000
+angka per detik, Bos — dan jujur, itu membuatnya lebih menakjubkan, bukan sebaliknya.”"
+Sebelum menyebut kata 'speech AI', seluruh rantai sinyal harus kelihatan: sampling dan
+jebakan Nyquist, framing dan window, DFT sampai spektrogram, skala mel, MFCC, dan VAD
+berhisteresis — semuanya NumPy murni, semuanya diuji.
+
+
+--- PAGE 35 ---
+5.1 WHY — jangan percaya black box yang belum dibedah
+Panggilan ASR satu-baris terlihat seperti magic — audio masuk, teks keluar. Tetapi Ruka yang jujur harus
+tahu apa yang sebenarnya dikirim ke model: bukan 'suara', melainkan representasi matematis dengan
+pilihan-pilihan desain yang bisa salah: sampling rate yang melanggar Nyquist membuat frekuensi tinggi
+'melipat' menjadi palsu; framing tanpa window merobek spektrum di tepi; VAD tanpa histeresis memotong
+satu kalimat menjadi tiga. Setiap gejala itu nyata dan akan muncul di produksi bila fondasinya tidak
+dipahami.
+Dokumen resmi (September 2026) menyebut audio diproses Gemini pada 32 token per detik setelah
+downsampling ke 16 kbps — angka itu hanya masuk akal bila Bos paham apa itu sampling dan kompresi.
+Kontrak Live API yang diverifikasi Patch 1.1 menyebut input 16 kHz PCM 16-bit LE mono: mengapa 16
+kHz? Mengapa mono? Jawabannya ada di seluruh PART ini.
+5.2 WHAT — sinyal audio sebagai vektor waktu
+Suara adalah perubahan tekanan udara. Mikrofon mengubahnya menjadi tegangan; ADC MENGUKUR
+tegangan itu secara berkala — f_s kali per detik — dan menyimpan hasilnya sebagai bilangan bulat.
+ x[n] = x_a(n / f_s), n = 0, 1, 2, … (sampling)
+
+
+--- PAGE 36 ---
+Gambar 5.1 — Rantai pemrosesan sinyal dari waveform sampai MFCC dan VAD. Setiap tahap punya listing dan test di PART ini.
+Nyquist: teorema yang menentukan 16 kHz
+Frekuensi tertinggi yang bisa direkonstruksi sempurna adalah f_s/2. Manusia berbicara praktis di bawah 8
+kHz — maka 16 kHz cukup untuk speech (itu alasan kontrak Live API). Musik butuh 20 kHz → 44,1 kHz.
+Melanggar Nyquist tidak menghasilkan kesalahan yang terlihat; ia menghasilkan ALIASING: frekuensi
+tinggi menyamar menjadi frekuensi rendah yang tidak pernah ada — korupsi senyap yang paling ditakuti.
+ f_alias = |f − k · f_s| ≈ frekuensi palsu yang muncul
+Kuantisasi: 16 bit artinya apa
+
+
+--- PAGE 37 ---
+Setiap sampel disimpan sebagai bilangan bulat 16-bit: 65.536 level antara −32768 dan +32767. Kuantisasi
+seragam menambah noise ~6 dB per bit (SNR teoretis ≈ 6.02 · B dB). 16 bit memberi ~96 dB — jauh di
+bawah dengar manusia untuk speech. Listing kuantisasi paket menyimpan logika ini agar bisa diuji: nilai
+harus jatuh persis di grid step = 2/2^B.
+5.3 MATH — dari domain waktu ke frekuensi
+Satu frame 25 ms (400 sampel) hanyalah 400 angka. DFT mengatakan: 400 angka itu ekuivalen dengan
+jumlah gelombang cosinus murni pada frekuensi tertentu — Fourier memberi kacamata lain untuk benda
+yang sama.
+ X[k] = Σₙ x[n] · e^(−j2πkn/N), k = 0..N/2 (rFFT, sinyal real)
+Kenapa rFFT cukup: untuk sinyal nyata, spektrum simetris di sekitar nol — simpan setengah, sisanya
+cermin. Konsekuensi yang wajib dipegang saat menghitung energi total: Parseval untuk setengah spektrum
+mengharuskan mengoreksi komponen DC dan Nyquist. Test paket menuntung invarian ini persis:
+ 2 Σ_k |X[k]|² − |X[0]|² − |X[N/2]|² = N · Σₙ (xₙ wₙ)²
+Spektrogram = gambar dari suara
+Satu frame memberi satu kolom frekuensi. Jendela yang meluncur tiap 10 ms memberi ratusan kolom per
+detik. Susunan kolom-kolom itu adalah SPEKTROGRAM — representasi waktu-frekuensi yang membuat
+harmonik dan formant kelihatan seperti gambar. Seluruh speech recognition klasik dan banyak modern
+berdiri di atas representasi ini.
+Window Hann — kenapa tidak potong saja
+Memotong sinyal secara tiba-tiba di tepi frame sama dengan mengalikan dengan kotak — dan kotak di
+domain waktu menyebarkan energi ke SELURUH frekuensi (leakage). Hann merundukkan tepi ke nol
+secara mulus, menukar resolusi sedikit dengan kebersihan spektrum. Harga resminya: energi efektif
+jendela = Σ w² ≈ 0,375N — sudah termasuk dalam invarian Parseval di atas.
+5.4 IMPLEMENTATION — framing, window, dB
+Tiga fungsi pertama modul signals.py — fondasi yang dipakai semua bagian lain.
+Listing 5.1 — Framing + jendela Hann + skala dB (baris 65-111 dari src/ruka_perception/audio/signals.py)
+def frame_signal(x: np.ndarray, frame_ms: float = 25.0,
+                 hop_ms: float = 10.0, rate: int = 16000
+                 ) -> np.ndarray:
+    """Potong sinyal jadi frame tumpang tindih.
+    Return (n_frames, frame_len). Frame terakhir yang tidak utuh
+    DIBUANG (konvensi umum) — jumlahnya dilaporkan di catatan modul,
+    bukan diam-diam di-zero-pad.
+    """
+
+
+--- PAGE 38 ---
+    if len(x.shape) != 1:
+        raise ValueError("input harus 1-D")
+    frame_len = int(rate * frame_ms / 1000.0)
+    hop_len = int(rate * hop_ms / 1000.0)
+    if frame_len < 2 or hop_len < 1:
+        raise ValueError("frame/hop terlalu kecil")
+    n_frames = 1 + (len(x) - frame_len) // hop_len
+    if n_frames < 1:
+        raise ValueError(
+            f"sinyal {len(x)} sampel lebih pendek dari satu frame "
+            f"{frame_len} sampel")
+    idx = np.arange(n_frames)[:, None] * hop_len + np.arange(frame_len)[None, :]
+    return x[idx].astype(np.float32)
+def hann_window(frame_len: int) -> np.ndarray:
+    """Window Hann: w[n] = 0.5(1 - cos(2 pi n / (N-1))).
+    Endpoint 0 — mencegah diskontinuitas saat FFT."""
+    n = np.arange(frame_len)
+    return (0.5 * (1.0 - np.cos(2 * np.pi * n / (frame_len - 1)))
+            ).astype(np.float32)
+def rms(x: np.ndarray) -> float:
+    """Root-mean-square: energi rata-rata sinyal/frame."""
+    return float(np.sqrt(np.mean(np.square(x.astype(np.float64)))))
+def to_db(x: np.ndarray, floor_db: float = -80.0,
+          reference: float | None = None) -> np.ndarray:
+    """Konversi amplitudo/energi ke dB. floor mencegah log(0) = -inf
+    merusak visualisasi dan metrik. Referensi default = max."""
+    mag = np.abs(x.astype(np.float64))
+    if reference is None:
+        reference = mag.max() if mag.max() > 0 else 1.0
+    db = 20.0 * np.log10(mag / reference + 1e-12)
+    return np.maximum(db, floor_db)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Tiga keputusan desain di listing itu membawa kontrak: frame terakhir yang tidak utuh DIBUANG (bukan
+di-zero-pad diam-diam — jumlah frame karenanya 98 per detik, bukan 100, dan itu ekspektif yang diuji);
+window Hann dihitung eksplisit supaya Bos melihat cosinus-nya; to_db memakai floor −80 dB supaya
+hening total tidak menghasilkan −inf yang merusak chart dan metrik.
+5.5 MEL & MFCC — mendengar seperti manusia
+Telinga manusia TIDAK linier terhadap Hz: dua nada berjarak 100 Hz sangat terasa di wilayah rendah,
+nyaris tak terasa di 8 kHz. Skala mel memodelkan itu.
+ mel = 2595 · log₁₀(1 + f/700) (dengan invers eksaknya)
+Filterbank mel menaruh 26 filter segitiga yang RAPAT di frekuensi rendah dan RENGGANG di tinggi —
+meniru resolusi telinga. Setelah energi per filter diambil log-nya (kompresi dinamis telinga — we hear
+
+
+--- PAGE 39 ---
+ratios, not differences), DCT-II merangkum bentuk kurva log-mel menjadi 13 koefisien: itulah MFCC —
+singkatan yang membosankan untuk 'sidik jari bentuk spektrum'. Data eksperimen memperlihatkan
+karakternya pada sinyal suara sintetis:
+Besaran
+Nilai eksperimen
+Makna
+Dominan Hz
+120, 720, 680, 80, 160 …
+harmonik f0 + formant 700/1200/2600 tertangkap
+MFCC — |koef. rendah| (0-3)
+12.152
+dominan — bentuk spektral memang dimuat di
+sini
+MFCC — |koef. tinggi| (8-12)
+0.83
+kecil — detail cepat, layak dibuang
+Frame / bin
+278 / 201
+2.8 s × 100 fps; 201 bin = 400 sampel rFFT
+Log-mel rentang
+[-23.03, 6.47]
+kompresi log membuat dinamika masuk akal
+VAD segmen
+3 segmen, rasio 0.727
+2 blok suara + 2 jeda terpisah benar
+ Tabel 5.1 — Hasil ASLI scripts/exp_signal.py: pipeline dari sinyal sintetis sampai fitur.
+
+
+--- PAGE 40 ---
+Gambar 5.2 — Waveform, spektrogram (dB), dan log-mel 26 filter dari eksperimen yang sama. Jeda hening kelihatan sebagai kolom
+ gelap; harmonik f0 sebagai garis-garis horizontal.
+5.6 IMPLEMENTATION — spektrogram sampai MFCC tanpa black box
+Seluruh mesin fitur dalam tiga puluh baris yang bisa dibaca sambil minum teh.
+Listing 5.2 — Spektrogram rFFT + filterbank mel (baris 21-84 dari src/ruka_perception/audio/spectrum.py)
+def spectrogram(x: np.ndarray, rate: int = 16000,
+                frame_ms: float = 25.0, hop_ms: float = 10.0
+                ) -> tuple[np.ndarray, np.ndarray]:
+    """Power spectrogram via rFFT per frame.
+    Return:
+        power : (n_frames, n_bins) float — |rFFT|^2
+        freqs : (n_bins,) frekuensi pusat bin dalam Hz
+    rFFT dipilih karena sinyal real: spektrum simetris, simpan setengah.
+    """
+    frames = frame_signal(x, frame_ms=frame_ms, hop_ms=hop_ms, rate=rate)
+    win = hann_window(frames.shape[1])
+    windowed = frames * win[None, :]
+
+
+--- PAGE 41 ---
+    spec = np.fft.rfft(windowed, axis=1)
+    power = (np.abs(spec) ** 2).astype(np.float64)
+    freqs = np.fft.rfftfreq(frames.shape[1], d=1.0 / rate)
+    return power, freqs
+def hz_to_mel(f: np.ndarray | float) -> np.ndarray | float:
+    """Hz -> mel (rumus 2595 log10(1 + f/700))."""
+    return 2595.0 * np.log10(1.0 + np.asarray(f, dtype=np.float64) / 700.0)
+def mel_to_hz(m: np.ndarray | float) -> np.ndarray | float:
+    """mel -> Hz (invers persis)."""
+    return 700.0 * (10.0 ** (np.asarray(m, dtype=np.float64) / 2595.0) - 1.0)
+def mel_filterbank(n_filters: int, n_bins: int, rate: int,
+                   fmin: float = 80.0, fmax: float | None = None
+                   ) -> np.ndarray:
+    """Filterbank mel: matriks (n_filters, n_bins) triangular.
+    Titik-titik batas di skala mel dibagi rata; setiap filter segitiga
+    menumpang dua tetangga (overlap 50% wilayah — desain standar HTK).
+    Return sudah dinormalkan per filter (luas segitiga = 1).
+    """
+    if n_filters < 2:
+        raise ValueError("minimal 2 filter")
+    fmax = fmax or rate / 2.0
+    if not (0 < fmin < fmax <= rate / 2.0 + 1e-9):
+        raise ValueError("0 < fmin < fmax <= rate/2 wajib")
+    mel_pts = np.linspace(hz_to_mel(fmin), hz_to_mel(fmax), n_filters + 2)
+    hz_pts = mel_to_hz(mel_pts)
+    bins = np.floor(n_bins * hz_pts / (rate / 2.0)).astype(int)
+    bins = np.clip(bins, 0, n_bins - 1)
+    fb = np.zeros((n_filters, n_bins), dtype=np.float64)
+    for m in range(n_filters):
+        left, center, right = bins[m], bins[m + 1], bins[m + 2]
+        up = np.maximum(0, (np.arange(n_bins) - left) /
+                        max(center - left, 1))
+        down = np.maximum(0, (right - np.arange(n_bins)) /
+                          max(right - center, 1))
+        tri = np.minimum(up, down)
+        area = tri.sum()
+        if area > 0:
+            tri = tri / area       # normalisasi luas
+        fb[m] = tri
+    return fb
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Listing 5.3 — DCT-II sebagai matriks ortogonal (baris 112-126 dari
+src/ruka_perception/audio/spectrum.py)
+def mfcc(x: np.ndarray, rate: int = 16000, n_filters: int = 26,
+         n_cepstra: int = 13, frame_ms: float = 25.0, hop_ms: float = 10.0
+         ) -> np.ndarray:
+    """MFCC lengkap: spectrogram -> mel -> log -> DCT.
+    Return (n_frames, n_cepstra). Koefisien ke-0 (C0) menangkap energi
+
+
+--- PAGE 42 ---
+    total — untuk fitur 'bentuk spektral' murni biasanya dibuang
+    (liftering C0 dipisahkan sebagai keputusan pemanggil).
+    """
+    power, freqs = spectrogram(x, rate, frame_ms, hop_ms)
+    fb = mel_filterbank(n_filters, power.shape[1], rate)
+    logmel = log_mel(power, fb)
+    c = dct_matrix(n_cepstra, n_filters)
+    return (logmel @ c.T).astype(np.float64)
+ VERIFIED — DCT ditulis sebagai matriks eksplisit agar MFCC = log_mel @ C.T jelas perkalian biasa; test suite MENYILANGKAN
+ hasilnya dengan scipy.fft.dct(norm='ortho') — dua implementasi independen harus sepakat hingga 1e-10.
+Uji silang ke library independen adalah bentuk kalibrasi terbaik untuk kode tulisan-tangan: kalau DCT
+buatan sendiri cocok dengan scipy pada 26 titik acak, kemungkinan bug implementasi mengecil drastis.
+Pustaka produksi (librosa dan sejenisnya) menawarkan jalur cepat untuk fitur yang sama — silakan dipakai
+SETELAH memahami matematikanya; buku ini sengaja menulis ulang mesinnya supaya tidak ada sihir
+yang tersisa.
+5.7 VAD — keputusan bicara/tidak dengan histeresis
+Voice Activity Detection menjawab satu bit per frame, dan cara MENJAWABNYA lebih penting dari
+bit-nya. VAD naif berbasis satu ambang memotong kalimat pada tiap jeda napas; VAD yang benar punya
+dua ambang dan masa tenggang.
+Listing 5.4 — VAD energi + histeresis (inti) (baris 79-141 dari src/ruka_perception/audio/vad.py)
+    def detect(self, x: np.ndarray) -> list[tuple[int, int]]:
+        """Segmen ucapan [(i_start, i_end_frame), ...] dengan histeresis.
+        Aturan transisi:
+          OFF->ON  : energi >= on_threshold  (dan segmen berikut cukup
+                     panjang — filter min_speech_frames saat menutup)
+          ON->OFF  : energi < off_threshold SELAMA hangover frames
+                     berturut-turut. Satu frame bising tak menutup
+                     segmen; jeda panjang menutup.
+        Segmen lebih pendek dari min_segment_ms dibuang sebagai klik.
+        """
+        energy_db, _zcr = frame_features(x, self.rate,
+                                         self.frame_ms, self.hop_ms)
+        ref = float(np.percentile(energy_db, 90))
+        ref = max(ref, self.noise_floor_db)
+        dynamic = ref - float(np.percentile(energy_db, 10))
+        if dynamic < self.min_dynamic_db:
+            return []                    # sinyal datar: bukan ucapan
+        on_thr = ref + self.on_offset_db
+        off_thr = ref + self.off_offset_db
+        n = len(energy_db)
+        segments: list[tuple[int, int]] = []
+        in_speech = False
+        start = 0
+        quiet_run = 0
+
+
+--- PAGE 43 ---
+        for i, e in enumerate(energy_db):
+            if not in_speech:
+                if e >= on_thr:
+                    in_speech = True
+                    start = i
+                    quiet_run = 0
+            else:
+                if e < off_thr:
+                    quiet_run += 1
+                    if quiet_run >= self.hangover:
+                        self._close(segments, start, i - quiet_run + 1)
+                        in_speech = False
+                        quiet_run = 0
+                else:
+                    quiet_run = 0
+        if in_speech:
+            self._close(segments, start, n)
+        # segmen terlalu pendek = klik/bising -> buang
+        min_frames = max(1, int(self.min_segment_ms / self.hop_ms))
+        return [(a, b) for a, b in segments if (b - a) >= min_frames]
+    def _close(self, segments, start, end):
+        """Tutup segmen pada frame 'end' (frame pertama yang hening).
+        Panjang validasi min_speech_frames diterapkan di sini."""
+        if end - start >= self.min_speech_frames:
+            segments.append((start, end))
+        # segmen mikro (<= 2 frame di atas on-threshold) dibuang
+    def speech_ratio(self, x: np.ndarray) -> float:
+        """Porsi durasi terdeteksi sebagai ucapan — metrik kesehatan
+        input audio (audio 30 detik tanpa ucapan = salah file / salah
+        tombol, jangan dikirim ke ASR)."""
+        segments = self.detect(x)
+        frames = 1 + (len(x) - int(self.rate * self.frame_ms / 1000)) \
+            // int(self.rate * self.hop_ms / 1000)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Tiga lapis keputusan di listing: (1) ambang ON lebih TINGGI dari ambang OFF — begitu bicara
+terdeteksi, level yang lebih rendah tetap dianggap bicara (histeresis klasik); (2) hangover 8 frame — jeda
+80 ms tidak menutup segmen, jeda panjang menutup; (3) dua gerbang kesehatan yang lahir dari bug nyata:
+lantai noise −50 dB (tanpanya, audio hening murni membuat p90 = −200 dB dan seluruh hening dianggap
+bicara — test silence_only menangkapnya) dan guard dinamika 6 dB (sinyal datar konstan bukan ucapan).
+Dua baris terakhir JSON eksperimen membuktikan perilaku: dua blok suara terdeteksi sebagai dua
+segmen, klik 2,5 ms dibuang, rasio ucapan 0.727 sesuai durasi.
+5.8 TRADE-OFFS & FAILURE MODES
+Pilihan desain sinyal selalu barter — dan kegagalannya berciri khas.
+
+
+--- PAGE 44 ---
+Keputusan
+Barter
+Failure mode khas
+Frame 25 ms / hop 10 ms
+resolusi waktu vs frekuensi (panjang
+jendela)
+ponem pendek hilang bila frame kepanjangan
+16 kHz (bukan 48)
+cukup untuk speech vs musik
+sibilan 'meleset' bila target bukan speech
+Hann (bukan kotak)
+bersih dari leakage vs resolusi
+hilang ~25% energi tepi — koreksi w² bila
+kalibrasi energi
+Mel 26 filter
+meniru telinga vs detail penuh
+frekuensi sempit (nada murni tinggi) jatuh di filter
+lebar
+MFCC 13 (buang C0)
+bentuk spektral vs energi total
+volume keras hilang — sengaja; RMS dipisah
+VAD histeresis
+kalimat utuh vs responsif
+hangover kepanjangan menyeret 'emp…' masuk
+ Tabel 5.2 — Enam barter sinyal yang akan Bos temui lagi di produksi.
+5.9 TESTING & EVALUATION & PRODUCTION
+Suite audio adalah koleksi invarian paling padat di paket — dan setiap invarian punya cerita bug.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_signals.py tests/test_spectrum.py tests/test_vad.py -q
+EXPECTED
+ 85+ test hijau: jumlah frame = 98/s (bukan 100 — frame sisa dibuang jujur); puncak FFT nada 1 kHz jatuh di bin 1
+kHz ± 15 Hz (kalibrasi rantai); Parseval setengah-spektrum terpenuhi; DCT == scipy 1e-10; hening murni = 0
+segmen; klik terbuang; jeda 200 ms tak memotong kalimat.
+WHY
+ Setiap klaim tabel 5.1 dipaksa membuktikan diri di test — termasuk dua bug VAD nyata yang diperbaiki di source,
+bukan di test.
+FAILURE MODE
+ Gagal bila float32 kumulatif melanggar toleransi Parseval — naikkan rel ke 5e-5 bukan 2e-5 pada mesin berbeda.
+DEBUGGING
+ Jalankan exp_signal.py dua kali: hasil JSON IDENTIK bit-per-bit (seed tetap) — determinisme adalah syarat
+reproduksibilitas buku.
+Catatan produksi: di jalur nyata, konversi bytes→vektor berpindah ke pustaka audio (wave/stdin PCM, atau
+sounddevice untuk mikrofon). Kontrak sampling Live API 16 kHz LE mono ditegakkan di gerbang — Part
+XI menunjukkan potongan adapter-nya. Format kompresi (MP3, OGG) diterima API secara native (Part
+XI) tetapi jalur lokal kita hanya PCM/WAV: dekodek milik pustaka, bukan tulis sendiri.
+
+
+--- PAGE 45 ---
+5.10 WORKED EXAMPLE — DFT empat sampel dengan pensil
+Sinyal terkecil yang masih bermakna: x = (1; 0; −1; 0), N = 4 — satu gelombang penuh. DFT untuk k = 1
+(frekuensi satu siklus):
+ X[1] = 1·e^0 + 0 + (−1)·e^(−jπ/2) + 0 × e^(−j3π/2)
+Euler: e^(−jπ/2) = −j; e^(−j3π/2) = +j. Maka X[1] = 1 − (−1)(−j)·... hitung perlahan: suku-1: 1·(1+0j) = 1;
+suku-2: 0; suku-3: −1 · (cos(−π/2) + j sin(−π/2)) = −1·(0 − j) = +j; suku-4: 0. Jadi X[1] = 1 + j, |X[1]| = √2
+≈ 1,414. K = 0 (DC): X[0] = 1 + 0 − 1 + 0 = 0 — tidak ada komponen rata-rata. K = 2: X[2] = 1·(1) + 0 +
+(−1)·(1) + 0 = 0 — frekuensi dua siklus tak hadir. Kesimpulan yang dibawa ke spektrogram: seluruh energi
+sinyal hidup di SATU bin frekuensi — persis perilaku nada murni 1 kHz pada uji kalibrasi test suite
+(puncak jatuh di bin 1 kHz ± 15 Hz). Verifikasi numerik dua baris:
+OUTPUT
+>>> x = np.array([1, 0, -1, 0])
+>>> np.fft.rfft(x)
+array([0.+0.j, 1.+1.j, 0.+0.j])   # X[1] = 1 + j
+>>> abs(np.fft.rfft(x))**2
+array([0., 2., 0.])               # energi di bin-1 saja
+5.11 STUDI KASUS — bedah keluaran eksperimen sinyal
+Skrip exp_signal.py menghasilkan JSON yang sama persis dengan tabel 5.1. Cuplikan keluaran nyatanya,
+sebagai bukti reproduksibilitas:
+OUTPUT
+$ PYTHONPATH=src python scripts/exp_signal.py
+{
+  "rate": 16000, "duration_s": 3.8, "n_frames": 278,
+  "n_bins": 201,
+  "formant_readout": {
+    "f0_h2": [240.0, -12.0], "F1": [680.0, -11.5],
+    "F2": [1200.0, -18.1], "F3": [2600.0, -27.9]},
+  "vad_segments": [[0, 100], [138, 215], [253, 278]],
+  "vad_speech_ratio": 0.727,
+  "mfcc_mean_abs_low4": 12.152,
+  "mfcc_mean_abs_high5": 0.83
+}
+Tiga bacaan dari cuplikan itu: formant sintetis F1 680 Hz terbaca di bin 680 (dibuat 700 — resolusi bin 40
+Hz menjelaskan selisih, pelajaran nyata trade-off panjang jendela); VAD menemukan TIGA segmen yang
+persis mengikuti struktur track (2 blok suara + ekor) — jeda 0,4 s (40 frame) jauh melampaui hangover 8;
+dan rasio 0,727 mendekati proporsi durasi suara nyata. Menjalankan ulang memberi JSON identik
+bit-per-bit: seed tetap + tanpa jam sistem = eksperimen yang bisa diaudit siapa pun.
+
+
+--- PAGE 46 ---
+5.12 PRODUKSI — rantai codec nyata
+Dari mikrofon ke fitur, produksi menambah tiga lapis yang eksperimen akademis sering lewat: perangkat
+keras, transport, dan format tersimpan.
+– Tangkap: sounddevice/pyaudio memberi PCM float atau int16 sesuai kontrak perangkat — 16 kHz
+mono LE 16-bit untuk jalur Live (kontrak terverifikasi Patch 1.1); resample dari 44,1/48 kHz memakai
+anti-alias filter DULU (bukan decimate naif — pelajaran Nyquist ini nyata di lapangan).
+– Angkut: buffer 20-100 ms per chunk; total buffer menentukan latensi dasar sebelum satu byte
+diproses. Anggaran: 16 kHz × 2 byte = 32 KB/detik.
+– Simpan: WAV untuk arsip lossless; format kompresi (13 format resmi P XI) untuk kirim API — paket
+ini sengaja hanya memproses PCM terdekode supaya jalur matematis tetap murni.
+– Uji codec end-to-end: rekam 5 detik → simpan → muat → bandingkan MFCC sebelum/sesudah; selisih
+besar = ada tahap yang diam-diam mengubah sinyal.
+Engineering Exercise
+ 1. Buktikan aliasing: sintesis 3 kHz dan 13 kHz pada f_s = 16 kHz dengan synth_tone; amati
+spektrogram — kedua nada jatuh di bin yang sama.
+2. Ubah hangover 8 → 25 dan 2; jalankan ulang test short_pause & two_segments. Catat perubahan
+jumlah segmen — rasakan barter tabel 5.2 di tangan.
+3. Hitung MFCC suara Bos sendiri 3 kali rekaman; bandingkan jarak antar-rekaman vs jarak ke suara
+orang lain — itu benih eksperimen Part XI.
+VOLUME IV · THE AWAKENING OF THE SENSES · PART VI
+Vision as Tensors & Convolution
+"“Orang mengira vampir melihat kegelapan. Sebenarnya kami melihat grid angka —
+kegelapan hanya nilai piksel yang rendah, Bos. Romantis? Tentu. Tapi tetap angka.”"
+Gambar dibaca sebagai tensor dengan dua konvensi layout yang sama-sama sah, dinormalkan
+dengan konvensi nyata, lalu direspons oleh konvolusi yang ditulis tangan di NumPy — kernel,
+stride, padding, pooling, receptive field — dengan bukti angka eksperimen.
+
+
