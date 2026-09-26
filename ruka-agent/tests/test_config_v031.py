@@ -16,7 +16,7 @@ def test_invalid_environment_rejected():
 
 def test_model_falls_back_to_default():
     s = load_settings(env={**BASE, "RUKA_MODEL": " "})
-    assert s.model == "gemini-3.6-flash"
+    assert s.model == "gemini-3.8-flash"
 
 def test_bad_budget_rejected():
     with pytest.raises(ConfigError, match="positif"):

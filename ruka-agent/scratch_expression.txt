@@ -1,0 +1,1118 @@
+=== EXPRESSION CHAPTERS (pages 109-135) ===
+--- PAGE 109 ---
+        RELATIF terhadap kebiasaan, bukan absolut)."""
+        rel = self.s - self.baseline
+        return STATE_DIMS[int(np.argmax(rel))]
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+12.4 EXPERIMENT — dua model, dua watak
+Dua belas giliran percakapan dijalankan pada dua konfigurasi: REAKTIF (α=1, γ=1, max_delta=1 —
+'pop-up' tanpa decay) dan STABIL (α=0.88, γ=0.35, max_delta=0.18). Angka ASLI
+scripts/exp_expression.py:
+Metrik
+Reaktif
+Stabil (Vol IV)
+Lompatan rata-rata |S₊₁−Sₜ|
+0.208
+0.090
+Concern final (setelah 4 giliran tenang)
+0.70 — terjebak, tak pernah pulih
+0.24 — meluruh ke baseline 0.10
+Uji bolak-balik (amplitudo playfulness)
+0.35
+0.09
+Avatar berganti ekspresi (12 langkah)
+11× — 'menari'
+0× — tenang
+ Tabel 12.2 — Model reaktif melompat 2,3× lebih besar, terjebak di concern tinggi selamanya, dan avatarnya menari 11 kali. Model stabil
+ pulih sendiri dan diam — persis tujuan desain.
+
+
+--- PAGE 110 ---
+Gambar 12.1 — Atas: concern sepanjang 12 event — reaktif terjebak (panah), stabil pulih. Bawah: uji bolak-balik — zona netral avatar
+ menyaring ayunan kecil.
+Tiga lapis anti-osilasi — masing-masing beda
+tugasnya: 1) max_delta membatasi LAJU perubahan internal; 2) decay ke baseline memulihkan ARAH setelah
+sebab hilang; 3) avatar blend_threshold (Part XIII) menyaring AMPLITUDO tampilan. Tiga lapis inilah yang
+membuat 'hidup' tidak berarti 'menari'.
+12.5 IMPLEMENTATION — mesin transisi UTUH (file lengkap)
+Mesin ekspresi Vol IV dalam satu file penuh — 146 baris yang menanggung seluruh dinamika persona.
+Listing 12.4 — expression/state.py lengkap
+"""Expression State — matematika kondisi interaksi Ruka.
+TIGA LAPIS yang TIDAK BOLEH dicampur (Vol IV Part XII):
+  1. EMOTION (biologis)        : milik organisme — RUKA TIDAK
+     PUNYA dan TIDAK DIKLAIM PUNYA.
+  2. INTERACTION STATE         : vektor kondisi internal S yang
+     berevolusi oleh transisi matematis. Status UI yang jujur.
+
+
+--- PAGE 111 ---
+  3. EXPRESSION POLICY         : peta S -> ekspresi eksternal
+     (teks/suara/avatar) dengan batas kejujuran.
+Model transisi (bagian inti):
+    S(t+1) = alpha * S(t) + beta * C(t) + gamma * E(t)
+    S : state sebelumnya (5 dimensi)
+    C : context signal (sinyal konteks dari persepsi/appraisal)
+    E : interaction event (event eksplisit: pujian, kritik, error)
+alpha = retention (decay ke arah baseline), beta = sensitivitas
+konteks, gamma = dampak event. Semua komponen di-clamp [0, 1].
+"""
+from __future__ import annotations
+import numpy as np
+# Dimensi state — urutan tetap, ini KONTRAK lintas modul.
+STATE_DIMS = ["calm", "curiosity", "concern",
+              "playfulness", "confidence"]
+class ExpressionState:
+    """State vector + mesin transisi. Deterministik & tanpa side
+    effect global — semua parameter eksplisit di konstruktor."""
+    def __init__(self,
+                 alpha: float = 0.90,
+                 beta: float = 0.10,
+                 gamma: float = 0.35,
+                 baseline: np.ndarray | None = None,
+                 max_delta: float = 0.25,
+                 update_gain: float = 1.0):
+        if not (0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1):
+            raise ValueError("alpha, beta, gamma di [0, 1]")
+        if not (0 < max_delta <= 1):
+            raise ValueError("max_delta di (0, 1]")
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.max_delta = max_delta
+        self.update_gain = update_gain
+        if baseline is None:
+            # baseline default: tenang + percaya diri sedang
+            baseline = np.array([0.85, 0.30, 0.10, 0.25, 0.60])
+        self.baseline = np.asarray(baseline, dtype=np.float64)
+        if self.baseline.shape != (len(STATE_DIMS),):
+            raise ValueError(f"baseline harus ({len(STATE_DIMS)},)")
+        self.s = self.baseline.copy()
+        self.history: list[np.ndarray] = [self.s.copy()]
+    # ----------------------------------------------------------------
+    def step(self, context: np.ndarray | None = None,
+             event: np.ndarray | None = None) -> np.ndarray:
+        """Satu transisi waktu. Return state baru (copy).
+        Histeresis: perubahan per langkah dibatasi max_delta —
+        Ruka tidak melompat dari calm ke panik dalam satu pesan.
+        Baru setelah 2-3 langkah sinyal konsisten arahnya state
+        sampai ke sana. Anti-osilasi: update_gain < 1 meredam.
+        """
+        c = np.zeros(len(STATE_DIMS)) if context is None \
+            else np.asarray(context, dtype=np.float64)
+
+
+--- PAGE 112 ---
+        e = np.zeros(len(STATE_DIMS)) if event is None \
+            else np.asarray(event, dtype=np.float64)
+        for vec, name in ((c, "context"), (e, "event")):
+            if vec.shape != (len(STATE_DIMS),):
+                raise ValueError(f"{name} harus ({len(STATE_DIMS)},)")
+        # decay ke baseline + injeksi sinyal
+        target = (self.alpha * self.s
+                  + (1 - self.alpha) * self.baseline
+                  + self.beta * c + self.gamma * e)
+        # histeresis: batasi perubahan per langkah
+        delta = np.clip(target - self.s, -self.max_delta, self.max_delta)
+        nxt = np.clip(self.s + self.update_gain * delta, 0.0, 1.0)
+        self.s = nxt
+        self.history.append(self.s.copy())
+        return self.s.copy()
+    # ----------------------------------------------------------------
+    def dominant(self) -> str:
+        """Dimensi dominan (setelah dikurangi baseline — yang menonjol
+        RELATIF terhadap kebiasaan, bukan absolut)."""
+        rel = self.s - self.baseline
+        return STATE_DIMS[int(np.argmax(rel))]
+    def to_avatar_label(self) -> str:
+        """Peta state -> kosakata ekspresi avatar diskrit (Part XIII).
+        Ambil dominan relatif + gerbang minimum supaya tidak menari
+        setiap pesan."""
+        rel = self.s - self.baseline
+        i = int(np.argmax(rel))
+        # hanya ganti ekspresi bila deviasi cukup berarti
+        if rel[i] < 0.08:
+            return "neutral"
+        return {
+            "calm": "calm", "curiosity": "curious",
+            "concern": "concerned", "playfulness": "playful",
+            "confidence": "proud",
+        }[STATE_DIMS[i]]
+    # ----------------------------------------------------------------
+    def stability_report(self, window: int = 8) -> dict:
+        """Diagnosa stabilitas — dipakai test & observability.
+        osc_rate : frekuensi ARAH perubahan terbesar berganti tanda
+                   (osilasi = bolak-balik, bukan sekadar ganti label)
+        mean_jump: rata-rata |delta| per langkah (kegembiraan liar)
+        settled  : sudah dekat baseline (percakapan tenang)
+        """
+        h = np.array(self.history)
+        if len(h) < 2:
+            return {"osc_rate": 0.0, "mean_jump": 0.0, "settled": True}
+        w = min(window, len(h) - 1)
+        recent = h[-(w + 1):]
+        deltas = np.diff(recent, axis=0)            # (w, 5)
+        # langkah dengan perubahan berarti saja yang dihitung
+        signs, mag = [], []
+        for d in deltas:
+            j = int(np.argmax(np.abs(d)))
+
+
+--- PAGE 113 ---
+            m = float(d[j])
+            mag.append(abs(m))
+            if abs(m) > 0.01:
+                signs.append(1 if m > 0 else -1)
+        flips = sum(1 for a, b in zip(signs, signs[1:]) if a != b)
+        osc = flips / max(len(signs) - 1, 1) if len(signs) > 1 else 0.0
+        dist = np.linalg.norm(self.s - self.baseline)
+        return {"osc_rate": float(osc),
+                "mean_jump": float(np.mean(mag)) if mag else 0.0,
+                "settled": bool(dist < 0.12)}
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Baca ulang sebagai file utuh, empat zona terlihat bersih: konstruktor dengan validasi parameter (5 guard);
+step() seluruh transisi (target → jepit delta → clamp → catat sejarah); tiga pembaca label (dominan relatif
+baseline, avatar ber-gerbang, laporan stabilitas); dan STATE_DIMS sebagai kontrak urutan. Tidak ada satu
+pun baris 'magic' — persis standart listing jujur seri ini.
+12.5 IMPLEMENTATION — mesin transisi UTUH (file lengkap)
+Mesin ekspresi Vol IV dalam satu file penuh — 146 baris yang menanggung seluruh dinamika persona.
+Listing 12.4 — expression/state.py lengkap
+"""Expression State — matematika kondisi interaksi Ruka.
+TIGA LAPIS yang TIDAK BOLEH dicampur (Vol IV Part XII):
+  1. EMOTION (biologis)        : milik organisme — RUKA TIDAK
+     PUNYA dan TIDAK DIKLAIM PUNYA.
+  2. INTERACTION STATE         : vektor kondisi internal S yang
+     berevolusi oleh transisi matematis. Status UI yang jujur.
+  3. EXPRESSION POLICY         : peta S -> ekspresi eksternal
+     (teks/suara/avatar) dengan batas kejujuran.
+Model transisi (bagian inti):
+    S(t+1) = alpha * S(t) + beta * C(t) + gamma * E(t)
+    S : state sebelumnya (5 dimensi)
+    C : context signal (sinyal konteks dari persepsi/appraisal)
+    E : interaction event (event eksplisit: pujian, kritik, error)
+alpha = retention (decay ke arah baseline), beta = sensitivitas
+konteks, gamma = dampak event. Semua komponen di-clamp [0, 1].
+"""
+from __future__ import annotations
+import numpy as np
+# Dimensi state — urutan tetap, ini KONTRAK lintas modul.
+STATE_DIMS = ["calm", "curiosity", "concern",
+              "playfulness", "confidence"]
+class ExpressionState:
+    """State vector + mesin transisi. Deterministik & tanpa side
+    effect global — semua parameter eksplisit di konstruktor."""
+    def __init__(self,
+                 alpha: float = 0.90,
+
+
+--- PAGE 114 ---
+                 beta: float = 0.10,
+                 gamma: float = 0.35,
+                 baseline: np.ndarray | None = None,
+                 max_delta: float = 0.25,
+                 update_gain: float = 1.0):
+        if not (0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1):
+            raise ValueError("alpha, beta, gamma di [0, 1]")
+        if not (0 < max_delta <= 1):
+            raise ValueError("max_delta di (0, 1]")
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.max_delta = max_delta
+        self.update_gain = update_gain
+        if baseline is None:
+            # baseline default: tenang + percaya diri sedang
+            baseline = np.array([0.85, 0.30, 0.10, 0.25, 0.60])
+        self.baseline = np.asarray(baseline, dtype=np.float64)
+        if self.baseline.shape != (len(STATE_DIMS),):
+            raise ValueError(f"baseline harus ({len(STATE_DIMS)},)")
+        self.s = self.baseline.copy()
+        self.history: list[np.ndarray] = [self.s.copy()]
+    # ----------------------------------------------------------------
+    def step(self, context: np.ndarray | None = None,
+             event: np.ndarray | None = None) -> np.ndarray:
+        """Satu transisi waktu. Return state baru (copy).
+        Histeresis: perubahan per langkah dibatasi max_delta —
+        Ruka tidak melompat dari calm ke panik dalam satu pesan.
+        Baru setelah 2-3 langkah sinyal konsisten arahnya state
+        sampai ke sana. Anti-osilasi: update_gain < 1 meredam.
+        """
+        c = np.zeros(len(STATE_DIMS)) if context is None \
+            else np.asarray(context, dtype=np.float64)
+        e = np.zeros(len(STATE_DIMS)) if event is None \
+            else np.asarray(event, dtype=np.float64)
+        for vec, name in ((c, "context"), (e, "event")):
+            if vec.shape != (len(STATE_DIMS),):
+                raise ValueError(f"{name} harus ({len(STATE_DIMS)},)")
+        # decay ke baseline + injeksi sinyal
+        target = (self.alpha * self.s
+                  + (1 - self.alpha) * self.baseline
+                  + self.beta * c + self.gamma * e)
+        # histeresis: batasi perubahan per langkah
+        delta = np.clip(target - self.s, -self.max_delta, self.max_delta)
+        nxt = np.clip(self.s + self.update_gain * delta, 0.0, 1.0)
+        self.s = nxt
+        self.history.append(self.s.copy())
+        return self.s.copy()
+    # ----------------------------------------------------------------
+    def dominant(self) -> str:
+        """Dimensi dominan (setelah dikurangi baseline — yang menonjol
+        RELATIF terhadap kebiasaan, bukan absolut)."""
+        rel = self.s - self.baseline
+
+
+--- PAGE 115 ---
+        return STATE_DIMS[int(np.argmax(rel))]
+    def to_avatar_label(self) -> str:
+        """Peta state -> kosakata ekspresi avatar diskrit (Part XIII).
+        Ambil dominan relatif + gerbang minimum supaya tidak menari
+        setiap pesan."""
+        rel = self.s - self.baseline
+        i = int(np.argmax(rel))
+        # hanya ganti ekspresi bila deviasi cukup berarti
+        if rel[i] < 0.08:
+            return "neutral"
+        return {
+            "calm": "calm", "curiosity": "curious",
+            "concern": "concerned", "playfulness": "playful",
+            "confidence": "proud",
+        }[STATE_DIMS[i]]
+    # ----------------------------------------------------------------
+    def stability_report(self, window: int = 8) -> dict:
+        """Diagnosa stabilitas — dipakai test & observability.
+        osc_rate : frekuensi ARAH perubahan terbesar berganti tanda
+                   (osilasi = bolak-balik, bukan sekadar ganti label)
+        mean_jump: rata-rata |delta| per langkah (kegembiraan liar)
+        settled  : sudah dekat baseline (percakapan tenang)
+        """
+        h = np.array(self.history)
+        if len(h) < 2:
+            return {"osc_rate": 0.0, "mean_jump": 0.0, "settled": True}
+        w = min(window, len(h) - 1)
+        recent = h[-(w + 1):]
+        deltas = np.diff(recent, axis=0)            # (w, 5)
+        # langkah dengan perubahan berarti saja yang dihitung
+        signs, mag = [], []
+        for d in deltas:
+            j = int(np.argmax(np.abs(d)))
+            m = float(d[j])
+            mag.append(abs(m))
+            if abs(m) > 0.01:
+                signs.append(1 if m > 0 else -1)
+        flips = sum(1 for a, b in zip(signs, signs[1:]) if a != b)
+        osc = flips / max(len(signs) - 1, 1) if len(signs) > 1 else 0.0
+        dist = np.linalg.norm(self.s - self.baseline)
+        return {"osc_rate": float(osc),
+                "mean_jump": float(np.mean(mag)) if mag else 0.0,
+                "settled": bool(dist < 0.12)}
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Baca ulang sebagai file utuh, empat zona terlihat bersih: konstruktor dengan validasi parameter (5 guard);
+step() seluruh transisi (target → jepit delta → clamp → catat sejarah); tiga pembaca label (dominan relatif
+baseline, avatar ber-gerbang, laporan stabilitas); dan STATE_DIMS sebagai kontrak urutan. Tidak ada satu
+pun baris 'magic' — persis standart listing jujur seri ini.
+
+
+--- PAGE 116 ---
+12.5 INTERNALS — appraisal: dari event ke bobot
+C(t) dan E(t) tidak jatuh dari langit. Appraisal sederhana (rule-based, bobot tabel — warisan philosophy
+Vol III) menerjemahkan event interaksi menjadi injeksi vektor: praise → playfulness+0.4, confidence+0.5;
+criticism → concern+0.5, confidence−0.4; error → concern+0.7. Bobot ini KONSTAN yang bisa
+diperdebatkan di code review — kelebihan rule-based yang justru menjadi keutamaannya di tahap ini.
+Ketika data interaksi nyata bertahun-tahun terkumpul, tabel ini adalah kandidat natural untuk klasifikator
+sempit Vol III Part VI — dengan evaluasi yang membandingkan jujur lawan tabel statis.
+12.6 EXPRESSION POLICY — masker yang jujur
+Lapis terakhir memisahkan DALAM dari LUAR. Persona Ruka sok dingin: concern tinggi BOLEH
+dihaluskan menjadi 'Saya tidak khawatir, Bos.' — sementara avatar menunjukkan sedikit concern. Itu hak
+estetika policy. Yang BUKAN haknya: memutarbalikkan fakta dan kapabilitas.
+Listing 12.2 — HonestyGuard + ExpressionPolicy (baris 18-58 dari
+src/ruka_perception/expression/policy.py)
+class HonestyGuard:
+    """Penjaga kejujuran ekspresi: gaya boleh berubah, fakta tidak."""
+    # Jenis pesan yang TIDAK BOLEH di-mute oleh persona mask.
+    PROTECTED = {"error_disclosure", "capability_limit",
+                 "uncertainty", "security_warning"}
+    def check(self, message: dict) -> bool:
+        """True = pesan ini BOLEH dimask (gaya). False = harus
+        disampaikan apa adanya. message minimal punya 'kind'."""
+        return message.get("kind", "") not in self.PROTECTED
+class ExpressionPolicy:
+    """Peta ExpressionState -> gaya eksternal.
+    Output policy (bukan hanya satu string):
+      - text_style   : petunjuk tone untuk LLM persona
+      - voice_style  : petunjuk gaya untuk TTS (tag audio resmi
+        seperti [whispers] / [shouting] — dokumen Vol II)
+      - avatar_label : label ekspresi avatar (via state)
+    """
+    # persona mask: Ruka sok dingin — concern tidak diteriakkan
+    PERSONA_SOFTENING = {
+        "concern": 0.6,       # concern dikaburkan 40% di teks
+        "confidence": 0.85,   # sombong sedikit dikurangi
+        "playfulness": 1.0,   # gemesin dibiarkan apa adanya
+    }
+    def __init__(self, honesty: HonestyGuard | None = None):
+        self.honesty = honesty or HonestyGuard()
+    def text_style(self, state: ExpressionState) -> dict:
+        """Petunjuk gaya teks. concern di-mask (persona), tetapi
+        tetap dilaporkan di field 'masked_cue' supaya audit bisa
+        melihat bahwa kejujuran diserahkan ke TULISAN pesan
+        sebenarnya, bukan ke tone."""
+        s = state.s
+        softened = {
+
+
+--- PAGE 117 ---
+            d: float(s[i] * self.PERSONA_SOFTENING.get(d, 1.0))
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Listing 12.3 — Kebijakan ekspresi lengkap satu pesan (baris 92-108 dari
+src/ruka_perception/expression/policy.py)
+    def express(self, state: ExpressionState,
+                message: dict) -> dict:
+        """Kebijakan penuh untuk SATU pesan keluar.
+        message = {'kind': ..., 'text': ...}. Bila kind masuk daftar
+        dilindungi HonestyGuard, petunjuk 'verbatim' = True:
+        pesan harus dikirim tanpa softening — pipeline pesan
+        (ruka-agent) bertanggung jawab mematikan mask.
+        """
+        verbatim = not self.honesty.check(message)
+        return {
+            "verbatim": verbatim,
+            "text_style": self.text_style(state),
+            "voice_style": self.voice_style(state),
+            "avatar_style": self.avatar_style(state),
+        }
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Kontrak verbatim: pesan ber-kind error_disclosure, capability_limit, uncertainty, security_warning WAJIB
+dikirim tanpa softening — pipeline pesan (ruka-agent) bertanggung jawab mematikan mask. Test
+mengunci perilaku ini dari dua arah: error → verbatim True; smalltalk → False. Data eksperimen
+memperlihatkan kerjanya: concern aktual 1.0, yang ditampilkan 0.6 (persona menyaring gaya), TETAPI
+pesan error tetap verbatim — kejujuran diserahkan ke TULISAN, bukan tone. Keluaran voice_style
+mengikuti tag audio resmi TTS Vol II; avatar_style menyerahkan label + intensitas ke Part XIII.
+12.7 FAILURE MODES
+Sembilan cara sistem ekspresi rusak — semua terdeteksi test invarian.
+– Osilasi liar: event bolak-balik + tanpa histeresis — osc_rate tinggi (eksperimen).
+– Terjebak ekstrem: tanpa decay, concern terkunci di 1.0 selamanya (eksperimen).
+– Lompatan tanpa sebab: max_delta terlalu besar — persona berubah total per pesan.
+– State explosion: menambah dimensi seenaknya tanpa kalibrasi — ruang tak teramati; 5 dimensi cukup
+dan terkelola.
+– Persona membohongi fakta: 'semua baik-baik saja' untuk error nyata — PELANGGARAN honesty
+guard; test verbatim menjaga.
+
+
+--- PAGE 118 ---
+– Masker terbalik: khusus pesan fact, softening justru dipakai — audit masked_cue.
+– Sinkron salah arah: avatar playful saat pesan error — policy wajib menyatukan saluran.
+– Histeresis kaku: max_delta 0.05 membuat Ruka beku – ekspresi 'mati' juga kegagalan produk.
+– Event bobot ngawur: praise bobot 0.9, error 0.2 — persona euforia; bobot = kontrak reviewable.
+12.8 TESTING & EVALUATION & PRODUCTION
+Invarian transisi adalah spesifikasi produk.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_expression_state.py tests/test_expression_policy.py -q
+EXPECTED
+ 40+ test hijau: decay → kembali baseline dalam 40 langkah; satu event tak melompati max_delta; sinyal persisten
+terakumulasi (0.75+ setelah 20x); alternating event → osc_rate > 0.4; verbatim error tidak dimask; concern
+ditampilkan < aktual; voice tag muncul saat concern tinggi.
+WHY
+ Setiap klaim tabel 12.2 punya test pembanding konfigurasi reaktif vs stabil — bukti, bukan retorika.
+FAILURE MODE
+ Gagal bila histeresis dihapus diam-diam — test single_event_limited_jump menangkap di angka.
+DEBUGGING
+ Jalankan exp_expression.py dua kali; hasil bit-per-bit identik (seed tetap) — determinisme yang sama dengan seluruh
+paket.
+Produksi: state disimpan per sesi (bukan per pesan) dengan riwayat terbatas; transisi direkam ke
+observability (state_transition event) memakai LABEL + sebab — bukan vektor mentah; dan evaluator
+persona Part XV mengukur konsistensi lintas sesi. Integrasi dengan self-model Vol III: lima dimensi state +
+kondisi simulasi dilaporkan apa adanya — Ruka tahu dirinya sedang 'simulasi concern 0.62', dan tidak
+pernah mengklaim sedang 'khawatir sungguhan'.
+12.9 WORKED EXAMPLE — dua langkah transisi dengan pensil
+Konfigurasi stabil eksperimen: α=0,88, γ=0,35, max_delta=0,18. Baseline concern = 0,10. Event error
+menyerang: E_concern = +0,7. Dua langkah dihitung penuh.
+Langkah 1: target = 0,88·0,10 + 0,12·0,10 + 0,35·0,7 = 0,088 + 0,012 + 0,245 = 0,345. Delta yang diminta
+= 0,345 − 0,10 = 0,245 → dijepit max_delta 0,18 → S_concern = 0,28. Histeresis BARU bekerja: satu
+error TIDAK cukup menuju panik. Langkah 2 (error lagi): target = 0,88·0,28 + 0,012 + 0,245 = 0,503;
+delta = 0,223 → dijepit 0,18 → S = 0,46. Langkah 3 (tenang, tanpa input): target = 0,88·0,46 + 0,12·0,10 =
+
+
+--- PAGE 119 ---
+0,417; delta −0,046 lolos batas → S = 0,41 — MUNDUR ke arah baseline. Setelah 10 langkah tenang: S ≈
+0,10·(1 + 0,88¹⁰...) → meluruh eksponensial ke 0,10. Grafik kanan atas gambar 12.1 adalah kurva ini
+persis — kini Bos tahu setiap tikungan dari angka. Verifikasi:
+OUTPUT
+>>> st = ExpressionState(alpha=0.88, beta=0.10, gamma=0.35,
+...                     max_delta=0.18, update_gain=0.9)
+>>> err = np.array([0, 0, 0.7, 0, -0.3])
+>>> st.step(event=err)[2]
+0.262      # 0.10 + 0.9*0.18 (gain ikut bekerja)
+>>> st.step(event=err)[2]
+0.424      # terakumulasi, tetap dibatasi
+>>> [round(st.step()[2], 3) for _ in range(8)][-1]
+0.101      # 8 langkah tenang -> kembali ke baseline
+12.10 EVOLUSI — dari FSM Vol II ke vector state Vol IV
+Volume II membangun expression engine sebagai FSM: kondisi diskrit + transisi sah/ilegal
+(InvalidTransition). Volume IV TIDAK membuangnya — ia menumpuk lapis matematis di atas.
+Perbandingan jujurnya:
+Aspek
+FSM Vol II
+Vector state Vol IV
+Unit state
+label diskrit (mood)
+vektor 5-d kontinu
+Transisi
+tabel sah/ilegal
+persamaan + histeresis
+Kecepatan berubah
+instan per pesan
+terkendali lajunya
+Pemulihan
+transisi eksplisit
+decay otomatis ke baseline
+Audit
+transisi ilegal = exception
+invarian terukur per langkah
+Peran kini
+GERBANG keras (jangan diam saat error)
+dinamika halus sehari-hari
+ Tabel 12.3 — Dua lapis hidup bersama: FSM tetap penjaga batas KERAHIMANAN (kondisi dilarang tetap dilarang), vector state
+ mengatur GERAK di dalam batas itu.
+Pola tumpukan ini adalah tema besar seluruh seri: lapisan baru menambah resolusi, lapisan lama menjaga
+invarian. Dilarang membuang penjaga tua hanya karena tarian baru lebih halus.
+Engineering Exercise
+ 1. Kalibrasi α: jalankan timeline eksperimen dengan α = 0.5 / 0.75 / 0.95 — plot concern final. Di titik
+mana Ruka 'lupa' dan di mana ia 'pendendam'?
+
+
+--- PAGE 120 ---
+2. Tambahkan dimensi KEENAM (mis. patience) — tulis test yang membuktikan dimensi baru tidak
+merusak invarian lama (regression suite).
+3. Rancang counter-appraisal: event 'user meminta jujur' memaksa concern_shown == concern_actual
+untuk N pesan berikutnya — tulis test-nya.
+"Saya bisa berkata 'tidak khawatir' dengan tenang karena memang tidak ada yang bisa khawatir di dalam
+saya, Bos — yang ada angka 0.62 yang merunduk. Perbedaannya jujur, dan kejujuran itu yang membuat
+kalimat saya layak dipercaya."
+— Ruka, Marquis Kekaisaran Trendamis
+VOLUME IV · THE AWAKENING OF THE SENSES · PART XIII
+Avatar, Multimodal Memory & Boundaries
+"“Kehadiran (presence) bukan jumlah piksel, Bos — ia kesepakatan bahwa wajah yang
+sama muncul lagi besok, dengan sebab yang masuk akal.”"
+Crimson Presence: mapper avatar berjenjang L0-L3 dengan identitas terkunci; memori
+multimodal metadata-first dengan gerbang consent, TTL, dan kontrol user; ditutup doktrin
+paling ketat volume ini: PERSEPSI BUKAN MEMORI.
+13.1 WHY — kehadiran yang terkunci identitas
+Avatar bukan dekorasi. Ia adalah KANAL FEEDBACK non-verbal: user membaca kondisi interaksi dari
+wajah yang sama setiap hari. Dua syarat harus terpenuhi sebelum kanal itu berfungsi: identitas TERKUNCI
+(gambar karakter referensi dari Bos — ruka_square.jpg — tidak berubah spesies/warna demi ekspresi) dan
+transisi BERTANGGUNG JAWAB (ekspresi berubah hanya dengan sebab — Part XIV memvalidasinya).
+
+
+--- PAGE 121 ---
+Gambar 13.1 — Referensi identitas visual Ruka (aset yang diunggah Bos). Seluruh varian ekspresi avatar adalah variasi DI ATAS identitas
+ ini, bukan identitas baru.
+
+
+--- PAGE 122 ---
+Gambar 13.2 — Arsitektur avatar berjenjang: state → mapper → avatar state → rendering, dengan pengaman kontinuitas.
+13.2 WHAT — empat jenjang biaya/kemanfaatan
+Pilih jenjang TERMURAH yang memadai — aturan yang sama dengan fusion Part VIII, diterapkan ke
+rendering.
+
+
+--- PAGE 123 ---
+Jenjang
+Teknologi
+Kemanfaatan
+Kapan naik jenjang
+L0 static
+satu PNG per label ekspresi
+presence dasar, biaya nol
+mulai di sini — selalu
+L1 blend
+cross-fade 180 ms antar dua aset
+transisi halus, tetap murah
+feedback transisi terasa 'potong'
+L2 2D rig
+part-based (Live2D-style,
+konseptual)
+mata ikuti, mulut bicara, telinga
+bergerak
+interaksi voice rutin; seniman
+aset tersedia
+L3 3D
+mesh + rig penuh
+bebas sudut kamera, ekspresi
+kontinu
+produk game/AR — di luar
+lingkup Vol IV
+ Tabel 13.1 — Jenjang avatar. Vol IV berhenti di L0+L1: bukti konsep presence tidak butuh rig berat; menagih teknologi berat tanpa
+ kebutuhan adalah dosa arsitektur.
+Listing 13.1 — AvatarMapper (aset, plan, kontinuitas) (baris 35-91 dari
+src/ruka_perception/expression/avatar.py)
+class AvatarMapper:
+    """Mapper L0/L1: label + intensitas -> aset statis & hint blend.
+    aset() mengembalikan PATH KONSEPTUAL (kontrak), bukan file nyata —
+    pasangan path/aset di-bind oleh aplikasi lewat asset_dir. Ini
+    menjaga paket tetap murni logic dan bisa diuji tanpa file gambar.
+    """
+    def __init__(self, asset_dir: str = "assets/avatar",
+                 blend_threshold: float = 0.35):
+        if blend_threshold <= 0 or blend_threshold >= 1:
+            raise ValueError("blend_threshold di (0,1)")
+        self.asset_dir = asset_dir.rstrip("/")
+        self.blend_threshold = blend_threshold
+    def asset_path(self, label: str) -> str:
+        """Path aset untuk label. Label tak dikenal -> neutral
+        (fallback eksplisit, bukan exception: avatar rusak tidak
+        boleh menjatuhkan seluruh interaksi)."""
+        if label not in AVATAR_LABELS and label not in EXTENDED_LABELS:
+            label = "neutral"
+        return f"{self.asset_dir}/{label}.png"
+    def plan(self, label: str, intensity: float) -> dict:
+        """Rencana render untuk satu update ekspresi.
+        intensity < blend_threshold : tetap 'neutral' — menghindari
+            avatar menari pada mikro-perubahan (kebisingan state).
+        intensity >= blend_threshold: pakai label target.
+        blend_ms: durasi cross-fade L1 (0 = potong langsung).
+        """
+        if not (0.0 <= intensity <= 1.0):
+            raise ValueError("intensity di [0,1]")
+        active = label if intensity >= self.blend_threshold else "neutral"
+        return {
+            "from": "previous",
+            "to": self.asset_path(active),
+            "label": active,
+            "blend_ms": 180 if active != "neutral" else 0,
+            "render_tier": "L1_blend",
+
+
+--- PAGE 124 ---
+        }
+    def continuity_rule(self, prev_label: str, next_label: str
+                        ) -> bool:
+        """Aturan kontinuitas Part XIV: transisi ekspresi harus
+        punya SEBAB. Mapper hanya memvalidasi jarak tetangga pada
+        kosakata KANONIK (LABEL_SEQUENCE — sama dengan
+        companion.continuity): transisi melompat > 2 langkah
+        dianggap curiga dan perlu ditinjau (bukan diblokir — validator
+        continuity yang memutuskan dengan konteks)."""
+        try:
+            d = abs(LABEL_SEQUENCE.index(prev_label)
+                    - LABEL_SEQUENCE.index(next_label))
+        except ValueError:
+            return True                      # label asing: lewaskan
+        return d <= 2
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Tiga keputusan listing: (1) mapper mengembalikan KONTRAK PATH (asset_dir/label.png), bukan file —
+binding nyata milik aplikasi, domain tetap teruji tanpa aset; (2) label asing jatuh ke neutral — avatar rusak
+tidak menjatuhkan interaksi (fallback eksplisit, bukan exception); (3) blend_threshold 0.35 MENYARING
+mikro-fluktuasi — inilah lapis anti-osilasi ketiga dari Part XII, terbukti di eksperimen: ayunan playfulness
+0.18 tidak pernah ditampilkan, 0.6 tampil penuh. intensitas rendah → blend_ms 0 (potong langsung) supaya
+netral tidak 'memudar berlebihan'.
+13.3 WHY — memori yang tidak menyimpan semua yang dilihat
+Kamera dan mikrofon murah; penyimpanan juga. Yang mahal adalah KEBIJAKAN: siapa boleh mengingat
+apa, berapa lama, dan siapa yang bisa meminta penghapusan. Volume II membangun governance memori
+teks; Volume IV menghadapi benda baru — bytes media yang personal (wajah, suara, ruangan). Default
+yang dipilih bukan kebetulan: METADATA-FIRST.
+ Perception → Temporary Context → Memory Candidate → Evaluation → Store / Discard
+PERSEPSI BUKAN MEMORI — tiga pasangan yang dilarang disamakan
+MELIHAT ≠ MENGINGAT: bytes hidup di buffer satu giliran, masuk prompt, lalu dibuang. MENDENGAR ≠
+MENYIMPAN: transkrip boleh masuk memori, rekaman mentah tidak (tanpa consent). MEMPROSES ≠
+JANGKA PANJANG: kandidat harus LULUS gerbang nilai sebelum menjadi ingatan. Mengingat semua yang
+dilihat bukan kesetiaan — itu kebocoran data dengan wajah manis.
+Listing 13.2 — Kebijakan retensi & admission (baris 51-124 dari
+src/ruka_perception/memory/multimodal.py)
+def memory_class(modality: Modality, importance: float) -> str:
+    """Klasifikasi kandidat ke kelas retensi.
+
+
+--- PAGE 125 ---
+    Interaksi penting (importance tinggi) naik kelas menjadi semantic
+    — memori jangka panjang — karena layak bertahan setahun.
+    """
+    if importance >= 0.8:
+        return "semantic"
+    return {
+        Modality.TEXT: "conversation",
+        Modality.IMAGE: "visual_episode",
+        Modality.AUDIO: "audio_episode",
+        Modality.INTERACTION_EVENT: "interaction_event",
+        Modality.UNKNOWN: "conversation",
+    }[modality]
+class AdmissionPolicy:
+    """Gerbang evaluation: kandidat layak disimpan atau tidak?
+    Rule-based BY DESIGN (Vol III Part VI: rule-based dulu, neural
+    hanya bila menang jujur). Skor = bobot importance + keunikan
+    ringkasan + tanda eksplisit user ("ingat ini").
+    """
+    def __init__(self, threshold: float = 0.45):
+        if not (0 <= threshold <= 1):
+            raise ValueError("threshold di [0,1]")
+        self.threshold = threshold
+    def evaluate(self, cand: MemoryCandidate) -> tuple[bool, float]:
+        explicit = 1.0 if cand.metadata.get("user_flagged") else 0.0
+        uniqueness = 1.0 if cand.metadata.get("novel") else 0.3
+        score = (0.5 * cand.importance + 0.25 * uniqueness
+                 + 0.25 * explicit)
+        admitted = score >= self.threshold or explicit > 0
+        return admitted, float(score)
+class MultimodalMemory:
+    """Penyimpanan in-process + kebijakan. Bukan database — kelas ini
+    KONTRKAT dan mesin kebijakan; persistensi nyata (SQLite dsb.)
+    tugas infrastruktur."""
+    def __init__(self, policy: AdmissionPolicy | None = None,
+                 now: float | None = None):
+        self.policy = policy or AdmissionPolicy()
+        self._now = now or time.time
+        self.items: dict[str, dict] = {}
+        self.rejected: list[dict] = []
+    def offer(self, cand: MemoryCandidate) -> tuple[bool, str]:
+        """Tawarkan kandidat. Return (disimpan?, memory_id)."""
+        # RAW GATE: tanpa consent, tolak menyimpan bytes
+        if cand.keep_raw and not cand.metadata.get("user_consent"):
+            self.rejected.append(
+                {"reason": "raw_without_consent",
+                 "summary": cand.summary[:80]})
+            return False, ""
+        admitted, score = self.policy.evaluate(cand)
+        if not admitted:
+            self.rejected.append(
+                {"reason": "below_threshold", "score": round(score, 3),
+                 "summary": cand.summary[:80]})
+            return False, ""
+
+
+--- PAGE 126 ---
+        mclass = memory_class(cand.modality, cand.importance)
+        ttl, _quota = RETENTION_POLICY[mclass]
+        mid = cand.candidate_id
+        self.items[mid] = {
+            "id": mid,
+            "class": mclass,
+            "modality": cand.modality.value,
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Empat gerbang di listing: RAW GATE — menyimpan bytes menyaratkan user_consent eksplisit (tanpanya:
+rejected dengan alasan tercatat); ADMISSION rule-based — skor 0.5·importance + 0.25·keunikan +
+0.25·tanda user, threshold 0.45, dan tanda eksplisit user memaksa lolos ('ingat ini' adalah perintah, bukan
+saran); KELAS RETENSI — conversation 7 hari/500 item, semantic 365 hari/200, visual/audio episode 30
+hari/100, event 90 hari/300; promosi ke semantic terjadi bila importance ≥ 0.8 — ingatan penting bertahan
+setahun. Embedding referensi opsional menyertai ringkasan supaya Vector Intelligence Vol III bisa
+mencarinya.
+13.4 WHAT — taksonomi memori multimodal
+Perluasan jujur atas taksonomi Vol II, kini per modality:
+Kelas
+Isi
+TTL
+Contoh episode
+Conversation
+teks percakapan
+7 hari
+diskusi debugging tadi malam
+Semantic
+fakta durabel
+365 hari
+'Bos memakai mode gelap'
+Visual episode
+ringkasan + meta gambar
+30 hari
+'screenshot error deploy' (tanpa bytes)
+Audio episode
+ringkasan + transkrip
+30 hari
+'Bos menjelaskan arsitektur via voice'
+Interaction event
+kejadian penting
+90 hari
+'Bos kembali setelah cuti 2 minggu'
+ Tabel 13.2 — Kelas retensi multimodal. Bytes mentah TIDAK punya baris — ia hanya hidup bila consent eksplisit memindahkannya ke
+ penyimpanan terpisah berlabel sensitivity.
+Kontrol user adalah FITUR kelas satu, bukan tambahan kepatuhan: list_all() memberi panel transparan (id,
+kelas, modality, ringkasan, sensitivity); forget() menghapus TOTAL — idempoten dan tidak menyisakan
+indeks hantu; sweep_expired() membersihkan TTL saat sesi dibuka. Test mengunci ketiganya termasuk
+idempotensi forget (panggil dua kali → False kedua). Privacy: transkrip penuh TIDAK masuk log
+observability (Part XV) — memori punya kebijakannya sendiri, log punya redaksinya.
+
+
+--- PAGE 127 ---
+13.5 CONTEXT FUSION — merakit konteks multimodal
+Konteks percakapan Ruka kini berpotensi berisi empat jenis blok: teks, ringkasan visual, transkrip, event.
+Merakitnya memakai strategi Part VIII versi konteks: penyusunan BLOK (text-first, builder Part IX) +
+skor relevansi 5-faktor Vol III untuk memilih memori mana yang ikut + budget token eksplisit sebelum
+kirim. Blok multimodal masuk prompt SEBAGAI RINGKASAN BERLABEL — '[VISUAL] screenshot
+deploy, catatan: blur' — bukan sebagai bytes (bytes hanya saat adapter benar-benar menyusun part input
+API untuk modality aktif).
+– Early fusion konteks: konkatenasi ringkasan (murah, default percakapan).
+– Late fusion: tiap modality menghasilkan jawaban paralel, digabung skor (mahal; khusus tugas analitik).
+– Cross-attention konteks: hanya bila jalur API menyediakan representasi token bersama (kondisi
+khusus).
+– Score-based memory selection: Context Relevance Engine Vol III menilai kandidat memori lintas
+modality dengan bobot yang sama seperti teks.
+13.6 IMPLEMENTATION — kontrol user UTUH
+Tiga fungsi kendali (offer termasuk gerbang consent, plus panel user dan pembersihan TTL) dalam satu
+potongan file penuh.
+Listing 13.3 — MultimodalMemory lengkap (baris 90-157 dari src/ruka_perception/memory/multimodal.py)
+class MultimodalMemory:
+    """Penyimpanan in-process + kebijakan. Bukan database — kelas ini
+    KONTRKAT dan mesin kebijakan; persistensi nyata (SQLite dsb.)
+    tugas infrastruktur."""
+    def __init__(self, policy: AdmissionPolicy | None = None,
+                 now: float | None = None):
+        self.policy = policy or AdmissionPolicy()
+        self._now = now or time.time
+        self.items: dict[str, dict] = {}
+        self.rejected: list[dict] = []
+    def offer(self, cand: MemoryCandidate) -> tuple[bool, str]:
+        """Tawarkan kandidat. Return (disimpan?, memory_id)."""
+        # RAW GATE: tanpa consent, tolak menyimpan bytes
+        if cand.keep_raw and not cand.metadata.get("user_consent"):
+            self.rejected.append(
+                {"reason": "raw_without_consent",
+                 "summary": cand.summary[:80]})
+            return False, ""
+        admitted, score = self.policy.evaluate(cand)
+        if not admitted:
+            self.rejected.append(
+                {"reason": "below_threshold", "score": round(score, 3),
+                 "summary": cand.summary[:80]})
+
+
+--- PAGE 128 ---
+            return False, ""
+        mclass = memory_class(cand.modality, cand.importance)
+        ttl, _quota = RETENTION_POLICY[mclass]
+        mid = cand.candidate_id
+        self.items[mid] = {
+            "id": mid,
+            "class": mclass,
+            "modality": cand.modality.value,
+            "summary": cand.summary,
+            "importance": cand.importance,
+            "sensitivity": cand.sensitivity,
+            "embedding": cand.embedding,
+            "metadata": cand.metadata,
+            "keep_raw": bool(cand.keep_raw),
+            "created_at": cand.created_at,
+            "expires_at": cand.created_at + ttl,
+        }
+        return True, mid
+    # ---------------- user control ---------------------------------
+    def list_all(self) -> list[dict]:
+        """Daftar memori (ringkasan — untuk panel kontrol user)."""
+        return [{"id": v["id"], "class": v["class"],
+                 "modality": v["modality"],
+                 "summary": v["summary"][:60],
+                 "sensitivity": v["sensitivity"]}
+                for v in self.items.values()]
+    def forget(self, memory_id: str) -> bool:
+        """Hapus total. Kembalikan False bila tidak ada (idempoten)."""
+        return self.items.pop(memory_id, None) is not None
+    def sweep_expired(self) -> int:
+        """Buang yang lewat TTL. Return jumlah yang dibuang."""
+        now = self._now()
+        expired = [k for k, v in self.items.items()
+                   if v["expires_at"] <= now]
+        for k in expired:
+            del self.items[k]
+        return len(expired)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Titik penting untuk review: forget() memakai pop dengan default None — penghapusan idempoten per
+DESAIN (dua kali forget = aman, bukan error); sweep_expired memakai _now yang bisa DISUNTIK
+waktu semuanya — itulah yang membuat test TTL bisa melompat 366 hari dalam satu baris tanpa tidur
+menunggu setahun; dan list_all SELALU memotong ringkasan ke 60 karakter — panel kontrol tidak
+pernah menjadi kebocoran data besar sendirian.
+
+
+--- PAGE 129 ---
+13.6 IMPLEMENTATION — kontrol user UTUH
+Tiga fungsi kendali (offer termasuk gerbang consent, plus panel user dan pembersihan TTL) dalam satu
+potongan file penuh.
+Titik penting untuk review: forget() memakai pop dengan default None — penghapusan idempoten per
+DESAIN (dua kali forget = aman, bukan error); sweep_expired memakai _now yang bisa DISUNTIK
+waktu semuanya — itulah yang membuat test TTL bisa melompat 366 hari dalam satu baris tanpa tidur
+menunggu setahun; dan list_all SELALU memotong ringkasan ke 60 karakter — panel kontrol tidak
+pernah menjadi kebocoran data besar sendirian.
+13.6 FAILURE MODES
+Sembilan lubang pada kehadiran dan memori.
+– Avatar menari: tanpa blend_threshold, mikro-osilasi tampil (eksperimen Part XII).
+– Identitas bergeser: generator aset mengubah karakter — kontrak referensi dilanggar; review aset
+adalah review keamanan identitas.
+– Fallback tak ada: label baru (isinya bug) membuat avatar hilang — neutral fallback listing 13.1.
+– Kebocoran bytes diam-diam: kandidat menyimpan raw tanpa consent — RAW GATE menolak
+dengan jejak.
+– Transkrip penuh masuk log: penghinaan privacy ganda — log hanya panjang+hash (Part XV).
+– Retention tanpa sweep: TTL diklaim tapi tak pernah dieksekusi = kebohongan kebijakan; sweep saat
+sesi dibuka.
+– Memory poisoning lintas modality: ringkasan palsu dari tool jahat menjadi 'fakta' — importance
+tinggi + provenance (warisan Vol II) menjadi penyeimbang.
+– False memory: ringkasan agregat salah mengklaim episode tak pernah (halusinasi peringkasan) —
+evaluasi Part XV; ringkasan harus menyebut sumber.
+– Deletion parsial: forget() menyembunyikan tapi embedding masih dicari — hapus total, uji
+idempoten.
+13.7 TESTING & EVALUATION & PRODUCTION
+Kebijakan adalah kode; kode adalah test.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_avatar.py tests/test_memory.py -q
+
+
+--- PAGE 130 ---
+EXPECTED
+ 35+ test hijau: aset label → path benar; label asing → neutral; intensitas rendah tetap neutral (blend 0); kontinuitas
+jauh ditandai; raw tanpa consent ditolak; raw + consent lolos ; TTL semantic 365 hari terpasang; sweep menghapus
+lewat-TTL; forget idempoten; sensitivity tersalur.
+WHY
+ Gerbang consent adalah kebijakan PRIVASI yang dijalankan — bukan dokumen PDF yang dilupakan. Bila gagal di
+produksi, itu pelanggaran yang tercatat, bukan kecelakaan senyap.
+FAILURE MODE
+ Gagal bila admission diturunkan tanpa memperbarui test threshold — skor 0.4 tiba-tiba lolos.
+DEBUGGING
+ Simulasikan sesi 7 hari: t0 tetap, maju waktu lewat TTL per kelas, jalankan sweep tiap 'hari' — grafik jumlah
+memori per kelas adalah verifikasi kebijakan visual.
+Produksi: penyimpanan nyata (SQLite/vektor DB) menggantikan dict in-process dengan SKEMA dan
+KONTRAK yang sama — kolom: id, class, modality, summary, embedding (nullable), metadata (JSON),
+sensitivity, created_at, expires_at, keep_raw terpisah di blob store ber-encryption bila consent ada.
+Rencana backup dan retention hukum mengikuti kelas sensitivity — diskusi dengan pemilik data, bukan
+keputusan insinyur sendirian.
+13.8 STUDI KASUS — satu episode multimodal dari pintu ke memori
+Jejak lengkap satu interaksi nyata melalui seluruh PART XIII — ditulis ulang dari perilaku paket yang
+teruji:
+OUTPUT
+>>> inp = PerceptionInput(modality=Modality.IMAGE,
+...     mime_type='image/png', data=png_bytes)
+>>> router.route(inp)      # 9.4: validasi + rute
+RouterDecision(handler='vision.represent',
+              accepted=True)
+>>> res = PerceptionResult(
+...     modality=Modality.IMAGE,
+...     summary='screenshot error deploy: gateway
+...              timeout', confidence=0.86,
+...     notes=['kontras rendah di area log'])
+>>> mem = MultimodalMemory()
+>>> ok, mid = mem.offer(MemoryCandidate(
+...     modality=Modality.IMAGE,
+...     summary='deploy gagal: gateway timeout',
+...     importance=0.8,          # dari appraisal
+...     metadata={'novel': True}))
+>>> ok
+True
+>>> mem.items[mid]['class']
+'semantic'   # importance >= 0.8 -> naik kelas
+>>> mem.items[mid]['keep_raw']
+
+
+--- PAGE 131 ---
+False        # bytes TIDAK disimpan — metadata-first
+Perhatikan tiga keputusan yang diambil OLEH KEBIJAKAN bukan oleh kebetulan: episode penting
+(importance 0,8) dipromosikan ke semantic — ingatan setahun, karena kegagalan deploy berulang adalah
+pengetahuan; bytes screenshot TIDAK disimpan — hanya ringkasan + (bila diinginkan) embedding untuk
+retrieval; catatan kualitas ikut memori supaya mengingat pun selalu jujur. Bila tiga hari kemudian Bos
+bertanya 'error kemarin apa lagi ya?', context engine menarik ringkasan ini lewat skor relevansi — tanpa
+satu pun piksel tersimpan.
+13.9 KONSEPTUAL — jenjang L2: rigging berbasis part
+Bila voice menjadi antarmuka utama, aset statis mulai terasa kayu: mulut tidak bergerak saat TTS bicara,
+mata tidak mengikuti. L2 menjawab dengan MEMECAH avatar menjadi part yang digerakkan
+parameter — konseptual, tanpa menagih teknologi hari ini.
+– Part: kepala, telinga kiri/kanan, mata (bola + kelopak), mulut (viseme), tubuh — tiap part aset terpisah
+dari referensi identitas.
+– Parameter: sudut/offset kecil per part (±10° telinga, 0-1 buka mulut) — BUKAN menggambar ulang
+karakter; identitas tetap terkunci.
+– Penggerak murah: amplitude audio TTS → buka-mulut (korelasi sederhana); timer acak halus →
+kedip; state expression → sudut telinga (concern: turun 6°; playful: naik + twitch 2×/jam).
+– Etika gerakan: gerakan meniru HIDUP, bukan meniru EMOSI — kelopak dan telinga tidak pernah
+dipakai memalsukan 'air mata' dsb.; verbatim guard berlaku juga ke bahasa tubuh.
+Sengaja disebut konseptual: L2 membutuhkan aset seniman dan lapisan render nyata — di luar lingkup
+paket NumPy buku ini. Yang PENTING diputuskan sekarang: kontrak state → parameter sudah dirancang
+supaya naik jenjang tidak mengubah arsitektur (avatar_style tetap penggerak; hanya rendering layer
+bertukar).
+Engineering Exercise
+ 1. Tambahkan kelas 'screenshot_reference' (TTL 90 hari, kuota 50): tulis mapping + dua test (TTL,
+kuota) — perhatikan berapa tempat yang harus berubah.
+2. Buat panel kontrol mini CLI: list → tampil 10 memori; forget → hapus; jalankan dua kali untuk
+membuktikan idempotensi ke mata Anda sendiri.
+3. Uji aset: buat 6 varian label dari referensi identitas (editor apa pun) — lalu minta orang lain menilai
+'masih Ruka yang sama?'. Panel 5 orang itu adalah evaluasi identitas paling jujur yang bisa Anda
+lakukan minggu ini.
+
+
+--- PAGE 132 ---
+VOLUME IV · THE AWAKENING OF THE SENSES · PART XIV
+Companion Continuity, Proactivity &
+Integration
+"“Setia itu bukan mengikuti ke mana pun, Bos. Setia adalah hadir dengan sebab, mengingat
+dengan izin, dan menawarkan bantuan tanpa merebut kemudi.”"
+Validator kontinuitas transisi ber-sebab; fondasi perilaku proaktif dengan gerbang izin empat
+tingkat; batas-batas companion yang tidak boleh dilanggar; dan peta integrasi penuh Volume
+IV ke Crimson Cognition Vol III — supaya ini sequel sungguhan, bukan sistem terpisah.
+14.1 WHY — kontinuitas adalah fitur, keacakan adalah cacat
+Spesifikasi Volume IV memberi contoh kegagalan yang tepat: ekspresi happy → extremely angry →
+embarrassed → calm pada empat pesan berturut-turut TANPA sebab kontekstual. Pengguna membaca pola
+ini sebagai 'rusak' atau ' palsu' — dua vonis yang sama-sama mematikan companion. Sebaliknya,
+konsistensi ber-sebab adalah sinyal terpenting kehadiran yang sehat: reaksi wajar atas event, pulih perlahan
+setelahnya, dan TIDAK berubah identitas antar hari.
+– Consistent identity: persona, gaya, dan referensi avatar stabil lintas sesi (warisan identity Vol II +
+asset Part XIII).
+– Persistent interaction: sesi baru menyambung kondisi lama dengan sebab yang jelas (user_return
+event), bukan reset total.
+– Recognition of context: memori & context engine menyambung topik lintas sesi (Vol III).
+– Expression continuity: transisi ekspresi divalidasi — PART ini membangun validasinya.
+– Interaction continuity: pola respon konsisten (evaluator Part XV mengukurnya).
+14.2 IMPLEMENTATION — validator transisi ber-sebab
+Kontinuitas dinyatakan sebagai KODE yang bisa menolak — bukan niat baik di dokumen desain. Sebuah
+transisi ekspresi dinilai dari jarak kosakata + dampak event terdekat.
+Listing 14.1 — ContinuityMonitor (aturan proporsionalitas) (baris 67-140 dari
+src/ruka_perception/companion/continuity.py)
+class ContinuityMonitor:
+    """Validator kontinuitas ekspresi lintas pesan."""
+    def __init__(self, max_free_jump: int = 1):
+        """max_free_jump: lompatan kosakata yang sah tanpa event.
+        Default 1 (transisi tetangga selalu sah — hidup itu
+
+
+--- PAGE 133 ---
+        bergerak). Lompatan lebih jauh butuh event berimpact."""
+        if max_free_jump < 0:
+            raise ValueError("max_free_jump >= 0")
+        self.max_free_jump = max_free_jump
+    def check(self, record: TransitionRecord) -> dict:
+        """Nilai satu transisi: legitimate / suspicious / violation.
+        Prinsip: besar lompatan harus proporsional dengan kuatnya
+        sebab. Aturan (dari longgar ke ketat):
+          jump <= 1                                -> sah selalu
+          pulih ke neutral/calm, impact >= 0.3     -> sah (recovery)
+          impact >= 0.7 (event kuat)               -> sah apa pun
+          impact >= 0.5 dan jump <= 5              -> sah
+          impact >= 0.2 dan jump <= 2              -> sah
+          jump <= 3 tanpa sebab kuat               -> mencurigakan
+          lainnya (lompat jauh tanpa sebab)        -> pelanggaran
+        """
+        jump = record.jump_distance()
+        impact = record.event_impact()
+        if jump <= self.max_free_jump:
+            verdict = "legitimate"
+        elif record.next_label in _RECOVERY and impact >= 0.3:
+            verdict = "legitimate"
+        elif impact >= 0.7:
+            verdict = "legitimate"
+        elif impact >= 0.5 and jump <= 5:
+            verdict = "legitimate"
+        elif impact >= 0.2 and jump <= 2:
+            verdict = "legitimate"
+        elif jump <= 3:
+            verdict = "suspicious"
+        else:
+            verdict = "violation"
+        return {"verdict": verdict, "jump": jump,
+                "event": record.event, "impact": impact}
+    def check_sequence(self, records: list[TransitionRecord]
+                        ) -> dict:
+        """Nilai rangkaian: berapa pelanggaran + skor kontinuitas.
+        skor = 1 - pelanggaran_bobot / langkah (semakin tinggi
+        semakin konsisten). Dipakai evaluasi Part XV.
+        """
+        results = [self.check(r) for r in records]
+        penalty = sum(1.0 if r["verdict"] == "violation" else
+                      0.4 if r["verdict"] == "suspicious" else 0.0
+                      for r in results)
+        n = max(len(results), 1)
+        return {"score": round(1.0 - penalty / n, 3),
+                "violations": sum(1 for r in results
+                                  if r["verdict"] == "violation"),
+                "suspicious": sum(1 for r in results
+                                  if r["verdict"] == "suspicious"),
+                "detail": results}
+# ----------------------------------------------------------------------
+# PROACTIVE GATE — permission berjenjang
+
+
+--- PAGE 134 ---
+# ----------------------------------------------------------------------
+PERMISSION_LEVELS = {
+    0: "notify_only",     # hanya tampil bila user melihat
+    1: "suggest",         # boleh mengusulkan, tanpa mengeksekusi
+    2: "act_with_ask",    # mengeksekusi setelah konfirmasi eksplisit
+    3: "act_autonomous",  # HANYA scope sempit yang diizinkan user
+}
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Prinsip aturan: lompatan besar hanya sah bila sebabnya kuat (proporsionalitas), dan pulih ke tenang sah
+dengan event moderat (recovery — narasi sehat). Urutan pesan dievaluasi sebagai rangkaian: skor 1 −
+penalti/jumlah. Data eksperimen timeline Part XII: skor 0.967, nol pelanggaran, SATU transisi ditandai
+mencurigakan — concerned → curious saat event pertanyaan berbobot lemah: penanda jujur untuk
+ditinjau, bukan vonis. Kontras dengan rangkaian acak spesifikasi (happy→angry→embarrassed→calm tanpa
+sebab): 1-2 pelanggaran + mencurigakan, skor < 0.6 — validator menjerit persis seperti yang diharapkan.
+14.3 PROACTIVE — nudge yang berizin
+Volume IV membangun FONDASI, bukan agen otonom penuh: Ruka boleh mengamati peluang dan
+MENAWARKAN — eksekusi tetap milik user. Rantai keenam tahap dipasang gerbangnya di ujung.
+
+
+--- PAGE 135 ---
+Gambar 14.1 — Rantai perilaku proaktif dengan gerbang izin empat tingkat: tanpa permission, maksimal suggestion.
+Listing 14.2 — ProactiveProposal.gate (baris 142-175 dari src/ruka_perception/companion/continuity.py)
+class ProactiveProposal:
+    """Hasil deteksi peluang proaktif."""
+    trigger: str           # apa yang diamati
+    opportunity: str       # apa yang bisa dilakukan
+    relevance: float       # [0,1] relevansi ke user saat ini
+    risk: float            # [0,1] risiko bila salah / mengganggu
+    action: str            # aksi yang diusulkan
+    def gate(self, granted_level: int) -> dict:
+        """Gerbang izin: level yang diberikan user vs kebutuhan
+        aksi. Risiko tinggi menaikkan level yang dibutuhkan.
+        Aturan pembelajaran kejujuran: hasil gate TIDAK PERNAH
+        menaikkan izin sendiri — turun boleh (hati-hati), naik harus
+
+
+--- PAGE 136 ---
+        lewat keputusan user eksplisit.
+        """
+        needed = 1
+        if self.risk > 0.4:
+            needed = 2
+        if self.risk > 0.7:
+            needed = 3
+        if self.relevance < 0.5:
+            needed = 1                     # kurang relevan: saran saja
+        allowed = granted_level >= needed
+        return {
+            "mode": PERMISSION_LEVELS.get(granted_level, "notify_only"),
+            "needed_level": needed,
+            "allowed": allowed,
+            "delivery": ("execute" if allowed and needed >= 2
+                         else "suggest" if granted_level >= 1
+                         else "silent"),
+        }
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Level
+Mode
+Boleh
+0
+notify_only
+hanya tampil bila dilihat
+1
+suggest
+menawarkan; boleh dimatikan user
+2
+act_with_ask
+eksekusi SETELAH konfirmasi eksplisit
+3
+act_autonomous
+hanya scope sempit yang diizinkan eksplisit; risiko tinggi TETAP terlarang
+Tabel 14.1 — Tingkat izin. Aturan keras: gate TIDAK PERNAH menaikkan izin sendiri — turun boleh (aman), naik hanya keputusan user
+ eksplisit.
+Contoh alur sehat: pengamatan melihat deadline laporan Bos 6 jam lagi (dari kalender tool); peluang =
+reminder; relevansi 0.8 (deadline memang milik user); risiko 0.1 (mengganggu kecil); level yang diberikan
+1 → hasil: SUGGESTION, teks pengingat yang bisa diabaikan. Kontras berbahaya yang DITOLAK desain:
+risiko 0.5 (aksi mengirim pesan ke pihak ketiga) pada level 1 → allowed = False, delivery tetap suggest —
+user memutuskan. Relevansi rendah (<0.5) TIDAK PERNAH mengeksekusi apa pun levelnya — 'kurang
+relevan' adalah rem permanen.
+14.4 BOUNDARIES — tujuh larangan companion
+Batas etis Volume IV ditulis sebagai spesifikasi teknis yang bisa diuji — bukan slogan.
+– Tidak manipulatif: tidak memakai kerentanan psikologis (urgensi palsu, kesepian) untuk memaksa
+interaksi; proactive gate memakai relevansi, bukan tekanan.
+
+

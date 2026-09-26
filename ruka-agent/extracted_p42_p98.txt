@@ -1,0 +1,274 @@
+=== PAGE 42 ===
+    total — untuk fitur 'bentuk spektral' murni biasanya dibuang
+    (liftering C0 dipisahkan sebagai keputusan pemanggil).
+    """
+    power, freqs = spectrogram(x, rate, frame_ms, hop_ms)
+    fb = mel_filterbank(n_filters, power.shape[1], rate)
+    logmel = log_mel(power, fb)
+    c = dct_matrix(n_cepstra, n_filters)
+    return (logmel @ c.T).astype(np.float64)
+ VERIFIED — DCT ditulis sebagai matriks eksplisit agar MFCC = log_mel @ C.T jelas perkalian biasa; test suite MENYILANGKAN
+ hasilnya dengan scipy.fft.dct(norm='ortho') — dua implementasi independen harus sepakat hingga 1e-10.
+Uji silang ke library independen adalah bentuk kalibrasi terbaik untuk kode tulisan-tangan: kalau DCT
+buatan sendiri cocok dengan scipy pada 26 titik acak, kemungkinan bug implementasi mengecil drastis.
+Pustaka produksi (librosa dan sejenisnya) menawarkan jalur cepat untuk fitur yang sama — silakan dipakai
+SETELAH memahami matematikanya; buku ini sengaja menulis ulang mesinnya supaya tidak ada sihir
+yang tersisa.
+5.7 VAD — keputusan bicara/tidak dengan histeresis
+Voice Activity Detection menjawab satu bit per frame, dan cara MENJAWABNYA lebih penting dari
+bit-nya. VAD naif berbasis satu ambang memotong kalimat pada tiap jeda napas; VAD yang benar punya
+dua ambang dan masa tenggang.
+Listing 5.4 — VAD energi + histeresis (inti) (baris 79-141 dari src/ruka_perception/audio/vad.py)
+    def detect(self, x: np.ndarray) -> list[tuple[int, int]]:
+        """Segmen ucapan [(i_start, i_end_frame), ...] dengan histeresis.
+        Aturan transisi:
+          OFF->ON  : energi >= on_threshold  (dan segmen berikut cukup
+                     panjang — filter min_speech_frames saat menutup)
+          ON->OFF  : energi < off_threshold SELAMA hangover frames
+                     berturut-turut. Satu frame bising tak menutup
+                     segmen; jeda panjang menutup.
+        Segmen lebih pendek dari min_segment_ms dibuang sebagai klik.
+        """
+        energy_db, _zcr = frame_features(x, self.rate,
+                                         self.frame_ms, self.hop_ms)
+        ref = float(np.percentile(energy_db, 90))
+        ref = max(ref, self.noise_floor_db)
+        dynamic = ref - float(np.percentile(energy_db, 10))
+        if dynamic < self.min_dynamic_db:
+            return []                    # sinyal datar: bukan ucapan
+        on_thr = ref + self.on_offset_db
+        off_thr = ref + self.off_offset_db
+        n = len(energy_db)
+        segments: list[tuple[int, int]] = []
+        in_speech = False
+        start = 0
+        quiet_run = 0
+
+
+=== PAGE 43 ===
+        for i, e in enumerate(energy_db):
+            if not in_speech:
+                if e >= on_thr:
+                    in_speech = True
+                    start = i
+                    quiet_run = 0
+            else:
+                if e < off_thr:
+                    quiet_run += 1
+                    if quiet_run >= self.hangover:
+                        self._close(segments, start, i - quiet_run + 1)
+                        in_speech = False
+                        quiet_run = 0
+                else:
+                    quiet_run = 0
+        if in_speech:
+            self._close(segments, start, n)
+        # segmen terlalu pendek = klik/bising -> buang
+        min_frames = max(1, int(self.min_segment_ms / self.hop_ms))
+        return [(a, b) for a, b in segments if (b - a) >= min_frames]
+    def _close(self, segments, start, end):
+        """Tutup segmen pada frame 'end' (frame pertama yang hening).
+        Panjang validasi min_speech_frames diterapkan di sini."""
+        if end - start >= self.min_speech_frames:
+            segments.append((start, end))
+        # segmen mikro (<= 2 frame di atas on-threshold) dibuang
+    def speech_ratio(self, x: np.ndarray) -> float:
+        """Porsi durasi terdeteksi sebagai ucapan — metrik kesehatan
+        input audio (audio 30 detik tanpa ucapan = salah file / salah
+        tombol, jangan dikirim ke ASR)."""
+        segments = self.detect(x)
+        frames = 1 + (len(x) - int(self.rate * self.frame_ms / 1000)) \
+            // int(self.rate * self.hop_ms / 1000)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Tiga lapis keputusan di listing: (1) ambang ON lebih TINGGI dari ambang OFF — begitu bicara
+terdeteksi, level yang lebih rendah tetap dianggap bicara (histeresis klasik); (2) hangover 8 frame — jeda
+80 ms tidak menutup segmen, jeda panjang menutup; (3) dua gerbang kesehatan yang lahir dari bug nyata:
+lantai noise −50 dB (tanpanya, audio hening murni membuat p90 = −200 dB dan seluruh hening dianggap
+bicara — test silence_only menangkapnya) dan guard dinamika 6 dB (sinyal datar konstan bukan ucapan).
+Dua baris terakhir JSON eksperimen membuktikan perilaku: dua blok suara terdeteksi sebagai dua
+segmen, klik 2,5 ms dibuang, rasio ucapan 0.727 sesuai durasi.
+5.8 TRADE-OFFS & FAILURE MODES
+Pilihan desain sinyal selalu barter — dan kegagalannya berciri khas.
+
+
+=== PAGE 44 ===
+Keputusan
+Barter
+Failure mode khas
+Frame 25 ms / hop 10 ms
+resolusi waktu vs frekuensi (panjang
+jendela)
+ponem pendek hilang bila frame kepanjangan
+16 kHz (bukan 48)
+cukup untuk speech vs musik
+sibilan 'meleset' bila target bukan speech
+Hann (bukan kotak)
+bersih dari leakage vs resolusi
+hilang ~25% energi tepi — koreksi w² bila
+kalibrasi energi
+Mel 26 filter
+meniru telinga vs detail penuh
+frekuensi sempit (nada murni tinggi) jatuh di filter
+lebar
+MFCC 13 (buang C0)
+bentuk spektral vs energi total
+volume keras hilang — sengaja; RMS dipisah
+VAD histeresis
+kalimat utuh vs responsif
+hangover kepanjangan menyeret 'emp…' masuk
+ Tabel 5.2 — Enam barter sinyal yang akan Bos temui lagi di produksi.
+5.9 TESTING & EVALUATION & PRODUCTION
+Suite audio adalah koleksi invarian paling padat di paket — dan setiap invarian punya cerita bug.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_signals.py tests/test_spectrum.py tests/test_vad.py -q
+EXPECTED
+ 85+ test hijau: jumlah frame = 98/s (bukan 100 — frame sisa dibuang jujur); puncak FFT nada 1 kHz jatuh di bin 1
+kHz ± 15 Hz (kalibrasi rantai); Parseval setengah-spektrum terpenuhi; DCT == scipy 1e-10; hening murni = 0
+segmen; klik terbuang; jeda 200 ms tak memotong kalimat.
+WHY
+ Setiap klaim tabel 5.1 dipaksa membuktikan diri di test — termasuk dua bug VAD nyata yang diperbaiki di source,
+bukan di test.
+FAILURE MODE
+ Gagal bila float32 kumulatif melanggar toleransi Parseval — naikkan rel ke 5e-5 bukan 2e-5 pada mesin berbeda.
+DEBUGGING
+ Jalankan exp_signal.py dua kali: hasil JSON IDENTIK bit-per-bit (seed tetap) — determinisme adalah syarat
+reproduksibilitas buku.
+Catatan produksi: di jalur nyata, konversi bytes→vektor berpindah ke pustaka audio (wave/stdin PCM, atau
+sounddevice untuk mikrofon). Kontrak sampling Live API 16 kHz LE mono ditegakkan di gerbang — Part
+XI menunjukkan potongan adapter-nya. Format kompresi (MP3, OGG) diterima API secara native (Part
+XI) tetapi jalur lokal kita hanya PCM/WAV: dekodek milik pustaka, bukan tulis sendiri.
+
+
+=== PAGE 98 ===
+            raise ValueError("enrollment butuh (n, d)")
+        c = samples.mean(axis=0)
+        n = np.linalg.norm(c)
+        return c / n if n > 0 else c
+    def score(self, claim: np.ndarray, enrolled: np.ndarray) -> float:
+        """Skor similarity klaim vs enrollment (cosine)."""
+        return cosine_similarity(claim, enrolled)
+    def decide(self, score: float) -> bool:
+        """Keputusan biner. Kembalikan True = accept."""
+        return bool(score >= self.threshold)
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Enrollment = centroid beberapa sampel (rata-rata + renormalisasi unit — mengurangi noise kanal per
+rekaman). Keputusan adalah threshold TAU, dan TAU adalah KEPUTUSAN RISIKO, bukan konstanta
+universal: menaikkannya membuat penyusup sulit masuk (FAR turun) tetapi pemilik sah sering ditolak
+(FRR naik). Melaporkan FAR tanpa FRR pada satu threshold = kesalahan metodologi yang akan
+ditertawakan reviewer.
+11.4 IMPLEMENTATION — sweep FAR/FRR, EER, ROC utuh
+Tiga fungsi matematika di balik tabel 11.1 — ditampilkan penuh karena invarian monotonitas dan
+interpolasi EER-nya adalah materi uji suite.
+Listing 11.3b — far_frr_sweep + eer + roc_points (baris 91-155 dari
+src/ruka_perception/speaker/verification.py)
+def eer(sweep: list[dict]) -> dict:
+    """Equal Error Rate: threshold tempat FAR == FRR.
+    Ditemukan lewat tanda selisih: karena FAR turun dan FRR naik
+    terhadap threshold, kurva bersilang tepat sekali.
+    """
+    prev = None
+    for row in sweep:
+        d = row["far"] - row["frr"]
+        if prev is not None and (d == 0 or (prev[1] > 0) != (d > 0)):
+            # interpolasi linear antar dua titik bersilang
+            t0, d0 = prev
+            t1, d1 = row["threshold"], d
+            if d1 == d0:
+                return {"eer": row["frr"], "threshold": row["threshold"]}
+            tt = t0 + (t1 - t0) * (0 - d0) / (d1 - d0)
+            # estimasi FRR pada tt (FRR linear antar titik)
+            frr0 = next(r for r in sweep if r["threshold"] == t0)["frr"]
+            frr1 = row["frr"]
+            eer_v = frr0 + (frr1 - frr0) * (tt - t0) / (t1 - t0)
+            return {"eer": float(eer_v), "threshold": float(tt)}
+        prev = (row["threshold"], d)
+    return {"eer": float(sweep[-1]["frr"]),
+
+
+=== PAGE 99 ===
+            "threshold": float(sweep[-1]["threshold"])}
+def roc_points(sweep: list[dict]) -> list[tuple[float, float]]:
+    """ROC: (FAR, 1 - FRR) = (FAR, TAR). Dipakai chart Part XI."""
+    return [(r["far"], 1.0 - r["frr"]) for r in sweep]
+def identify(claim: np.ndarray, gallery: dict[str, np.ndarray]
+             ) -> tuple[str, float]:
+    """Identifikasi 1-dari-N: kandidat skor tertinggi.
+    Sengaja dipisah dari verification — masalah berbeda, kesalahan
+    berbeda (open-set vs closed-set), dan metriknya berbeda (Top-1
+    accuracy vs FAR/FRR).
+    """
+    if not gallery:
+        raise ValueError("galeri kosong")
+    scores = {name: cosine_similarity(claim, vec)
+              for name, vec in gallery.items()}
+    best = max(scores, key=scores.get)
+    return best, scores[best]
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Dua detail implementasi yang layak dibedah: sweep bukan loop dua-vektor naive — ia menghitung
+proporsi dengan mean boolean per threshold, O(n·P) dengan P titik grid; dan EER tidak memilih titik grid
+terdekat melainkan MENGINTERPOLASI silangan nol selisih FAR−FRR — presisi sub-grid tanpa biaya
+besar. Monotonitas keduanya diuji eksplisit di suite (FAR turun, FRR naik terhadap threshold) — sifat
+yang membuat bug index langsung ketahuan.
+11.4 IMPLEMENTATION — sweep FAR/FRR, EER, ROC utuh
+Tiga fungsi matematika di balik tabel 11.1 — ditampilkan penuh karena invarian monotonitas dan
+interpolasi EER-nya adalah materi uji suite.
+Listing 11.3b — far_frr_sweep + eer + roc_points (baris 91-155 dari
+src/ruka_perception/speaker/verification.py)
+def eer(sweep: list[dict]) -> dict:
+    """Equal Error Rate: threshold tempat FAR == FRR.
+    Ditemukan lewat tanda selisih: karena FAR turun dan FRR naik
+    terhadap threshold, kurva bersilang tepat sekali.
+    """
+    prev = None
+    for row in sweep:
+        d = row["far"] - row["frr"]
+        if prev is not None and (d == 0 or (prev[1] > 0) != (d > 0)):
+            # interpolasi linear antar dua titik bersilang
+            t0, d0 = prev
+            t1, d1 = row["threshold"], d
+            if d1 == d0:
+                return {"eer": row["frr"], "threshold": row["threshold"]}
+            tt = t0 + (t1 - t0) * (0 - d0) / (d1 - d0)
+
+
+=== PAGE 100 ===
+            # estimasi FRR pada tt (FRR linear antar titik)
+            frr0 = next(r for r in sweep if r["threshold"] == t0)["frr"]
+            frr1 = row["frr"]
+            eer_v = frr0 + (frr1 - frr0) * (tt - t0) / (t1 - t0)
+            return {"eer": float(eer_v), "threshold": float(tt)}
+        prev = (row["threshold"], d)
+    return {"eer": float(sweep[-1]["frr"]),
+            "threshold": float(sweep[-1]["threshold"])}
+def roc_points(sweep: list[dict]) -> list[tuple[float, float]]:
+    """ROC: (FAR, 1 - FRR) = (FAR, TAR). Dipakai chart Part XI."""
+    return [(r["far"], 1.0 - r["frr"]) for r in sweep]
+def identify(claim: np.ndarray, gallery: dict[str, np.ndarray]
+             ) -> tuple[str, float]:
+    """Identifikasi 1-dari-N: kandidat skor tertinggi.
+    Sengaja dipisah dari verification — masalah berbeda, kesalahan
+    berbeda (open-set vs closed-set), dan metriknya berbeda (Top-1
+    accuracy vs FAR/FRR).
+    """
+    if not gallery:
+        raise ValueError("galeri kosong")
+    scores = {name: cosine_similarity(claim, vec)
+              for name, vec in gallery.items()}
+    best = max(scores, key=scores.get)
+    return best, scores[best]
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Dua detail implementasi yang layak dibedah: sweep bukan loop dua-vektor naive — ia menghitung
+proporsi dengan mean boolean per threshold, O(n·P) dengan P titik grid; dan EER tidak memilih titik grid
+terdekat melainkan MENGINTERPOLASI silangan nol selisih FAR−FRR — presisi sub-grid tanpa biaya
+besar. Monotonitas keduanya diuji eksplisit di suite (FAR turun, FRR naik terhadap threshold) — sifat
+yang membuat bug index langsung ketahuan.
+11.4 EXPERIMENT — EER, ROC, dan harga keputusan
+Simulasi 400 percobaan (50 pembicara × 8 rekaman, noise kanal 0.85, identitas menumpuk di subspace
+suara bersama — sengaja bertindih agar jujur). Angka ASLI scripts/exp_speaker.py:
+
+

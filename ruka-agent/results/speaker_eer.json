@@ -1,0 +1,12 @@
+{
+  "n_speakers": 50,
+  "n_genuine": 200,
+  "n_impostor": 2450,
+  "genuine_score_mean": 0.263,
+  "genuine_score_std": 0.109,
+  "impostor_score_mean": 0.027,
+  "impostor_score_std": 0.126,
+  "d_prime": 2.004,
+  "eer": 1.0,
+  "eer_threshold": 0.95
+}

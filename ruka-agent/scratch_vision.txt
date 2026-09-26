@@ -1,0 +1,464 @@
+=== PAGES 47 to 56 ===
+--- PAGE 47 ---
+6.1 WHY — kenapa tensor, kenapa bukan 'gambar'
+Piksel JPEG hanyalah bytes terkompresi; untuk diproses ia harus jadi grid angka. Itu bukan formalitas:
+DUA konvensi layout hidup di ekosistem dan salah tebak artinya data terpotong senyap. Setelah jadi
+tensor, pertanyaan berikutnya lebih dalam: operasi apa yang cocok dengan struktur gambar? Jawaban abad
+lalu — konvolusi — tetap paling ekonomis untuk menghargai satu sifat fisik piksel: TETANGGADEKAT
+bermakna.
+Dokumen resmi (September 2026) memakai fakta yang sama untuk menentukan biaya: gambar ≤ 384 px
+kedua sisi dikonsumsi 258 token; lebih besar dipotong ubin 768×768, tiap ubin 258 token, dengan unit
+potong floor(min(w,h)/1,5) — contoh resmi 960×540 = 6 ubin. Membaca aturan itu butuh pemahaman
+dimensi piksel; PART ini memberi fondasinya, Part X memakainya untuk budgeting.
+6.2 WHAT — layout, normalisasi, luminance
+Dua keluarga konvensi: HWC (PIL/matplotlib, channels-last) dan CHW (PyTorch, kernel-C). Keduanya
+benar; CAMPUR ADUK keduanya adalah sumber bug klasik lintas framework.
+ HWC: (H, W, C) ↔ CHW: (C, H, W) C = 3 (RGB) atau 1 (grayscale)
+Listing 6.1 — Konversi layout + validasi keras (baris 37-60 dari
+src/ruka_perception/vision/image_tensor.py)
+def to_chw(t_hwc: np.ndarray) -> np.ndarray:
+    """HWC -> CHW: (H, W, C) -> (C, H, W)."""
+    if t_hwc.ndim != 3 or t_hwc.shape[2] not in (1, 3):
+        raise ValueError(f"bukan tensor HWC image: shape {t_hwc.shape}")
+    return np.transpose(t_hwc, (2, 0, 1))
+def to_hwc(t_chw: np.ndarray) -> np.ndarray:
+    """CHW -> HWC: (C, H, W) -> (H, W, C)."""
+    if t_chw.ndim != 3 or t_chw.shape[0] not in (1, 3):
+        raise ValueError(f"bukan tensor CHW image: shape {t_chw.shape}")
+    return np.transpose(t_chw, (1, 2, 0))
+def add_batch(t: np.ndarray) -> np.ndarray:
+    """(C, H, W) -> (1, C, H, W). Dimensi batch SELALU eksplisit.
+    Validasi bentuk CHW: channel harus di depan dan bernilai 1/3 —
+    menolak tensor HWC yang terkirim diam-diam."""
+    if t.ndim != 3 or t.shape[0] not in (1, 3):
+        raise ValueError(
+            f"butuh (C, H, W) dengan C in (1, 3), dapat {t.shape} "
+            f"— kemungkinan ini tensor HWC, konversi dulu")
+    return t[np.newaxis, ...]
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+Validasi di listing 6.1 menolak HWC yang terkirim diam-diam ke jalur CHW: add_batch menuntut
+dimensi pertama 1/3 (channel), bukan sekadar 'tiga dimensi'. Bug yang ditangkap test: tensor (8, 6, 3) lolos
+
+
+--- PAGE 48 ---
+cek ndim == 3 lalu batch-nya salah total — sejak itu bentuk channel diperiksa eksplisit. Pesan error
+menyebut kemungkinan 'ini HWC, konversi dulu' supaya pengguna baru tidak tersesat.
+Normalisasi — dua tingkat kedisiplinan
+Tingkat satu: /255 → [0,1] (wajib; skala mentarik uint8 membuat gradien training meledak). Tingkat dua:
+statistik ImageNet per channel (mean 0.485/0.456/0.406, std 0.229/0.224/0.225) — konvensi model vision
+terlatih; menggunakan statistik ini pada model yang dilatih tanpa itu (atau sebaliknya) menurunkan akurasi
+secara senyap. Paket menyediakan keduanya dengan nama eksplisit supaya pilihan terlihat di code review.
+Luminance — satu catatan BT.601
+ Y = 0.299 R + 0.587 G + 0.114 B (jumlah bobot = 1)
+Konversi grayscale ini dipakai kernel demo Part ini. Bobotnya bukan mistik: mata manusia paling sensitif
+ke hijau. Test memverifikasi invarian 'jumlah bobot satu' lewat citra abu-abu murni.
+6.3 MATH — konvolusi yang sebenarnya (cross-correlation)
+Kejujuran istilah sebelum rumus: operasi 'convolution' di CNN adalah CROSS-CORRELATION —
+kernel TIDAK dibalik. Semua framework melakukannya; buku-buku sering lupa menyebutnya. Bukti satu
+listing: respons konvolusi pada delta adalah kernel TERBALIK urutan (test delta stamp), sedangkan
+konvolusi matematis memberi kernel asli.
+ y[i, j] = Σₘ Σₙ x[i+u, j+v] · w[u, v] (cross-correlation)
+ H_out = ⌊(H + 2P − kH)/S⌋ + 1 W_out = ⌊(W + 2P − kW)/S⌋ + 1
+– Kernel w: (C_out, C_in, kH, kW) — bobot DIBAGIPAKAI lintas seluruh gambar (parameter sharing),
+itulah sumber efisiensi vs dense.
+– Stride S melangkah window — S=2 memangkas keluaran hampir separuh.
+– Padding P menambah bingkai nol — P=(k-1)/2 pada stride 1 mempertahankan ukuran (P=cuci tangan
+agar arsitektur dalam terbaca).
+– Feature map: satu bidang keluaran per pasangan (kernel-out, channel-in) — jumlahnya C_out.
+Listing 6.2 — conv2d murni NumPy (inti loop) (baris 22-57 dari
+src/ruka_perception/vision/convolution.py)
+def conv2d(x: np.ndarray, w: np.ndarray, stride: int = 1,
+           padding: int = 0) -> np.ndarray:
+    """Konvolusi (cross-correlation) 2D batch. Float32 keluar."""
+    if x.ndim != 4:
+        raise ValueError(f"x harus (N, C_in, H, W), dapat {x.shape}")
+    if w.ndim != 4:
+        raise ValueError(f"w harus (C_out, C_in, kH, kW), dapat {w.shape}")
+    n, c_in, h, wd = x.shape
+
+
+--- PAGE 49 ---
+    c_out, w_cin, kh, kw = w.shape
+    if c_in != w_cin:
+        raise ValueError(
+            f"channel mismatch: x punya {c_in}, kernel {w_cin}")
+    if stride < 1 or padding < 0:
+        raise ValueError("stride >= 1 dan padding >= 0 wajib")
+    h_out = (h + 2 * padding - kh) // stride + 1
+    w_out = (wd + 2 * padding - kw) // stride + 1
+    if h_out < 1 or w_out < 1:
+        raise ValueError(
+            f"kernel ({kh},{kw}) lebih besar dari input efektif "
+            f"({h + 2 * padding},{wd + 2 * padding})")
+    if padding:
+        x = np.pad(x, ((0, 0), (0, 0),
+                       (padding, padding), (padding, padding)))
+    out = np.zeros((n, c_out, h_out, w_out), dtype=np.float32)
+    for i in range(h_out):
+        for j in range(w_out):
+            si = i * stride
+            sj = j * stride
+            patch = x[:, :, si:si + kh, sj:sj + kw]       # (N,C,kH,kW)
+            # einsum: pasang dimensi patch dengan kernel, jumlahkan.
+            out[:, :, i, j] = np.einsum("nchw,ochw->no", patch, w)
+    return out
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+einsum 'nchw,ochw→no' menjahit dimensi patch dan kernel dalam satu ekspresi — bentuk dibaca langsung
+dari string-nya, dan penjumlahan atas (c,h,w) implisit. Sebelum einsum: dua validasi (channel cocok;
+stride/padding sehat) dan rumus H_out di atas DIVERIFIKASI identik dengan hasil nyata di test shape.
+6.4 EXPERIMENT — kernel menjawab pemandangan sintetis
+Satu citra 64×64 (gradasi + kotak terang + garis gelap) diperiksa empat kernel klasik. Angka ASLI dari
+scripts/exp_conv_vision.py:
+Kernel
+Respons eksperimen
+Makna
+Sobel-X
+max |y| = 3.055 (area datar: 0.1705)
+tepi vertikal menyala; datar = nol — kernel diferensial
+sungguhan
+Sobel-Y
+max |y| = 2.921
+tepi horizontal — arah berbeda, jawaban berbeda
+Box blur
+rentang 0.805 → 0.864
+rata-rata lokal memangkas kontras — smoothing
+Sharpen
+gradien rata-rata 0.0369 → 0.2076
+mask unsharp meninggikan detail — kebalikan blur
+ Tabel 6.1 — Empat kernel, empat karakter, satu eksperimen. maxpool mempertahankan respons tepi (2.004) di separuh resolusi.
+
+
+--- PAGE 50 ---
+Gambar 6.1 — Peta fitur eksperimen: input, respons Sobel-X/Y, dan hasil maxpool 2×2.
+ Gambar 6.2 — Anatomi konvolusi NCHW dan pertumbuhan receptive field.
+
+
+--- PAGE 51 ---
+6.5 INTERNALS — pooling dan receptive field
+MaxPool mengambil pemenang tiap blok k×k; efek fungsionalnya invariansi translasi kecil (objek bergeser
+beberapa piksel → respons serupa). Harga: posisi persis hilang. Receptive field (RF) melacak 'sejauh apa
+satu neuron keluaran melihat input'.
+ RFₗ₊₁ = RFₗ + (kₗ − 1) · jₗ, jₗ = Π stride₁..ₗ
+Layer
+Kernel/Stride
+RF kumulatif
+Jump
+conv3x3
+k=3, s=1
+3
+1
+pool2x2
+k=2, s=2
+4
+2
+conv3x3
+k=3, s=1
+8
+2
+pool2x2
+k=2, s=2
+10
+4
+conv3x3
+k=3, s=1
+18
+4
+ Tabel 6.2 — Tumpukan 5 layer eksperimen: RF tumbuh 3 → 18 piksel. Layer dalam 'melihat' lebih luas — inilah hierarki fitur: tepi lokal
+ di bawah, bentuk objek di atas.
+6.6 TRADE-OFFS — kernel kecil bertumpuk vs kernel besar tunggal
+Dua conv 3×3 menjangkau 5×5 dengan parameter 18 vs 25 DAN menyisipkan non-linearitas di antaranya
+(satu conv 5×5 tidak) — kemenangan ganda. Tiga conv 3×3 menjangkau 7×7: 27 vs 49 parameter. Prinsip
+bertahan sejak VGG: tumpuk kernel kecil. Konsekuensi yang jarang disebut: kedalaman menambah biaya
+rangkaian dan memperparah gradien (Vol III Part VII vanishing) — keputusan tetap barter, bukan dogma.
+Desain
+Parameter
+Non-linearitas
+RF
+1 × conv 5×5 (C=16)
+25C²
+0
+5
+2 × conv 3×3 (C=16)
+18C²
+1
+5
+3 × conv 3×3 (C=16)
+27C²
+2
+7
+1 × conv 7×7 (C=16)
+49C²
+0
+7
+ Tabel 6.3 — Barter tumpukan kernel. C² bobot per kernel; kolom non-linearitas sering jadi penentu sebenarnya.
+6.7 FAILURE MODES
+Enam kegagalan tensor vision yang paling sering muncul di code review nyata.
+
+
+--- PAGE 52 ---
+– Layout tertukar: HWC masuk jalur CHW — ditolak listing 6.1 sekarang; tanpa validasi, hasil 'jalan'
+tetapi salah semantik (channel dibaca sebagai tinggi).
+– Normalisasi tidak konsisten: training pakai [0,1], inferensi lupa /255 — akurasi runtuh tanpa error.
+– Padding asimetris naif: memotong tepi membuat objek di pinggir 'menghilang' perlahan antar layer.
+– Stride melampaui objek kecil: S terlalu besar membuat deteksi kecil skip — gejala: recall turun
+untuk objek jauh.
+– Maxpool menelan sinyal lemah: detail frekuensi halus hilang setelah 2-3 pool; gunakan avg atau
+stride kecil untuk tugas presisi.
+– Grayscale dihitung rata-rata: (R+G+B)/3 bukan luma — kontras salah untuk citra berwarna
+dominan.
+6.8 TESTING & EVALUATION
+Invarian konvolusi adalah matematika yang bisa diminta pertanggungjawaban.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_convolution.py tests/test_image_tensor.py -q
+EXPECTED
+ 40+ test hijau: rumus H_out/W_out terverifikasi untuk (stride,padding) campuran; kernel identitas mengembalikan
+input; area datar → respons nol; delta stamp membuktikan konvensi cross-correlation; estimasi token 960×540 =
+6×258 sesuai contoh dokumen resmi.
+WHY
+ Rumus bentuk yang ditulis di komentar harus SAMA dengan keluaran — bila tidak, test shape gagal sebelum bug
+merambat ke arsitektur.
+FAILURE MODE
+ Test gagal bila einsum diganti matmul dengan sumbu salah — hasil salah tapi bentuk benar; kernel identitas &
+sobel-flat adalah penjaga semantiknya.
+DEBUGGING
+ Untuk delta stamp: buat delta manual dan cek apakah urutan [3,2,1] muncul (correlation) atau [1,2,3] (konvolusi
+murni).
+Evaluasi kualitas kernel klasik dilakukan visual dan kuantitatif sekaligus: tabel 6.1 memberi angka (respons
+maksimum, kontras) dan gambar 6.1 memberi mata. Di produksi, kernel klasik dipakai untuk pra-proses
+dan diagnosis (deteksi blur, penajaran), sementara kernel LEARNED milik CNN/ViT menangani
+semantik — Part VII melanjutkan ke sana.
+
+
+--- PAGE 53 ---
+6.9 WORKED EXAMPLE — konvolusi 3×3 pada window 3×3
+Input grayscale window (stride pertama, tanpa padding) dikalikan kernel Sobel-X. Semua angka dihitung
+tangan sampai hasil akhir.
+ window x = [[1, 1, 1], [1, 1, 1], [1, 2, 1]] w = [[-1, 0, +1], [-2, 0, +2], [-1, 0, +1]]
+Jumlahkan perkalian elemen-demi-elemenem: (−1·1) + (0·1) + (+1·1) + (−2·1) + 0 + (+2·1) + (−1·1) + 0 +
+(+1·1) = −1 + 1 − 2 + 2 − 1 + 1 = 0. Tepi VERTIKAL di kanan window (kolom 1→2: 1→1... sebenarnya
+tidak berubah) memberi nol — benar: area tanpa perubahan horizontal memang tak terlihat Sobel-X.
+Sekarang ganti kolom terakhir window menjadi 5: x = [[1,1,5],[1,1,5],[1,2,5]]: hasil = (−1·1)+(0·1)+(+1·5)
++ (−2·1)+0+(+2·5) + (−1·1)+0+(+1·5) = 4 + 8 + 4 = 16 — tepi vertikal KUAT menyala. Satu kalimat
+bacaan: Sobel-X adalah selisih tertimbang kolom kanan minus kolom kiri; horizontal edge (baris berubah)
+memerlukan Sobel-Y. Verifikasi:
+OUTPUT
+>>> import numpy as np
+>>> from ruka_perception.vision.convolution import SOBEL_X
+>>> w = np.ones((1,1,3,3), np.float32)
+>>> conv2d(w, SOBEL_X)
+array([[[[0.]]]], ...)          # area datar: nol
+>>> w[0,0,:,2] = 5.0
+>>> float(conv2d(w, SOBEL_X)[0,0,1,1])
+16.0                            # tepi kanan: menyala
+6.10 IMPLEMENTATION — pooling dan rumus RF
+Dua fungsi pendamping conv2d yang menuntaskan hierarki: pooling meresolusikan turun, receptive_field
+menghitung jangkauan kumulatif.
+Listing 6.3 — MaxPool 2×2 dan receptive field (baris 59-126 dari
+src/ruka_perception/vision/convolution.py)
+def maxpool2d(x: np.ndarray, k: int = 2, stride: int | None = None
+              ) -> np.ndarray:
+    """Max pooling (N, C, H, W). Default stride = k (non-overlap)."""
+    if x.ndim != 4:
+        raise ValueError(f"x harus (N, C, H, W), dapat {x.shape}")
+    if stride is None:
+        stride = k
+    n, c, h, w = x.shape
+    h_out = (h - k) // stride + 1
+    w_out = (w - k) // stride + 1
+    out = np.zeros((n, c, h_out, w_out), dtype=x.dtype)
+    for i in range(h_out):
+        for j in range(w_out):
+            si, sj = i * stride, j * stride
+            out[:, :, i, j] = x[:, :, si:si + k, sj:sj + k].max(axis=(2, 3))
+
+
+--- PAGE 54 ---
+    return out
+def avgpool2d(x: np.ndarray, k: int = 2, stride: int | None = None
+              ) -> np.ndarray:
+    """Average pooling (N, C, H, W)."""
+    if x.ndim != 4:
+        raise ValueError(f"x harus (N, C, H, W), dapat {x.shape}")
+    if stride is None:
+        stride = k
+    n, c, h, w = x.shape
+    h_out = (h - k) // stride + 1
+    w_out = (w - k) // stride + 1
+    out = np.zeros((n, c, h_out, w_out), dtype=np.float32)
+    for i in range(h_out):
+        for j in range(w_out):
+            si, sj = i * stride, j * stride
+            out[:, :, i, j] = x[:, :, si:si + k, sj:sj + k].mean(axis=(2, 3))
+    return out
+# ---------------------------------------------------------------------------
+# Kernel klasik (grayscale 1-channel-in 1-channel-out)
+# ---------------------------------------------------------------------------
+SOBEL_X = np.array([[-1, 0, +1],
+                    [-2, 0, +2],
+                    [-1, 0, +1]], dtype=np.float32).reshape(1, 1, 3, 3)
+SOBEL_Y = np.array([[-1, -2, -1],
+                    [ 0,  0,  0],
+                    [+1, +2, +1]], dtype=np.float32).reshape(1, 1, 3, 3)
+BOX_BLUR = np.ones((1, 1, 3, 3), dtype=np.float32) / 9.0
+SHARPEN = np.array([[ 0, -1,  0],
+                    [-1, +5, -1],
+                    [ 0, -1,  0]], dtype=np.float32).reshape(1, 1, 3, 3)
+def receptive_field(layers: list[tuple[int, int]]) -> int:
+    """Receptive field kumulatif dari susunan (kernel, stride).
+    RF bertambah: RF_{l+1} = RF_l + (k_l - 1) * j_l,
+    dengan jump j adalah hasil kali semua stride sebelum layer l.
+    Contoh: dua conv 3x3 stride 1 -> RF 5; ditambah maxpool 2x2
+    stride 2 lalu conv 3x3 -> RF 14.
+    """
+    rf, jump = 1, 1
+    for k, s in layers:
+        if k < 1 or s < 1:
+            raise ValueError("kernel dan stride harus >= 1")
+        rf += (k - 1) * jump
+        jump *= s
+    return rf
+VERIFIED — Kode ini dijalankan di lingkungan buku: 243/243 test lulus pada Python 3.12.14, NumPy 2.1.3, pytest 9.0.2 (pillow 11.3.0;
+ scipy 1.14.1 untuk uji silang DCT).
+MaxPool mengambil pemenang blok — bukan rata-rata: tujuannya invariansi, bukan ringkasan; avgpool
+ada untuk kasus sinyal kontinu (dan dipakai paralel di eksperimen). Rumus RF menjumlah (k−1)·jump:
+stride pooling MENGGANDAKAN jump, sehingga satu layer kecil di kedalaman 3-4 memberi lompatan
+
+
+--- PAGE 55 ---
+jangkauan besar — itulah sebabnya arsitektur nyata berselang conv dan pool, dan tabel 6.2 eksperimen
+menunjukkan 5 layer mencapai RF 13.
+6.11 PRODUKSI — pra-proses yang stabil
+Jalur visi produksi tidak menulis ulang konvolusi — ia menstabilkan INPUT-nya.
+– EXIF orientation dibaca dan diterapkan (best practice resmi P X) sebelum resize.
+– Resize dengan filter (bukan nearest) + padding aspect-ratio konsisten — pipeline training dan
+inferensi HARUS identik, termasuk epsilon.
+– Statistik normalisasi dibekukan dari training dan disimpan sebagai konstanta versi — ganti model,
+ganti konstanta.
+– Deteksi kualitas murah: variansi Laplacian untuk blur (kernel SHARPEN listing bisa jadi basis
+diagnosa), histogram untuk gelap/terang — catat hasilnya ke PerceptionResult.notes.
+Engineering Exercise
+ 1. Tulis kernel emboss 3×3 dan prediksi gambarnya sebelum menjalankan; verifikasi dengan conv2d
+pada scene sintetis.
+2. Ganti stride pool 2 → 1 di tumpukan tabel 6.2; hitung RF ulang dengan rumus — berapa lapisan
+tambahan yang dibutuhkan untuk RF 13?
+3. Estimasi token: foto layar ponsel Bos (mis. 1080×2400) — hitung ubin dan token dengan
+estimate_image_tokens, lalu bandingkan dengan media_resolution tinggi (Part X).
+VOLUME IV · THE AWAKENING OF THE SENSES · PART VII
+From CNN to Attention
+"“CNN adalah bangsawan lama: hanya mengakrabi tetangga dekat. Attention adalah
+diplomat baru: mengundang seluruh ruangan bicara. Keduanya tetap harus menunduk pada
+aljabar bentuk, Bos.”"
+Keterbatasan CNN dan kelahiran patch embedding; lalu attention dibangun ulang dari nol
+dengan dimensional reasoning penuh — Q, K, V, skala akar d_k, masking — sampai
+cross-modal attention yang menjadi jantung fusi Vol IV.
+
+
+--- PAGE 56 ---
+7.1 WHY — keterbatasan struktural CNN
+CNN menghargai lokalitas: kernel kecil + pooling bertumpuk menghasilkan receptive field yang tumbuh
+secara LINIER terhadap kedalaman (tabel 6.2: lima layer baru RF 13). Dua konsekuensi menghantui visi
+modern: hubungan jarak-jauh antar objek (kucing DI ATAS meja) harus menunggu lapisan paling dalam;
+dan resolusi input berubah RF efektifnya — gambar besar membuat objek 'lebih kecil' relatif terhadap
+jangkauan.
+Vision Transformer menjawab dengan langkah yang terdengar boros: potong gambar jadi patch 16×16,
+perlakukan TIAP patch sebagai token (persis seperti kata di teks), dan biarkan attention global
+menghubungkan semua patch sejak lapisan pertama. Jangkauan = satu lapisan = seluruh gambar. Harganya:
+O(n²) pasangan patch dan kehilangan inductive bias lokal — data kecil membuat ViT kalah oleh CNN;
+data besar membalikkan hasilnya. Itu temuan empiris yang stabil lintas studi; jadikan aturan praktis, bukan
+iman.
+ patch 16×16×3 = 768 nilai → W ∈ ℝ^(768 × d_model) → token ∈ ℝ^d_model
+Aspek
+CNN
+Vision Transformer
+Inductive bias
+kuat: lokal + hirarki
+lemah: harus belajar sendiri
+Jangkauan lapisan-1
+k×k piksel
+seluruh patch
+Biaya
+O(H·W·k²·C²)
+O(n²·d) pasangan patch
+Data kecil (<100k)
+menang umumnya
+kalah umumnya
+Data besar
+baik
+menang umumnya
+Posisi
+implisit dalam grid
+embedding posisi WAJIB ditambah
+ Tabel 7.1 — Dua filosofi visi. Posisi patch harus DIINJEKSI pada ViT karena attention sendiri tidak tahu letak.
+7.2 MATH — attention dengan bentuk yang bersuara
+Rumus Vol IV tidak ditulis tanpa bentuk. Setiap simbol membawa dimensi dan jumlah baris nyata dari
+eksperimen.
+ Attention(Q, K, V) = softmax(QKᵀ / √d_k) V
+
+
+--- PAGE 57 ---
+Tensor
+Bentuk
+Contoh eksperimen
+Peran
+Q
+(n_q, d_k)
+(4, 32) — token teks
+yang bertanya
+K
+(n_k, d_k)
+(9, 32) — patch gambar
+yang menawarkan diri
+V
+(n_k, d_v)
+(9, 32) — isi patch
+yang diambil bila dipilih
+QKᵀ/√d_k
+(n_q, n_k)
+(4, 9) skor
+kecocokan pasangan
+softmax baris
+(n_q, n_k)
+tiap baris Σ=1
+distribusi perhatian
+(W) V
+(n_q, d_v)
+(4, 32) konteks
+ringkasan tertimbang
+Tabel 7.2 — Kontrak bentuk attention. d_k Q harus == d_k K; jumlah token K harus == V; pelanggaran =ValueError dengan angka nyata
+ (listing 2.1).
+Mengapa dibagi akar d_k
+Dot produk dua vektor acak berdimensi d bervarian ~d. Pada d=512, skor mentah mudah mencapai
+puluhan; softmax menjadi nyaris one-hot → gradien lenyap (kulit Vol III Part VII: sigmoid saturated versi
+attention). Membagi √d_k menjaga varian skor ~O(1). Data eksperimen menuliskannya angka: dot mentah
+−57,6 pada d_k=2048 menjadi −1,27 setelah skala — aman untuk softmax; tanpa skala, distribusi baris
+menajam buta.
+d_k
+dot mentah
+setelah /√d_k
+8
+-3.64
+-1.29
+64
+-2.87
+-0.36
+512
+-7.48
+-0.33
+2048
+-57.61
+-1.27
+ Tabel 7.3 — Skala √d_k dari eksperimen: skor mentah tumbuh dengan dimensi; skala mengembalikannya ke ranah softmax yang sehat.
+7.3 IMPLEMENTATION — attention inti
+Dua puluh baris yang menanggung seluruh ekosistem modern.
+Listing 7.1 — Scaled dot-product attention (baris 49-78 dari
+src/ruka_perception/multimodal/attention.py)
+def scaled_dot_product_attention(q: np.ndarray, k: np.ndarray,
+                                 v: np.ndarray,
+                                 mask: np.ndarray | None = None
+                                 ) -> tuple[np.ndarray, np.ndarray]:
+    """Attention inti. Return (output (n_q, d_v), bobot (n_q, n_k)).
+
+
