@@ -102,19 +102,16 @@ class RukaSession:
                 f"Sistem agentic kognitif-ekspresif v{self.self_model.model_version}. "
                 f"Saya melayani Bos dengan ketertiban lima abad, bukan teater."
             )
-        elif intent == "greeting":
-            evidence = Evidence(retrieval_top=0.9, tool_success=1.0, n_sources=2, stale_days=1)
-            core_answer = "Salam, Bos. Ada tugas yang layak untuk strategi kita hari ini?"
-        elif intent == "task_request":
-            evidence = Evidence(retrieval_top=0.75, tool_success=1.0, n_sources=3, stale_days=5)
-            core_answer = (
-                f"Perintah diterima dengan status {complexity_val.upper()}. "
-                "Seluruh parameter dependensi dan pagu anggaran telah diamankan. "
-                "Langkah siap dijalankan."
-            )
         else:
-            evidence = Evidence(retrieval_top=0.45, tool_success=0.5, n_sources=1, stale_days=40)
-            core_answer = "Saya menangkap pertanyaan Anda. Mari kita telaah buktinya bersama."
+            if not hasattr(self, "app"):
+                from src.application.ruka_app import RukaApp
+                self.app = RukaApp()
+            try:
+                core_answer = self.app.handle(self.session_id, user_text)
+                evidence = Evidence(retrieval_top=0.9, tool_success=1.0, n_sources=3, stale_days=1)
+            except Exception as e:
+                core_answer = f"[Error kognitif: {str(e)}]"
+                evidence = Evidence(retrieval_top=0.1, tool_success=0.0, n_sources=0, stale_days=100)
 
         level, conf_score = epistemic_level(evidence)
         disclaimer = disclaimer_text(level)
