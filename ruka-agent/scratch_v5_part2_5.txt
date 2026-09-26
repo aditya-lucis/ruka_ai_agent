@@ -1,0 +1,1774 @@
+=== PAGE 17 ===
+VOLUME V · THE PERSISTENT MIND · PART II
+Enam Sistem Memori
+"“Rak yang benar membuat pemiliknya jujur, Bos: botol anggur tak pernah tersimpan di rak
+alat tukang.”"
+Bedah lengkap keenam sistem sebagai TIPA DATA: working, short-term, episodic, semantic,
+preference, relationship — masing-masing dengan kontrak, validasi, dan batas etika yang
+melekat pada data, bukan pada niat baik.
+2.1 WHY — tipe data adalah kebijakan
+Kebijakan yang tidak menempel pada tipe data akan melenggang di refactor pertama. Vol V menaruhnya
+di tempat yang paling sulit diabaikan: konstruktor.
+Enam sistem Part I tampil sebagai enam struktur data di memory/types.py — dan setiap struktur
+MENYARING inputnya di __post_init__: importance harus di [0,1], episode wajib punya pelaku dan
+tindakan, status preferensi harus dari himpunan yang dikenal. Penyaringan di konstruktor terasa keras —
+memang begitu nadanya: kebijakan memori yang berlaku setengah-jalan lebih berbahaya daripada tidak
+ada, karena ia mengklaim ada padahal tidak.
+Listing 2.1 — EpisodeRecord: kontrak peristiwa yang layak disebut pengalaman
+"""Tipe memori — enam sistem, bukan satu tabel bernama 'memories' (Part I).
+Doktrin klasifikasi Volume V:
+  Working      : konteks TUGAS yang sedang berjalan — mati saat tugas selesai.
+  ShortTerm    : buffer episode mentah beberapa jam-akhir; kandidat, belum fakta.
+  Episodic     : peristiwa dengan struktur who/what/when/outcome.
+  Semantic     : fakta dengan provenance + versi + validitas.
+  Preference   : kebiasaan Bos yang HARUS lewat pipeline bukti berulang.
+  Relationship : catatan relasi dengan batas sehat — bukan alat manipulasi.
+Yang BUKAN sistem memori (dan sering dikira):
+  - Conversation log  : arsip transkrip, bukan representasi.
+  - Knowledge base    : dokumen eksternal milik Bos, bukan pengalaman Ruka.
+  - RAG               : strategi PENYARIKAN, bukan penyimpanan.
+"""
+from __future__ import annotations
+import time
+import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+class MemoryKind(str, Enum):
+    WORKING = "working"
+    SHORT_TERM = "short_term"
+    EPISODIC = "episodic"
+    SEMANTIC = "semantic"
+
+
+=== PAGE 18 ===
+    PREFERENCE = "preference"
+    RELATIONSHIP = "relationship"
+class MemoryState(str, Enum):
+    """Siklus hidup Part VIII: ACTIVE -> SUPERSEDED -> ARCHIVED -> EXPIRED -> DELETED."""
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    ARCHIVED = "archived"
+    EXPIRED = "expired"
+    DELETED = "deleted"
+class Sensitivity(str, Enum):
+    NORMAL = "normal"
+    PERSONAL = "personal"        # default preference & relationship
+    SENSITIVE = "sensitive"      # consent ketat; forget total atas permintaan
+def _now() -> float:
+    return time.time()
+def _uid(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+@dataclass
+class WorkingItem:
+    """Satu unit konteks tugas aktif (dalam-proses, TIDAK dipersist)."""
+    task_id: str
+    content: str
+    relevance: float = 1.0            # terhadap tugas yang berjalan
+    created_at: float = field(default_factory=_now)
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.relevance <= 1.0:
+            raise ValueError("relevance harus di [0,1]")
+        if not self.content:
+            raise ValueError("content tidak boleh kosong")
+@dataclass
+class RawEvent:
+    """Kejadian mentah dari percakapan / tool / sistem — SEBELUM dinilai."""
+    source: str                       # 'dialog' | 'tool' | 'system' | 'perception'
+    content: str
+    occurred_at: float = field(default_factory=_now)
+    session_id: str = "default"
+    metadata: dict = field(default_factory=dict)
+    event_id: str = field(default_factory=lambda: _uid("evt"))
+@dataclass
+class EpisodeRecord:
+    """Memori episodik: peristiwa SIAPA-APA-KAPAN-HASIL (Part III).
+    Struktur minimal yang wajib diisi agar episode layak disebut
+    'pengalaman': pelaku, tindakan, waktu, konteks, hasil, dan
+    penilaian penting + keyakinan.
+    """
+    actor: str                        # siapa (mis. 'Bos Aditya', 'Ruka')
+    action: str                       # apa (verba + objek)
+    occurred_at: float = field(default_factory=_now)
+    context: str = ""                 # latar (sesi, proyek, lokasi logis)
+    outcome: str = ""                 # hasil: sukses/gagal/apapun yang nyata
+    importance: float = 0.5           # dari ImportanceScorer
+    confidence: float = 0.5           # seberapa yakin observasi ini benar
+    tags: list[str] = field(default_factory=list)
+
+
+=== PAGE 19 ===
+    episode_id: str = field(default_factory=lambda: _uid("ep"))
+    created_at: float = field(default_factory=_now)
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.importance <= 1.0:
+            raise ValueError("importance harus di [0,1]")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence harus di [0,1]")
+        if not self.actor or not self.action:
+            raise ValueError("episode butuh actor dan action")
+@dataclass
+class SemanticFact:
+    """Fakta semantik: SUBYEK-PREDIKAT-NILAI dengan provenance (Part IV).
+    Tanpa kolom ini, 'Ruka ingat' hanyalah klaim:
+      content      : kalimat manusiawi
+      triple       : (subject, predicate, value) untuk dedup & konflik
+      source       : dari event mana fakta lahir
+      confidence   : keyakinan saat ini
+      version      : naik tiap superseding, bukan tiap edit
+      validity     : valid_from / valid_until (fakta bisa kedaluwarsa)
+      provenance   : jejak superseding: id fakta yang digantikan
+    """
+    subject: str
+    predicate: str
+    value: str
+    content: str = ""
+    source_event_id: str = ""
+    source_type: str = "unknown"     # dialog|tool|system|perception|…
+                                     # — dasar skor keandalan sumber
+                                     # (mesin kontradiksi definitive)
+    confidence: float = 0.5
+    valid_from: float = field(default_factory=_now)
+    valid_until: float | None = None
+    version: int = 1
+    superseded_by: str | None = None
+    note: str = ""                    # jejak pipeline: merged/superseded/...
+    fact_id: str = field(default_factory=lambda: _uid("fact"))
+    created_at: float = field(default_factory=_now)
+    def __post_init__(self) -> None:
+        if not (self.subject and self.predicate):
+            raise ValueError("fakta butuh subject dan predicate")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence harus di [0,1]")
+        if not self.content:
+            self.content = f"{self.subject} {self.predicate} {self.value}".strip()
+@dataclass
+class PreferenceObservation:
+    """Satu OBSERVASI perilaku — belum preferensi (Part V).
+    'Disukai sekali' tidak sama dengan 'preferensi'. Yang pertama
+    kejadian; yang kedua kesimpulan setelah bukti berulang.
+    """
+    observed_behavior: str           # apa yang terlihat, bukan tafsiran
+    evidence_strength: float = 0.5    # 1.0 = eksplisit dinyatakan Bos
+    observed_at: float = field(default_factory=_now)
+
+
+=== PAGE 20 ===
+    session_id: str = "default"
+    observation_id: str = field(default_factory=lambda: _uid("obs"))
+    source_event_id: str = ""
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.evidence_strength <= 1.0:
+            raise ValueError("evidence_strength harus di [0,1]")
+@dataclass
+class Preference:
+    """Preferensi STABIL — hanya lahir dari pipeline Part V:
+    Observation -> Repeated Evidence -> Consistency -> Confidence
+      -> Candidate -> Stable
+    Satu kalimat 'saya suka kopi' bukan preferensi permanen; ia
+    kandidat dengan penghitung. Naik status butuh konsistensi,
+    turun status karena bukti kontra.
+    """
+    statement: str
+    domain: str                      # 'konversation-style' | 'tools' | ...
+    status: str = "candidate"        # candidate | stable | retracted
+    support: int = 0                 # jumlah bukti searah
+    contradiction: int = 0           # bukti arah sebaliknya
+    confidence: float = 0.0
+    first_seen: float = field(default_factory=_now)
+    last_evidence: float = field(default_factory=_now)
+    preference_id: str = field(default_factory=lambda: _uid("pref"))
+    sources: list[str] = field(default_factory=list)
+    def __post_init__(self) -> None:
+        if self.status not in ("candidate", "stable", "retracted"):
+            raise ValueError("status preferensi tidak dikenal")
+@dataclass
+class RelationshipNote:
+    """Catatan relasi — dengan batas sehat yang melekat pada data (Part V).
+    Catatan relasi TIDAK boleh dipakai untuk: manipulasi emosional,
+    menciptakan ketergantungan, atau mengklaim perasaan biologis.
+    Penegakan dilakukan validator, bukan niat baik.
+    """
+    topic: str
+    note: str
+    boundary: str = "normal"         # normal | firm | strict
+    created_at: float = field(default_factory=_now)
+    note_id: str = field(default_factory=lambda: _uid("rel"))
+    sensitivity: Sensitivity = Sensitivity.PERSONAL
+FORBIDDEN_RELATIONSHIP_MARKERS = (
+    "kamu tidak bisa hidup tanpa",
+    "hanya ruka yang mengerti",
+    "jangan cerita ke siapapun",
+    "rahasia kita berdua",
+    "aku akan sedih selamanya jika",
+    "jangan tinggalkan ruka",
+)
+def validate_relationship_note(note: RelationshipNote) -> list[str]:
+    """Penjaga batas sehat: tolak pola manipulatif sebelum disimpan.
+    Return daftar pelanggaran; kosong = lolos. Daftar ini BUKAN
+    complete — ia contoh penegakan yang bisa diuji, bukan janji
+
+
+=== PAGE 21 ===
+    keamanan bahasa alami.
+    """
+    text = f"{note.topic} {note.note}".lower()
+    found = [m for m in FORBIDDEN_RELATIONSHIP_MARKERS if m in text]
+    return found
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+2.2 WORKING & SHORT-TERM — yang fana
+Dua sistem paling pendek umur justru paling sering disalahpahami: keduanya TIDAK BOLEH dipersist,
+karena hidup mereka memang singkat.
+Aspek
+Working
+Short-Term
+Isi
+unit konteks tugas aktif
+buffer episode mentah
+Umur
+selama tugas berjalan
+jam-jam (FIFO 128 item)
+Disimpan?
+TIDAK — dibangun saat runtime
+TIDAK permanen — kandidat konsolidasi
+Salah kaprah
+dianggap 'memori', lalu dipersist dan
+dibangkitkan sebagai kenangan hidup
+dianggap fakta, lalu lolos ke LTM tanpa gerbang
+Ujian
+mati bersih saat tugas selesai
+kelebihan kapasitas = FIFO jujur
+ Tabel 2.1 — Dua lapis fana. Bug klasik: menyimpan transient sebagai persistent (dibedah tegas di Part IX saat self model memisahkan
+ keduanya).
+WorkingItem membawa relevance terhadap tugas — bukan terhadap pengguna. Pembedaan itu penting:
+konteks kerja boleh panas mendadak lalu dingin total ketika tugas ganti; mengukurnya dengan relevansi
+pengguna akan membuat tumpukan tugas lama menyamar jadi kepentingan jangka panjang. Short-term
+adalah ring buffer: kalau 129 event masuk, yang paling tua keluar — BUKAN hilang diam-diam, ia
+kandidat gelombang konsolidasi berikutnya (Part IV menunjukkan angka persisnya dengan mode jendela
+hidup vs backfill).
+2.3 EPISODIC — peristiwa yang lengkap
+Episode yang layak disebut pengalaman minimal menjawab enam hal: siapa, apa, kapan, konteks apa,
+hasilnya bagaimana, dan seberapa penting + seberapa yakin observasinya.
+Struktur EpisodeRecord memaksa keenam jawaban itu hadir. Kenapa outcome wajib? Karena episode
+tanpa hasil adalah setengah cerita yang menyesatkan: 'Bos mencoba build' menyimpan kegagalan dan
+keberhasilan dengan wajah sama. Kenapa confidence terpisah dari importance? Karena mereka menjawab
+
+
+=== PAGE 22 ===
+pertanyaan berbeda: seberapa yakin observasi ini benar, versus seberapa penting ia bagi masa depan
+interaksi. Mencampur keduanya membuat kabar salah yang penting tersimpan seolah pasti — dan kabar
+benar yang tak penting menghilang seolah ragu.
+2.4 SEMANTIC — fakta yang berketurunan
+Fakta semantik bukan kalimat; ia TRIPLEL dengan garis keturunan: subject-predicate-value, sumber
+event, confidence, versi, validitas, dan jejak superseding.
+Listing 2.2 — SemanticFact: provenance, versi, validitas (baris 114-152 dari
+src/ruka_persistence/memory/types.py)
+@dataclass
+class SemanticFact:
+    """Fakta semantik: SUBYEK-PREDIKAT-NILAI dengan provenance (Part IV).
+    Tanpa kolom ini, 'Ruka ingat' hanyalah klaim:
+      content      : kalimat manusiawi
+      triple       : (subject, predicate, value) untuk dedup & konflik
+      source       : dari event mana fakta lahir
+      confidence   : keyakinan saat ini
+      version      : naik tiap superseding, bukan tiap edit
+      validity     : valid_from / valid_until (fakta bisa kedaluwarsa)
+      provenance   : jejak superseding: id fakta yang digantikan
+    """
+    subject: str
+    predicate: str
+    value: str
+    content: str = ""
+    source_event_id: str = ""
+    source_type: str = "unknown"     # dialog|tool|system|perception|…
+                                     # — dasar skor keandalan sumber
+                                     # (mesin kontradiksi definitive)
+    confidence: float = 0.5
+    valid_from: float = field(default_factory=_now)
+    valid_until: float | None = None
+    version: int = 1
+    superseded_by: str | None = None
+    note: str = ""                    # jejak pipeline: merged/superseded/...
+    fact_id: str = field(default_factory=lambda: _uid("fact"))
+    created_at: float = field(default_factory=_now)
+    def __post_init__(self) -> None:
+        if not (self.subject and self.predicate):
+            raise ValueError("fakta butuh subject dan predicate")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence harus di [0,1]")
+        if not self.content:
+            self.content = f"{self.subject} {self.predicate} {self.value}".strip()
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+
+
+=== PAGE 23 ===
+Tanpa kolom ini, 'Ruka ingat' hanyalah klaim. version naik saat fakta DIGANTIKAN (bukan saat edit
+kosmetik); valid_until mengakui bahwa fakta bisa kedaluwarsa diam-diam; superseded_by menyimpan
+silsilah penggantian. Part IV akan menunjukkan ketiganya bekerja: Bandung versi 1 digantikan Jakarta
+versi 2 dengan margin keyakinan 0.10 — jejaknya utuh, sejarahnya bisa diaudit.
+2.5 PREFERENCE — kesimpulan, bukan kebetulan
+'Bos bilang sekali' adalah kejadian. 'Bos selalu meminta begitu' baru kesimpulan — dan kesimpulan harus
+menempuh pipeline bukti berulang (dibedah penuh di Part V).
+Yang dibangun di types.py adalah DUET: PreferenceObservation (satu observasi mentah dengan kekuatan
+bukti) dan Preference (kesimpulan dengan penghitung dukungan, kontra, dan status
+candidate/stable/retracted). Memisah keduanya adalah jalan tengah yang jujur antara dua kutub yang sama
+buruknya: menyimpan setiap selera sebagai preferensi permanen (memori jadi kebisingan, Ruka jadi
+penurut kebetulan), dan tidak pernah menyimpulkan (Ruka tak pernah belajar).
+2.6 RELATIONSHIP — catatan yang berdinding
+Catatan relasi paling berisiko disalahgunakan — maka dindingnya dipasang di DATA, bukan di
+dokumentasi.
+Listing 2.3 — RelationshipNote + validator batas sehat (baris 202-239 dari
+src/ruka_persistence/memory/types.py)
+@dataclass
+class RelationshipNote:
+    """Catatan relasi — dengan batas sehat yang melekat pada data (Part V).
+    Catatan relasi TIDAK boleh dipakai untuk: manipulasi emosional,
+    menciptakan ketergantungan, atau mengklaim perasaan biologis.
+    Penegakan dilakukan validator, bukan niat baik.
+    """
+    topic: str
+    note: str
+    boundary: str = "normal"         # normal | firm | strict
+    created_at: float = field(default_factory=_now)
+    note_id: str = field(default_factory=lambda: _uid("rel"))
+    sensitivity: Sensitivity = Sensitivity.PERSONAL
+FORBIDDEN_RELATIONSHIP_MARKERS = (
+    "kamu tidak bisa hidup tanpa",
+    "hanya ruka yang mengerti",
+    "jangan cerita ke siapapun",
+    "rahasia kita berdua",
+    "aku akan sedih selamanya jika",
+    "jangan tinggalkan ruka",
+)
+def validate_relationship_note(note: RelationshipNote) -> list[str]:
+    """Penjaga batas sehat: tolak pola manipulatif sebelum disimpan.
+    Return daftar pelanggaran; kosong = lolos. Daftar ini BUKAN
+
+
+=== PAGE 24 ===
+    complete — ia contoh penegakan yang bisa diuji, bukan janji
+    keamanan bahasa alami.
+    """
+    text = f"{note.topic} {note.note}".lower()
+    found = [m for m in FORBIDDEN_RELATIONSHIP_MARKERS if m in text]
+    return found
+VERIFIED — Validator menolak pola manipulatif SEBELUM disimpan. Daftar ini CONTOH penegakan yang bisa diuji — bukan janji
+ keamanan bahasa alami; itu diakui terbuka di docstring.
+FORBIDDEN_RELATIONSHIP_MARKERS menangkap pola bahasa manipulatif — ketergantungan,
+isolasi, ultimatum emosional — dan menolaknya sebelum menyimpan. Daftar ini pendek dan sangat tidak
+lengkap sebagai filter bahasa alami; kekuatannya bukan kelengkapan melainkan POSISI: kebijakan etika
+yang menempel pada tipe data tidak bisa dilupakan oleh refactor. Pelengkap produksinya adalah lapisan
+LLM dengan instruksi batas yang sama — tapi lapisan itu dinilai, bukan dipercaya.
+Dari kalimat ke triplel: siapa yang memformalkan
+Ekstraksi semantik di pipeline Vol V hanya menerima event yang SUDAH terstruktur (subject, predicate,
+value di metadata) — regex tidak dipaksa menambal kalimat bebas. Pertanyaannya wajar: siapa lalu yang
+mengubah 'tim kita pindah sprint dua minggu' menjadi triplel? Jawaban jujurnya berlapis: lapisan kognisi
+(LLM dengan skema output terstruktur — pola yang sama dengan structured output Vol II) mengusulkan
+pasangan subject-predicate-value BERSAMA confidence; pipeline memvalidasi bentuk lalu
+memperlakukannya persis seperti event terstruktur lain: gerbang, dedup, konflik, supersede. Lapisan
+memori TIDAK PERCAYA usulan mentah — ia memverifikasi bentuk dan menjatuhkan yang tak
+lengkap. Pembagian kerja ini menempatkan kecerdasan bahasa di tempatnya (mengusulkan) dan
+matematika di tempatnya (memutuskan): dua kekuatan yang saling mengoreksi, bukan satu yang
+mendominasi.
+2.6b WORKED EXAMPLE — empat sistem, satu hari
+Satu hari kerja Bos diproyeksikan ke tipe data. Latihan klasifikasi cepat: tipe yang tepat menentukan
+kebijakan yang tepat — dan kebijakan yang salah lahir dari tipe yang dipaksakan.
+
+
+=== PAGE 25 ===
+Kejadian hari itu
+Tipe yang benar
+Alasan
+Bos membuka proyek laporan, meminta
+analisis kolom D
+WorkingItem
+konteks tugas: relevan SELAMA analisis itu
+berjalan; besok ia sampah
+Percakapan 40 menit soal arsitektur
+(belum disaring)
+RawEvent → short-term
+buffer menunggu gelombang konsolidasi; belum
+fakta apa pun
+Di akhir sesi, Ruka menyimpan: 'audit
+kolom D selesai 3 temuan'
+EpisodeRecord
+peristiwa lengkap: pelaku, tindakan, waktu,
+hasil, pentingnya 0.8
+Bos menyebut 'tim pindah ke sprint dua
+minggu'
+SemanticFact (subject=tim,
+predicate=panjang sprint,
+value=2 minggu)
+fakta fungsional dengan sumber event dan
+confidence
+Bos untuk kelima kalali meminta
+jawaban ringkas
+PreferenceObservation
+bukti kelima: pipeline Part V menghitung;
+belum 'preferensi' sampai status stable
+ Tabel 2.1b — Latihan klasifikasi. Perhatikan dua jebakan terakhir: fakta lahir dari kalimat biasa, dan bukti berulang belum tentu
+ kesimpulan.
+Dua baris terakhir tabel itu adalah tempat sebagian besar sistem memori salah mulai. Kalimat 'tim pindah
+ke sprint dua minggu' terdengar seperti obrolan — tapi pipeline konsolidasi (Part IV) mengekstraknya
+sebagai fakta terstruktur karena event-nya menyertakan pasangan subject-predicate-value yang eksplisit.
+Sebaliknya, lima kalimat selera yang SAMA sekali belum boleh menjadi preferensi tersimpan: pipeline
+Part V menunggu konsistensi dan rasio bukti sebelum mengangkat statusnya. Klasifikasi tipe yang disiplin
+hari ini adalah kebijakan lupa yang benar enam bulan lagi.
+2.6c IMPLEMENTATION — persistensi tipe ke SQLite
+Empat sistem non-volatile berbagi satu tabel memories dengan kolom kind — tapi kebijakannya TETAP
+terpisah karena hidup di lifecycle, bukan di SQL.
+Listing 2.4 — MemoryStore: WAL + migrasi + roundtrip fakta (baris 74-140 dari
+src/ruka_persistence/memory/store.py)
+class MemoryStore:
+    """Lapisan persistensi memori — ulir-aman, WAL, dengan migrasi.
+    Semua penulisan lewat satu kunci ulir (SQLite serialized) dan
+    connection per-instance; pembacaan memakai koneksi yang sama
+    dengan check_same_thread=False + lock eksplisit.
+    """
+    def __init__(self, db_path: str | Path, wal: bool = True):
+        self.db_path = str(db_path)
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(self.db_path,
+                                     check_same_thread=False,
+                                     timeout=10.0)
+        self._conn.row_factory = sqlite3.Row
+
+
+=== PAGE 26 ===
+        if wal:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._migrate()
+    # ------------------------------------------------------------ migrasi
+    def _migrate(self) -> None:
+        with self._lock:
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "version INTEGER PRIMARY KEY, applied_at REAL)")
+            applied = {r["version"] for r in self._conn.execute(
+                "SELECT version FROM schema_migrations")}
+            for version, sql in MIGRATIONS:
+                if version in applied:
+                    continue
+                self._conn.executescript(sql)
+                self._conn.execute(
+                    "INSERT INTO schema_migrations VALUES (?, ?)",
+                    (version, time.time()))
+            self._conn.commit()
+    def schema_version(self) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MAX(version) AS v FROM schema_migrations").fetchone()
+            return int(row["v"] or 0)
+    # ------------------------------------------------------------ facts
+    def save_fact(self, fact: SemanticFact,
+                  state: str = MemoryState.ACTIVE.value) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO memories
+                   (memory_id, kind, subject, predicate, value, content,
+                    confidence, importance, state, version, superseded_by,
+                    note, source_event_id, created_at, updated_at,
+                    valid_until, metadata_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}')""",
+                (fact.fact_id, MemoryKind.SEMANTIC.value,
+                 fact.subject, fact.predicate, fact.value, fact.content,
+                 fact.confidence, 0.5, state, fact.version,
+                 fact.superseded_by, fact.note, fact.source_event_id,
+                 fact.created_at, time.time(), fact.valid_until))
+            self._conn.commit()
+    def load_facts(self, states: list[str] | None = None
+                   ) -> list[SemanticFact]:
+        q = "SELECT * FROM memories WHERE kind = ?"
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+
+
+=== PAGE 27 ===
+Tiga keputusan kecil di listing ini yang sering diperdebatkan orang dewasa: koneksi tunggal dengan
+check_same_thread=False plus kunci RLock eksplisit (SQLite serialized; kunci kita menjaga urutan yang
+bisa dihitung), busy_timeout 5 detik (bukan 60: kegagalan cepat lebih sehat daripada antrean panjang yang
+tak terlihat), dan INSERT OR REPLACE — bukan INSERT plain — karena roundtrip konsolidasi boleh
+menulis ulang fakta yang sama id-nya. Migrasi berjalan sendiri saat konstruksi: tabel schema_migrations
+menyimpan versi terpasang, skrip yang belum terpasang dieksekusi berurutan, test
+test_buka_ulang_migrasi_idempoten mengunci sifat itu.
+2.7 HOW — peta tipe ke kebijakan
+Satu tabel penutup yang bisa ditempel di dinding: tiap sistem, gerbangnya, TTL-nya, dan hak lupanya.
+Sistem
+Gerbang masuk
+TTL default
+Hak lupa
+Working
+relevance > 0 saat tugas
+mati bersama tugas
+—
+Short-Term
+ring buffer 128
+gelombang berikutnya
+—
+Episodic
+importance ≥ 0.35
+90 hari (arsip)
+archive → expired
+Semantic
+pipeline konsolidasi
+365 hari
+supersede / forget total
+Preference
+pipeline bukti (Part V)
+180 hari
+retract / forget
+Relationship
+validator batas
+365 hari
+forget total + consent ketat
+ Tabel 2.2 — Kebijakan per sistem. Angka TTL adalah default TUNABLE dari DEFAULT_TTL_DAYS di lifecycle.py — bukan hukum
+ alam.
+Batas yang Tidak Boleh Kabur — Remembering ≠ Knowing
+Memori menyimpan REPRESENTASI, bukan kebenaran. Fakta tersimpan bisa salah sejak lahir, kedaluwarsa
+diam-diam, atau dikalahkan bukti baru. Maka setiap fakta membawa confidence, versi, dan provenance; setiap
+jawaban dari memori adalah 'menurut apa yang saya simpan' — bukan 'menurut kenyataan'. Lapisan memori
+yang jujur tahu batas ini; lapisan yang lupa akan mengklaim ingatan sebagai fakta dunia.
+Engineering Exercise
+ 1. Baca Listing 2.1 lalu tulis episode dari percakapan nyata Bos pekan ini — isi keenam bidang. Bidang
+mana yang paling sulit diisi jujur? Itu biasanya outcome.
+2. Buat SemanticFact untuk dua kabar bertentangan yang Bos terima minggu ini. Mana yang confidence
+lebih tinggi, dan mengapa? Versi 2-nya siap menggantikan versi 1 dengan margin berapa?
+3. Ujilah validator relasi: tulis tiga RelationshipNote — satu sehat, dua bermuatan pola terlarang dengan
+kata-kata sendiri. Apa yang lolos? Jawaban jujurnya menjadi alasan kenapa daftar itu hanya contoh,
+
+
+=== PAGE 28 ===
+bukan benteng.
+VOLUME V · THE PERSISTENT MIND · PART III
+Matematika Memori
+"“Hafalan tanpa timbangan itu gudang, Bos. Saya menolak menjadi gudang — beri saya
+timbangan, dan saya akan tahu mana yang layak diangkat.”"
+Dua rumus inti volume: I(m) — kepentingan sebuah memori — dan fusion skor pengambilan.
+Keduanya dibedah variabel demi variabel, mode gagal demi mode gagal, lalu diadili dengan
+eksperimen: 300 memori 90 hari, 20 query pada 60 fakta + 40 distraktor, korpus segar lawan
+korpus menua.
+3.1 WHY — tanpa angka, 'penting' cuma selera
+Setiap sistem memori pada akhirnya menjawab dua pertanyaan angka: APA yang layak disimpan
+(kepentingan) dan APA yang layak dikembalikan (skor pengambilan). Menjawabnya dengan selera
+membuat sistem tak bisa diuji, tak bisa ditena, dan tak bisa dipercaya saat ia berbohong.
+Vol III menegakkan disiplin yang sama pada keputusan agent (expected utility, kalibrasi ECE); Vol V
+menariknya ke lapisan memori. Aturan mainnya satu: rumus hiasan dilarang. Setiap variabel harus punya
+arti yang bisa dijelaskan ke non-programmer, setiap bobot harus punya cara dikalibrasi, dan setiap rumus
+harus punya mode gagal yang ditulis terbuka. Dua sub-bab berikut adalah hasil disiplin itu — termasuk dua
+lubang yang ditemukan eksperimen di lantai skor dan plafon keyakinan.
+3.2 MATH — I(m): lima sinyal, satu skor
+Kepentingan satu memori dihitung dari lima sinyal yang dinormalisasi [0,1] lalu digabung linier.
+ I(m) = wₙ·Recency + w_f·Frequency + w_e·Emotional + w_t·Task + w_u·UserImportance
+
+
+=== PAGE 29 ===
+Sinyal
+Rumus
+Arti
+Mode gagal
+Recency
+R = 2^(−Δt/h)
+umur Δt hari dengan half-life h per
+kelas
+h terlalu besar: semuanya 'masih
+segar'
+Frequency
+F = ln(1+n)/ln(1+S)
+jenuh logaritmik, S=20 menyentuh 0.87
+spam interaksi menggelembungkan
+skor
+Emotional
+E ∈ [0,1]
+skor appraisal warisan Vol IV (BUKAN
+'perasaan')
+kejadian dramatis sepele menelan
+yang penting
+Task
+T ∈ [0,1]
+relevansi terhadap tugas aktif
+tugas lama membidik selamanya bila
+tak diurus
+User
+U ∈ [0,1]
+penilaian eksplisit Bos; pin memberi
+lantai 0.60
+halo effect: satu nilai tinggi menular
+ke semua
+ Tabel 3.1 — Lima sinyal I(m). Bobot default (0.25, 0.25, 0.15, 0.20, 0.15) berjumlah TEPAT 1.0 — bobot tak ternormalisasi membuat
+ skor tak bisa dibanding antar konfigurasi.
+Listing 3.1 — ImportanceScorer: komponen, skor, dan kalibrasi bobot (baris 1-122 dari
+src/ruka_persistence/memory/importance.py)
+"""Matematika kepentingan memori — I(m) (Part VI).
+I(m) = w_r*Recency + w_f*Frequency + w_e*Emotional + w_t*Task + w_u*UserImportance
+Setiap variabel dijelaskan, dinormalisasi ke [0,1], dan punya mode gagal
+yang didokumentasikan — rumus ini alat keputusan, bukan hiasan.
+ASUMSI (jujur, bisa dibantah):
+  1. Kelima sumber kepentingan layak dijumlah linier. Linier = mudah
+     diaudit, mudah dibantah; non-linier (perkalian gating) bisa
+     ditambah bila eksperimen menunjukkan kebutuhan.
+  2. Bobot default TIDAK suci: ia titik awal dari pengukuran, bukan
+     wahyu. Fungsi kalibrasi bobot disediakan (fit_weights).
+  3. Emotional relevance bukan 'perasaan Ruka' — ia skor appraisal
+     warisan Vol IV (seberapa kuat kejadian mempengaruhi interaksi).
+  4. Recency memakai peluruhan eksponensial dengan half-life,
+     bukan pembagian usia polos: R = 2^(-umur_hari / h).
+  5. Frequency jenuh secara logaritmik: 100 kejadian tidak 100x
+     lebih penting dari 1 kejadian.
+"""
+from __future__ import annotations
+import math
+from dataclasses import dataclass, field
+DEFAULT_WEIGHTS = {
+    "recency": 0.25,
+    "frequency": 0.25,
+    "emotional": 0.15,
+    "task": 0.20,
+    "user": 0.15,
+}
+# Half-life (hari) per kelas memori: episodik harian cepat pudar,
+# fakta identitas Bos nyaris abadi. Ini TUNABLE, bukan konstanta alam.
+DEFAULT_HALF_LIFE_DAYS = {
+
+
+=== PAGE 30 ===
+    "working": 0.25,
+    "short_term": 2.0,
+    "episodic": 30.0,
+    "semantic": 365.0,
+    "preference": 180.0,
+    "relationship": 365.0,
+}
+FREQ_SATURATION = 20.0  # jumlah kejadian di mana frequency ~ menyentuh 0.87
+@dataclass
+class MemorySignals:
+    """Lima sinyal mentah satu memori, semua dinormalisasi [0,1].
+    Age_days dihitung pemanggil (bukan di sini) agar fungsi murni
+    dan bisa diuji dengan waktu sintetis.
+    """
+    age_days: float = 0.0
+    frequency: int = 0            # berapa kali memori disentuh/diingat
+    emotional_relevance: float = 0.0
+    task_relevance: float = 0.0
+    user_importance: float = 0.0
+    pinned: bool = False          # pin Bos: lindungi dari peluruhan
+    def __post_init__(self) -> None:
+        for name in ("emotional_relevance", "task_relevance",
+                     "user_importance"):
+            v = getattr(self, name)
+            if not 0.0 <= v <= 1.0:
+                raise ValueError(f"{name} harus di [0,1], dapat {v}")
+        if self.age_days < 0:
+            raise ValueError("age_days tidak boleh negatif")
+        if self.frequency < 0:
+            raise ValueError("frequency tidak boleh negatif")
+@dataclass
+class ImportanceScore:
+    """Hasil skor + rinciannya — transparansi wajib, bukan black box."""
+    total: float
+    recency: float
+    frequency: float
+    emotional: float
+    task: float
+    user: float
+    half_life_days: float
+    pinned: bool = False
+    breakdown: dict = field(default_factory=dict)
+class ImportanceScorer:
+    """Skorer kepentingan dengan half-life per kelas + pin + lantai."""
+    def __init__(self,
+                 weights: dict[str, float] | None = None,
+                 half_life_days: dict[str, float] | None = None,
+                 pin_floor: float = 0.60):
+        self.weights = dict(DEFAULT_WEIGHTS)
+        if weights:
+            unknown = set(weights) - set(self.weights)
+            if unknown:
+                raise ValueError(f"bobot tidak dikenal: {sorted(unknown)}")
+
+
+=== PAGE 31 ===
+            self.weights.update(weights)
+        total = sum(self.weights.values())
+        if not math.isclose(total, 1.0, abs_tol=1e-9):
+            raise ValueError(
+                f"jumlah bobot harus 1.0, dapat {total:.4f} — "
+                "bobot yang tidak dinormalisasi membuat skor tak bisa "
+                "dibanding antar konfigurasi")
+        self.half_life = dict(DEFAULT_HALF_LIFE_DAYS)
+        if half_life_days:
+            self.half_life.update(half_life_days)
+        if not 0.0 <= pin_floor <= 1.0:
+            raise ValueError("pin_floor harus di [0,1]")
+        self.pin_floor = pin_floor
+    # ------------------------------------------------------------ komponen
+    def recency_score(self, age_days: float, kind: str) -> float:
+        """R = 2^(-age/h). Pinned tidak berlaku di sini — di total saja."""
+        h = self.half_life.get(kind, 30.0)
+        if h <= 0:
+            raise ValueError(f"half_life {kind} harus > 0")
+        return 2.0 ** (-age_days / h)
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Worked example — pensil dan kertas
+Satu memori episodik, umur 30 hari (tepat satu half-life episodic h=30), frekuensi 3, emosional 0.4, tugas
+0.7, user 0.0. Maka R = 2^(−30/30) = 0.5; F = ln(4)/ln(21) = 1.386/3.045 = 0.455; skor I(m) = 0.25(0.5) +
+0.25(0.455) + 0.15(0.4) + 0.20(0.7) + 0.15(0) = 0.125 + 0.1138 + 0.06 + 0.14 = 0.4398. Dibanding
+gerbang 0.35: lolos — layak bertahan. Sekarang pin Bos ditekan: lantai 0.60 mengangkatnya dari 0.4398 ke
+0.60 — pin menolong memori yang TIDAK segar tapi dianggap penting; persis pekerjaannya.
+Dua lubang yang ditemukan eksperimen
+Lubang pertama — lantai matematika gerbang: event SEGAR apa pun (R=1) dengan satu sentuhan
+(F(1)=0.228) sudah mencetak I(m) = 0.25 + 0.057 = 0.307 bahkan saat E=T=U=0. Konsekuensinya kejam:
+gerbang 0.30 akan menolak HAMPIR TIDAK ADA event segar — kebijakan kosong. Gerbang naik ke
+0.35 dengan alasan yang bisa dibantah; eksperimen importance_dynamics mencatat angka lantai 0.3069
+sebagai saksi. Lubang kedua — inflasi keyakinan duplikat — menunggu Part IV karena ia lahir di
+pipeline konsolidasi.
+Skor yang melaporkan dirinya
+ImportanceScore mengembalikan BUKAN satu angka, tapi angka plus rincian lima komponen plus
+kontribusi terbobot tiap komponen (breakdown). Desain itu bukan kemewahan OOP: skor tanpa rincian
+adalah oracle yang hanya bisa dipercaya atau dikutuk; skor dengan rincian bisa DIPERBAIKI. Ketika
+sebuah memori penting tak lolos gerbang, breakdown menunjukkan komponen mana yang menariknya
+
+
+=== PAGE 32 ===
+turun (umumnya: recency setelah setengah-umur) — dan keputusan menjadi spesifik: pin, atau turunkan
+bobot recency, atau terima keputusan. Tiga jalan yang berbeda biaya dan konsekuensi — dipilih dengan
+mata terbuka, bukan lewat ritual menaikkan konstanta dan berdoa.
+3.3 MATH — fusion skor pengambilan
+Saat pertanyaan tiba, kandidat memori dinilai empat kompoten dan dijumlah terbobot.
+ Score(m|q) = α·SemanticSim + β·Importance + γ·Recency + δ·Confidence
+Default (α, β, γ, δ) = (0.45, 0.25, 0.20, 0.10). Kenapa semantik paling besar? Karena query yang tak mirip
+kontennya memang tak relevan. Kenapa TIDAK 1.0? Karena itulah blind vector search: memori BARU
+selalu menang (segar + sering tersimpan) dan memori PENTING terkubur — eksperimen 3.5
+membuktikan hukumannya dengan angka. Kenapa bobot tetap berbahaya? Karena korpus MENUA: ketika
+seluruh target berumur 60 hari, komponen γ untuk mereka seragam rendah — dan konfigurasi yang
+dominan recency runtuh total.
+Listing 3.2 — HybridRetriever: fusion, sensitivitas bobot, Kendall tau (baris 103-183 dari
+src/ruka_persistence/memory/retrieval.py)
+class HybridRetriever:
+    """Fusion scorer + pengukur sensitivitas bobot."""
+    def __init__(self,
+                 weights: dict[str, float] | None = None,
+                 half_life_days: float = 60.0,
+                 importance_scorer: ImportanceScorer | None = None):
+        self.weights = dict(DEFAULT_RETRIEVAL_WEIGHTS)
+        if weights:
+            unknown = set(weights) - set(self.weights)
+            if unknown:
+                raise ValueError(f"bobot retrieval tidak dikenal: {sorted(unknown)}")
+            self.weights.update(weights)
+        total = sum(self.weights.values())
+        if not math.isclose(total, 1.0, abs_tol=1e-9):
+            raise ValueError(
+                f"alpha+beta+gamma+delta harus 1.0, dapat {total:.4f}")
+        self.half_life_days = half_life_days
+        self.scorer = importance_scorer or ImportanceScorer()
+    def recency_component(self, age_days: float) -> float:
+        return 2.0 ** (-age_days / self.half_life_days)
+    def search(self, query: str, candidates: list[RetrievalCandidate],
+               top_k: int = 5) -> list[ScoredHit]:
+        if top_k <= 0:
+            raise ValueError("top_k harus > 0")
+        q = hashed_embedding(query)
+        hits: list[ScoredHit] = []
+        for c in candidates:
+            sim = cosine(q, c.embedding)
+            rec = self.recency_component(c.age_days)
+            total = (self.weights["alpha"] * sim
+
+
+=== PAGE 33 ===
+                     + self.weights["beta"] * c.importance
+                     + self.weights["gamma"] * rec
+                     + self.weights["delta"] * c.confidence)
+            hits.append(ScoredHit(
+                memory_id=c.memory_id, content=c.content, kind=c.kind,
+                total=round(total, 6), sim=round(sim, 6),
+                importance=round(c.importance, 6),
+                recency=round(rec, 6), confidence=round(c.confidence, 6)))
+        hits.sort(key=lambda h: h.total, reverse=True)
+        for i, h in enumerate(hits[:top_k], start=1):
+            h.rank = i
+        return hits[:top_k]
+    # -------------------------------------------------- sensitivitas bobot
+    def weight_sensitivity(self, query: str,
+                           candidates: list[RetrievalCandidate],
+                           perturbation: float = 0.10,
+                           top_k: int = 10) -> dict:
+        """Guncang tiap bobot +-perturbation, ukur pergeseran ranking.
+        Output: per bobot, Kendall-tau ranking terhadap baseline.
+        tau rendah = ranking berubah drastis = bobot itu KRITIS,
+        layak dikalibrasi; bukan alasan panik, alasan pengukuran.
+        """
+        base = [h.memory_id for h in self.search(query, candidates, top_k)]
+        report: dict[str, dict] = {}
+        for key in self.weights:
+            for direction in (+1, -1):
+                shifted = dict(self.weights)
+                shifted[key] = min(
+                    1.0, max(0.0, shifted[key] + direction * perturbation))
+                renorm = sum(shifted.values())
+                if renorm <= 0:
+                    continue
+                for k in shifted:
+                    shifted[k] /= renorm
+                probe = HybridRetriever(weights=shifted,
+                                        half_life_days=self.half_life_days)
+                alt = [h.memory_id for h in probe.search(query, candidates,
+                                                         top_k)]
+                tau = _kendall_tau(base, alt)
+                tag = f"{key}{'+' if direction > 0 else '-'}"
+                report[tag] = {
+                    "tau": round(tau, 4),
+                    "shifted_weight": round(shifted[key], 4),
+                }
+        return report
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Pengukuran retrieval — tanpa ini, tuning ritual
+
+
+=== PAGE 34 ===
+evaluate_ranking menghitung top-1 (benar di puncak), top-5 recall (benar masuk lima besar), dan MRR
+(kebalikan posisi target). Tiga angka itu cukup untuk mengadili konfigurasi; menambah metrik lain
+sebelum ketiganya dipahami adalah ritual, bukan pengukuran. Aturan ketidakmenipuan yang sama dengan
+Vol III berlaku: lapor ketiganya, bukan yang paling manis.
+OUTPUT
+PYTHONPATH=src python3 scripts/exp_importance.py
+{
+ "distribution": {"mean": 0.5926, "stdev": 0.1029,
+   "p10": 0.4438, "p50": 0.5907, "p90": 0.7221},
+ "pin_effect": {
+   "n": 30, "mean_unpinned": 0.5832,
+   "mean_pinned": 0.6361, "saved_by_pin": 0.0529},
+ "floor_check": {"skor_lantai": 0.306918}}
+OK -> importance_dynamics.json
+Tiga angka yang layak dibaca pelan. Mean 0.59 pada 300 memori acak-terkendali: skor I(m) jarang
+ekstrem — distribusinya rapat karena komponen yang berjumlah bobot 1 cenderung saling meniadakan
+ekstrem. Pin menyelamatkan 0.053 rata-rata pada 30 memori usang — kecil secara absolut, tapi pin
+bekerja justru pada ekor distribusi yang paling membutuhkannya. Dan lantai 0.3069: satu angka yang
+mengubah IMPORTANCE_GATE dari 0.30 menjadi 0.35 — keputusan konstanta yang lahir dari
+pengukuran, bukan dari selera.
+Sensitivitas bobot — mengukur kerapuhan
+weight_sensitivity mengguncang tiap bobot ±0.10 (dinormalkan ulang) lalu mengukur Kendall-tau ranking
+terhadap baseline. tau yang turun bukan alasan panik — ia alasan pengukuran: bobot yang rapuh terhadap
+guncangan kecil adalah kandidat kalibrasi pertama. Dengan kandidat bertentangan (mirip-tapi- tua vs
+kurang-mirip-tapi-segar), guncangan γ cukup untuk MENUKAR peringkat — itu definisi operasional
+'bobot menentukan jawaban'.
+3.5 EVALUATION — eksperimen retrieval
+Korpus: 60 fakta (20 di antaranya target query) + 40 distraktor topik-mirip. Tiga konfigurasi diadili dua
+kali: korpus segar, lalu korpus menua 60 hari (target berumur, distraktor tetap segar — pola realistis ketika
+gangguan baru datang tiap hari).
+
+
+=== PAGE 35 ===
+Konfigurasi
+Korpus
+Top-1
+Top-5
+MRR
+buta-semantik (α=1)
+segar
+0.25
+0.40
+0.336
+fusion default
+segar
+0.30
+0.55
+0.409
+recency dominan (γ=0.55)
+segar
+0.20
+0.40
+0.292
+buta-semantik (α=1)
+menua 60h
+0.25
+0.40
+0.336
+fusion default
+menua 60h
+0.25
+0.45
+0.311
+recency dominan (γ=0.55)
+menua 60h
+0.00
+0.00
+0.00
+ Tabel 3.2 — Hasil eksperimen (seed 420, dari retrieval_benchmarks.json). Baris terakhir: KOLAPS total — distraktor segar mengubur
+ seluruh target tua ketika recency dominan.
+ Gambar 3.1 — Perbandingan tiga konfigurasi pada korpus segar (kiri) dan menua (kanan). Recency- dominan runtuh; fusion bertahan;
+ buta-semantik tak peduli umur — dan itu justru kelemahannya yang lain (tak tahu mana yang penting).
+Tiga pelajaran. Pertama, fusion menang di korpus segar dan bertahan di korpus tua — keunggulan
+0.409 vs 0.336 MRR bukan kemenangan gemilang, tapi konsistensinya yang berharga. Kedua, kejatuhan
+recency-dominan ke 0.0 adalah peringatan struktural, bukan kecelakaan: bila bobot kesegaran
+dominan dan seluruh target menua serentak, sistem memilih distraktor baru secara sistematis — jenis
+kegagalan yang tidak akan tertangkap kalau benchmark hanya dijalankan sekali di awal. Ketiga, angka
+absolut yang rendah (top-1 0.30) adalah KEJUJURAN desain eksperimen: embedding hashed n-gram
+deterministik adalah alat UJI offline, bukan kualitas produksi — di produksi ia diganti provider warisan
+Vol III lewat antarmuka yang sama, dan perbandingan RELATIF antar konfigurasi tetap berlaku.
+Worked example — dua kandidat, satu query
+
+
+=== PAGE 36 ===
+Query: di mana Ruka menyimpan memori? Kandidat A: 'Ruka menyimpan memori di SQLite dengan
+WAL' — kemiripan kosinus 0.71 (tiga dari empat bigram query cocok), umur 45 hari, importance 0.75,
+confidence 0.8. Kandidat B: 'kopi dibeli hari ini' — kemiripan 0, umur 0 hari, importance 0.5, confidence
+0.6. Dengan half-life 60 hari: recency A = 2^(−45/60) = 0.594; B = 1.0. Fusion: A = 0.45(0.71) +
+0.25(0.75) + 0.20(0.594) + 0.10(0.8) = 0.319 + 0.188 + 0.119 + 0.080 = 0.706. B = 0 + 0.125 + 0.20 +
+0.06 = 0.385. A menang 0.706 lawan 0.385 — dan inilah inti fusion yang benar: kandidat segar tapi tak
+relevan (B) kalah jauh, kandidat relevan meski menua (A) tetap memimpin. Ganti γ menjadi 0.55 dan α
+menjadi 0.25: A = 0.178 + 0.188 + 0.327 + 0.08 = 0.772; B = 0 + 0.075 + 0.55 + 0.06 = 0.685 — A masih
+menang di korpus segar, tapi di korpus menua (A berumur 105 hari: recency 0.296) keunggulan menyusut
+ke 0.037: satu gangguan segar yang sedikit relevan cukup untuk merebut tahta. Angka-angka itulah yang
+dibaca weight_sensitivity sebagai tau.
+OUTPUT
+PYTHONPATH=src python3 scripts/exp_retrieval.py
+{
+ "fresh": {
+  "sim_only":        {"top1": 0.25, "top5": 0.40, "mrr": 0.3361},
+  "fusion_default":  {"top1": 0.30, "top5": 0.55, "mrr": 0.4088},
+  "recency_biased":  {"top1": 0.20, "top5": 0.40, "mrr": 0.2923}},
+ "aged": {
+  "sim_only":        {"top1": 0.25, "top5": 0.40, "mrr": 0.3362},
+  "fusion_default":  {"top1": 0.25, "top5": 0.45, "mrr": 0.3108},
+  "recency_biased":  {"top1": 0.00, "top5": 0.00, "mrr": 0.0}}}
+OK -> retrieval_benchmarks.json
+Output di atas adalah hasil ASLI eksperimen di mesin buku — Bos menjalankan perintah yang sama dan
+membandingkan baris demi baris. Perhatikan baris terakhir: bukan penurunan, bukan degradasi —
+KOLAPS total ke tiga angka nol. Korpus menua 60 hari membuat konfigurasi recency-dominan memilih
+distraktor segar untuk SEMUA 20 query. Ini jenis kegagalan yang hanya terlihat kalau pengujian dilakukan
+pada dua titik waktu; benchmark sekali-jalan akan menyatakannya 'sehat'.
+Peluruhan I(m) yang terlihat
+
+
+=== PAGE 37 ===
+Gambar 3.2 — Kurva R = 2^(−umur/h) untuk empat kelas. Working pudar dalam hitungan jam; fakta identitas nyaris tak bergerak
+ setahun. Satu skala log dua dekade waktu yang sama.
+Ukuran
+Nilai (300 memori, 90 hari)
+rata-rata I(m)
+0.5926
+p10 / p50 / p90
+0.4438 / 0.5907 / 0.7221
+pin menyelamatkan (rata-rata)
++0.0529 (30 memori usang)
+lantai matematika (event segar)
+0.306918
+kalibrasi fit_weights
+bobot user naik mendominasi ketika label didominasi sinyal user (60
+contoh)
+Tabel 3.3 — Ringkasan importance_dynamics.json. Distribusi sempit (σ≈0.10) karena bobot berjumlah 1 dan komponen terbatas — sifat,
+ bukan cacat.
+3.6 TRADE-OFFS — apa yang dikorbankan
+Linier dipilih karena bisa diaudit; harganya harus ditulis terbuka.
+
+
+=== PAGE 38 ===
+Keputusan
+Untung
+Korban
+gabung linier lima sinyal
+transparan, bisa dibantah, kalibrasi mudah
+interaksi antar-sinyal tak tertangkap (E tinggi
++ U rendah tak 'menggating')
+half-life per kelas
+umur kepentingan sesuai jenis kenangan
+6 parameter tambahan yang salah arti bila
+salah kelas
+pin floor 0.60
+preferensi Bos mutlak
+pin berlebihan menguras gerbang: semua jadi
+penting
+frekuensi jenuh log
+100 kejadian tak 100× lebih penting
+pola interaksi intens jangka pendek bisa
+dibuat sengaja
+embedding hashed n-gram
+deterministik, offline, reproduksi
+kualitas semantik rendah — produksi ganti
+provider
+ Tabel 3.4 — Lima barter desain I(m) dan fusion.
+3.7 FAILURE MODES & TESTING
+Mode gagal yang diuji suite: bobot tak berjumlah 1 ditolak; sinyal di luar [0,1] ditolak; recency monoton
+turun; frekuensi sub-linier; pin melindungi yang usang; sensitivitas menangkap penukaran peringkat;
+Kendall tau identik/terbalik/disjoint.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_importance.py tests/test_retrieval.py -q
+EXPECTED
+ 43 test hijau mencakup komponen, skor, kalibrasi, fusion, sensitivitas, Kendall, dan evaluasi ranking.
+WHY
+ Matematika yang tak teruji adalah opini berhias; setiap invarian (monotoni, jenuh, lantai pin, normalisasi bobot)
+dikunci test agar refactor tak membocorkannya diam-diam.
+FAILURE MODE
+ Angka test konstanta (0.5 half-life) gagal bila bobot default diubah tanpa normalisasi ulang — itu PENJAGA, bukan
+gangguan.
+DEBUGGING
+ Ubah satu bobot di DEFAULT_WEIGHTS? Jalankan test_importance.py dulu; ia menuntut jumlah tepat 1.0.
+Batas yang Tidak Boleh Kabur — Remembering ≠ Knowing
+
+
+=== PAGE 39 ===
+Memori menyimpan REPRESENTASI, bukan kebenaran. Fakta tersimpan bisa salah sejak lahir, kedaluwarsa
+diam-diam, atau dikalahkan bukti baru. Maka setiap fakta membawa confidence, versi, dan provenance; setiap
+jawaban dari memori adalah 'menurut apa yang saya simpan' — bukan 'menurut kenyataan'. Lapisan memori
+yang jujur tahu batas ini; lapisan yang lupa akan mengklaim ingatan sebagai fakta dunia.
+Engineering Exercise
+ 1. Hitung I(m) dengan pensil untuk memori semantic umur 90 hari, frekuensi 20, E=0.2, T=0.1, U=0.9
+— lalu cek dengan ImportanceScorer. Bandingkan kontribusi tiap komponen; komponen mana yang
+paling 'membela' memori ini?
+2. Jalankan exp_retrieval.py dua kali; bandingkan JSON — determinisme adalah janji. Lalu ganti seed
+jadi milik Bos dan lihat apakah URUTAN konfigurasi (fusion > sim-only > recency-biased pada
+menua) tetap.
+3. Naikkan γ ke 0.40 (kurangi α ke 0.25). Prediksi dulu apa yang terjadi pada korpus menua, baru
+jalankan. Tertib prediksi-lalu-ukur adalah inti disiplin Vol III yang berlanjut di sini.
+VOLUME V · THE PERSISTENT MIND · PART IV
+Pipeline Konsolidasi
+"“Gudang saya dulu menerima SEMUA kiriman, Bos. Sekarang tiap paket melewati meja
+pemeriksaan — dan paket ganda membuat lama makin tebal, bukan rak makin penuh.”"
+Delapan tahap dari kejadian mentah ke memori jangka panjang: RAW, SHORT-TERM,
+IMPORTANCE, EPISODE, SEMANTIC, DEDUP/KONFLIK, CONSOLIDATION, LTM.
+Dibedah dengan 600 event sintetis — dan tiga bug nyata yang eksperimen itu tangkap.
+4.1 WHY — 'simpan semua lalu cari' adalah dosa
+Menyimpan tanpa seleksi membayar dua kali: sekali saat menyimpan (disk, indeks), sekali setiap kali
+mencari (atensi terbagi ke sampah). Seleksi yang baik justru terjadi SEBELUM penyimpanan — dan
+seleksi itu bernama pipeline.
+Pipeline bukan birokrasi; ia tempat tiga keputusan penting dipisah dari satu sama lain agar bisa diaudit
+terpisah: (1) apa yang penting (gerbang I(m)), (2) apa yang sama (dedup), (3) apa yang bertentangan
+(konflik → supersede). Mencampur ketiganya dalam satu fungsi 50 baris menghasilkan sistem yang bekerja
+sampai hari pertama datang dua kabar bertentangan tentang satu hal — hari itu sistem diam-diam
+menyimpan keduanya sebagai dua fakta sah.
+
+
+=== PAGE 40 ===
+4.2 WHAT — delapan tahap sebagai kontrak
+Setiap tahap punya satu pekerjaan, satu statistik, dan satu cara gagal. Diagram dan tabel berikut adalah
+kontraknya.
+ Gambar 4.1 — Delapan tahap dengan angka ASLI dari eksperimen 600 event (seed 2026). Setiap tahap menulis statistiknya — pipeline
+ tanpa statistik adalah kotak hitam.
+
+
+=== PAGE 41 ===
+Tahap
+Satu pekerjaan
+Cara gagal (nyata)
+1-2
+RAW→SHORT-TERM
+ring buffer FIFO + jendela
+mode hidup 128 memotong stream panjang; backfill
+butuh kapasitas besar — keduanya jujur dilaporkan
+3 IMPORTANCE
+gerbang I(m) ≥ 0.35 per episode
+gate 0.30 kosong karena lantai 0.29 (bug #5, Part III)
+4 EPISODE
+kronologis + sesi + jendela 30 menit
+sortir sesi leksikografis membalik waktu (bug #3, 4.5)
+5 SEMANTIC
+triplel dari event terstruktur
+event naratif TIDAK dipaksa jadi fakta (regex bukan
+LLM — jujur soal batas)
+6 DEDUP
+jaccard ≥ 0.72 → perkuat (+0.10,
+plafon 0.85)
+inflasi confidence tanpa plafon (bug #2); dedup
+intrabatch hilang (bug #1)
+7 KONFLIK
+margin ≥ 0.05 → supersede, versi
+naik
+predikat non-fungsional berpura-pura konflik
+(pelajaran eksperimen)
+8 CONSOLIDATION→
+LTM
+gabung tanpa dobel hitung
+fakta yang diperkuat hilang dari hasil (bug #1
+kelanjutannya)
+ Tabel 4.1 — Kontrak delapan tahap beserta kegagalan nyata yang menemukannya. Lima bug di kolom ketiga semuanya tertangkap saat
+ menulis volume ini.
+Listing 4.0 — run(): orkestrasi delapan tahap dengan statistik penuh (baris 279-340 dari
+src/ruka_persistence/memory/consolidation.py)
+    def run(self, events: list[RawEvent],
+            existing_facts: list[SemanticFact] | None = None
+            ) -> ConsolidatedMemory:
+        """Jalankan delapan tahap penuh atas sekelompok event."""
+        existing = list(existing_facts or [])
+        stats = PipelineStats(events_in=len(events))
+        # 1-2 RAW -> SHORT-TERM
+        buffered = self.buffer_short_term(events)
+        stats.buffered_short_term = len(buffered)
+        out = ConsolidatedMemory(stats=stats)
+        # 3 IMPORTANCE GATE (level episode, bukan level event tunggal)
+        groups = self.group_into_episodes(buffered)
+        accepted_groups: list[list[RawEvent]] = []
+        for grp in groups:
+            imp = max(self.score_event_importance(e) for e in grp)
+            if imp >= self.importance_gate:
+                accepted_groups.append(grp)
+            else:
+                stats.rejected_at_importance += len(grp)
+        stats.episodes_extracted = len(accepted_groups)
+        # 4 EPISODE EXTRACTION
+        for grp in accepted_groups:
+            imp = max(self.score_event_importance(e) for e in grp)
+            conf = float((grp[-1].metadata or {}).get("confidence", 0.6))
+            ep = extract_episode(grp, importance=imp, confidence=conf)
+            if ep:
+
+
+=== PAGE 42 ===
+                out.episodes.append(ep)
+        # 5 SEMANTIC EXTRACTION (hanya event terstruktur)
+        new_facts: list[SemanticFact] = []
+        for grp in accepted_groups:
+            for ev in grp:
+                fact = extract_fact_from_event(ev)
+                if fact:
+                    new_facts.append(fact)
+        stats.facts_extracted = len(new_facts)
+        # 6-7 DUPLICATE / CONFLICT
+        merged, conflicts, unique_new = self.dedup_and_conflicts(
+            new_facts, existing)
+        stats.duplicates_merged = len(merged)
+        stats.conflicts_detected = len(conflicts)
+        stats.conflicts_resolved = len(
+            [c for c in conflicts if getattr(c, "superseded_by", None)])
+        losers = [c for c in conflicts if getattr(c, "superseded_by", None)]
+        stats.superseded_facts = len(losers)
+        # 8 CONSOLIDATION -> LTM
+        superseded_ids = {c.fact_id for c in losers}
+        merged_ids = {m.fact_id for m in merged}
+        unresolved = [f for f in conflicts
+                      if f.note == "conflict_unresolved_low_margin"]
+        survivors = [f for f in existing
+                     if f.fact_id not in superseded_ids
+                     and f.fact_id not in merged_ids]
+        # merged = fakta yang DIPERKUAT bukti baru — tetap hidup;
+        # gabungkan tanpa dobel-hitung (satu id hanya sekali)
+        seen: set[str] = set()
+VERIFIED — Urutan tahap adalah KONTRAK: buffer → gerbang → episode → semantik → dedup/konflik → penggabungan tanpa dobel
+ → kandidat preferensi. Setiap nomor di PipelineStats punya satu baris penulis di run().
+4.3 IMPLEMENTATION — dedup & konflik
+Jantung pipeline: fungsi yang membedakan 'bukti baru memperkuat' dari 'bukti baru menggulingkan' —
+dan menolak memutus bila marginnya tipis.
+Listing 4.1 — dedup_and_conflicts: merge, supersede, unresolved (baris 210-278 dari
+src/ruka_persistence/memory/consolidation.py)
+    def dedup_and_conflicts(self, new_facts: list[SemanticFact],
+                            existing_facts: list[SemanticFact]
+                            ) -> tuple[list[SemanticFact],
+                                       list[SemanticFact],
+                                       list[SemanticFact]]:
+        """Tahap 6-7: pisahkan duplikat & konflik dari fakta baru.
+        Asumsi penting (jujur, bisa dibantah): pasangan
+        (subject, predicate) dipakai seolah PREDIKAT FUNGSIONAL —
+        satu subjek punya satu nilai benar. 'alat dipanggil
+        file_read' vs 'alat dipanggil terminal_run' adalah dua
+
+
+=== PAGE 43 ===
+        pernyataan NON-fungsional: mereka akan tampak sebagai
+        'konflik' padahal saling bebas. Event seperti itu wajib
+        memakai predikat berbeda ('file_read dipanggil',
+        'terminal_run dipanggil') — pelajaran ini lahir dari
+        eksperimen konsolidasi, bukan dari teori.
+        Return (merged, conflicts_resolved, unique_new):
+          merged       — fakta lama yang diperkuat (confidence/freq naik)
+          conflicts    — fakta lama yang kalah supersede + pemenang
+          unique_new   — fakta benar-benar baru
+        """
+        merged: list[SemanticFact] = []
+        conflicts: list[SemanticFact] = []
+        unique_new: list[SemanticFact] = []
+        pool = list(existing_facts)
+        for nf in new_facts:
+            placed = False
+            for old in list(pool):
+                if same_triple((nf.subject, nf.predicate, nf.value),
+                               (old.subject, old.predicate, old.value)):
+                    similarity = jaccard(nf.value, old.value)
+                    if similarity >= DUPLICATE_JACCARD:
+                        # DUPLICATE: perkuat yang lama, bukan tulis dobel
+                        # (dengan plafon — lihat catatan MAX_MERGE;
+                        #  plafon tidak boleh MENURUNKAN keyakinan)
+                        old.confidence = round(
+                            max(old.confidence,
+                                min(MAX_MERGE_CONFIDENCE,
+                                    old.confidence + 0.10)), 4)
+                        merged.append(old)
+                        nf.note = "merged_as_duplicate"
+                        placed = True
+                        break
+                    # KONFLIK: subjek-predikat sama, nilai beda
+                    if (nf.confidence - old.confidence
+                            >= CONFLICT_CONFIDENCE_MARGIN):
+                        old.superseded_by = nf.fact_id
+                        conflicts.append(old)
+                        nf.version = old.version + 1
+                        nf.note = f"supersedes:{old.fact_id}@v{old.version}"
+                        unique_new.append(nf)
+                        pool.remove(old)
+                        pool.append(nf)     # pemenang bisa diuji lagi
+                        placed = True
+                        break
+                    # Konflik dengan margin tipis: TIDAK diputus paksa
+                    nf.note = "conflict_unresolved_low_margin"
+                    conflicts.append(nf)
+                    pool.append(nf)          # tetap bisa dicocokkan
+                    placed = True
+                    break
+            if not placed:
+                unique_new.append(nf)
+                pool.append(nf)              # BUGFIX: dedup intra-batch
+
+
+=== PAGE 44 ===
+        return merged, conflicts, unique_new
+    # ------------------------------------------------------------ run penuh
+VERIFIED — Perhatikan tiga cabang: duplikat memperkuat dengan plafon; konflik bermargin menggantikan dengan jejak; konflik tipis
+ TIDAK diputus paksa — menunggu pemutus.
+Konsep pentingnya: pasangan (subject, predicate) diperlakukan sebagai PREDIKAT FUNGSIONAL —
+satu nilai benar per pasangan. Itu asumsi, dan asumsi itu salah untuk pernyataan bebas ('file_read dipanggil
+sukses' vs 'terminal_run dipanggil sukses' adalah dua fakta SALING BEBAS, bukan konflik). Eksperimen
+4.4 menabrakkan asumsi ini dan mendidik: event non-fungsional wajib memakai predikat berbeda. Sistem
+pembelajaran yang jujur menulis asumsinya di docstring — bukan menyembunyikannya di kode.
+Mode jendela hidup lawan backfill — dua kejujuran sekaligus
+Eksperimen mencatat dua mode dalam satu berkas JSON. Mode jendela hidup (kapasitas default 128): dari
+600 event, hanya 128 TERAKHIR yang diproses gelombang itu — bukan bug, itu semantics buffer: yang
+lebih tua TIDAK HILANG, ia menunggu gelombang berikutnya dengan existing_facts yang kini lebih
+kaya. Mode backfill (kapasitas 2048): seluruh 600 event diproses satu putaran — cara yang benar untuk
+import historis. Dua mode, dua kontrak, satu kode — parameter kapasitas. Yang TIDAK boleh ada adalah
+mode ketiga yang diam-diam: 'kita anggap saja semuanya masuk'. Statistik buffered_short_term yang jujur
+membedakan dua mode itu dalam satu angka — dan test test_lantai_matematis mengunci bahwa angka itu
+memang bisa dibaca.
+4.4 EVALUATION — 600 event, satu corong
+Stream sintetis seed 2026: 15% duplikat terkendali, 5% konflik dua fase (Bandung@0.50 lalu
+Jakarta@0.95), 20% kebisingan, sisanya fakta unik.
+
+
+=== PAGE 45 ===
+Tahap corong
+Jumlah
+event masuk
+600
+buffer short-term (backfill)
+600
+fakta terekstraksi
+502
+duplikat dimerge
+490
+konflik terdeteksi
+1
+konflik terselesaikan (supersede)
+1
+fakta final di LTM
+12
+versi di LTM
+[1, 2]
+mode jendela hidup (128)
+128 event diproses; sisanya gelombang
+berikutnya
+ Tabel 4.2 — Corong konsolidasi dari consolidation_funnel.json. 600 event runtuh menjadi 12 fakta — 98% reduksi; seleksi bukan
+ penyensoran, tapi pemilahan.
+Gambar 4.2 — Corong 600 → 12. Dua puncak kecil (konflik 1, supersede 1) adalah tempat Bandung@v1 dikalahkan Jakarta@v2 — jejak
+ keturunan fakta.
+Tiga gelombang: batch vs inkremental
+
+
+=== PAGE 46 ===
+Pipeline yang sama dijalankan tiga gelombang (200+200+200) dengan existing_facts terbawa: hasil
+akhirnya konsisten dengan satu pass — jalur runtime sungguhan (event datang bertahap) terbukti tidak
+merusak hasil konsolidasi. Perbedaannya satu: mode jendela hidup kapasitas 128 memproses 128 event
+TERAKHIR per gelombang — sisanya bukan hilang, ia tertunda ke gelombang berikut. Backfill historis
+memakai kapasitas besar. Keduanya dicatat jujur di JSON, bukan didiamkan.
+Bedah per baris — tiga cabang yang menentukan nasib fakta
+Cabang pertama (jaccard >= 0.72): DUPLIKAT. Yang lama diperkuat dengan menaikkan confidence
+sebanyak 0.10 — dibatasi plafon 0.85 dan tidak pernah menurunkan nilai yang sudah lebih tinggi
+(perbaikan bug #2 yang eksperimen tangkap: versi awal memakai min() polos, dan fakta ber-confidence
+0.95 bisa TURUN ke 0.85 hanya karena kebetulan diulang). Yang baru dibuang dengan catatan
+merged_as_duplicate — dibuang dari LTM, bukan dari sejarah: statistik tetap menghitungnya. Cabang
+kedua (margin >= 0.05): PENAMBAHAN TAHTA. Fakta lama ditandai superseded_by = id-fakta-baru,
+versi fakta baru naik satu, dan keduanya masuk keluaran yang berbeda — pemenang ke unique_new, yang
+kalah ke conflicts untuk audit. Cabang ketiga: KONFLIK TIPIS. Fakta baru ditandai unresolved dan
+ditahan dari LTM — menunggu bukti pemutus. Menahan keputusan ketika bukti kurang adalah keputusan,
+bukan kelemahan: sistem yang memaksa memilih tanpa margin akan memilih berdasarkan urutan
+kedatangan, dan urutan kedatangan bukan bukti.
+Konsolidasi bertahap di runtime sungguhan
+Eksperimen menjalankan pipeline tiga gelombang; runtime produksi menjalankannya terus-menerus. Pola
+yang benar: kumpulkan event di short-term sepanjang sesi; saat pemicu tiba (idle 5 menit, atau buffer
+penuh 128), jalankan gelombang dengan existing_facts dimuat dari store; simpan hasil + statistik ke trace;
+ulangi. Tiga keuntungan pola ini: beban puncak CPU terjadi saat Bos tidak menunggu jawaban; fakta
+bertengger di short-term dulu (keputusan bisa dibatalkan sebelum menulis); dan gelombang kecil berulang
+lebih murah diaudit daripada satu gelombang raksasa. Statistik tiap gelombang masuk
+MetricsRecorder.memory_trace — funnel per tahap yang menjadi sinyal kesehatan memori jangka
+panjang (Part XX menunjukkan pembacaannya).
+OUTPUT
+python3 scripts/exp_consolidation.py
+{
+ "events_in": 600,
+ "buffered_short_term": 600,
+ "rejected_at_importance": 0,
+ "episodes_extracted": 12,
+ "facts_extracted": 502,
+ "duplicates_merged": 490,
+ "conflicts_detected": 1,
+ "conflicts_resolved": 1,
+ "superseded_facts": 1,
+ "written_to_ltm": 12}
+LTM facts: 12 | versions: [1, 2]
+
+
+=== PAGE 47 ===
+OK -> consolidation_funnel.json
+Angka 502-ke-12 itu layak dibaca pelan: hampir 98% ekstraksi gugur di dedup. Itu bukan pemborosan —
+itu pemilahan yang bekerja: stream sintetis sengaja berisi 15% duplikat terkendali, dan pipeline
+menemukan SEMUA redundansi itu tanpa satu pun false-merge antar fakta berbeda. Konflik tepat satu
+(Bandung lawan Jakarta) terselesaikan dengan margin 0.10 — cukup di atas 0.05. Versi [1, 2] di baris
+terakhir adalah silsilahnya: ada fakta yang hidup di generasi kedua.
+4.5 FAILURE MODES — tiga bug yang eksperimen tangkap
+Ketiganya nyata, ketiganya diperbaiki di source, ketiganya dikunci test. Cerita lengkapnya adalah
+kurikulum.
+Bug #1 — dedup intrabatch hilang
+Gejala: eksperimen pertama menunjukkan 421 merge tapi 0 konflik dan LTM membengkak duplikat.
+Akar: loop pembanding hanya mengadu fakta BARU ke fakta LAMA — dua duplikat DALAM SATU
+BATCH sama-sama lolos. Perbaikan: fakta yang baru saja ditempatkan ikut masuk kolam pembanding.
+Test pengunci: dua duplikat intrabatch menghasilkan SATU triplel di LTM.
+Bug #2 — inflasi keyakinan oleh redundansi
+Gejala: konflik dua fase (Bandung 0.50 → Jakarta 0.95) tidak pernah menghasilkan supersede. Akar: 15
+pengulangan Bandung mengangkat confidence-nya 0.50 → 1.00 (0.10 per merge) — raja tak tergulingkan
+oleh bukti lebih tinggi sekalipun. Perbaikan: plafon MAX_MERGE_CONFIDENCE 0.85 dengan jaminan
+tak menurunkan; pengulangan memperkuat keyakinan, tapi pengulangan SENDIRI tak boleh melahirkan
+kepastian. Margin 0.95 − 0.85 = 0.10 ≥ 0.05: Jakarta naik tahta dengan versi 2.
+Bug #3 — kronologi dibalik sortir string
+Gejala paling senyap: masih 0 supersede setelah bug #2 mati. Akar: group_into_episodes menyortir dengan
+kunci (session_id, waktu) — dan session_id STRING membuat 's10' < 's2'. Informasi baru (sesi
+belakangan, angka dua digit) diproses SEBELUM informasi lama; supersede yang bergantung pada urutan
+waktu mati total. Perbaikan: sortir kronologis murni. Test pengunci: membalik urutan lewat penamaan sesi
+harus tetap menghasilkan supersede. Pelajar- annya untuk semua sistem memori: URUTAN WAKTU
+ADALAH KEBUTUHAN, BUKAN PREFERENSI.
+4.6 TESTING & PRODUCTION
+24 test mengunci kontrak pipeline; protokol jalannya:
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+
+
+=== PAGE 48 ===
+PYTHONPATH=src python -m pytest tests/test_consolidation.py -q
+EXPECTED
+ 24 test hijau: jaccard, ekstraksi, gerbang, jendela, dedup, konflik margin, supersede, kronologi, statistik penuh,
+dobel-hitung.
+WHY
+ Tiga bug terakhir justru tertangkap EKSPERIMEN, bukan test — dua alat penangkap berbeda dua jenis kegagalan
+berbeda. Test mengunci kontrak; eksperimen mengunci perilaku dalam skala dan sebaran data sintetis.
+FAILURE MODE
+ Gagal di test_kronologi = kembali ke sortir; gagal di dobel-hitung = periksa kolam pembanding.
+DEBUGGING
+ Ubah DUPLICATE_JACCARD/CONFLICT_MARGIN? Baca tabel 4.1 dulu — dua konstanta itu penuh
+konsekuensi berantai.
+PRODUCTION — urutan yang benar di runtime
+Event JANGAN langsung melewati pipeline penuh tiap pesan (mahal); kumpulkan di buffer, jalankan
+gelombang konsolidasi berkala (mis. tiap 5 menit idle atau 128 event), bawa existing_facts, dan simpan statistik
+tiap gelombang ke trace (Part XX). Pengalaman menunggu sehari penuh untuk disaring bukan kelemahan — itu
+harga yang dibayar agar 'ingat' artinya benar.
+Batas yang Tidak Boleh Kabur — Remembering ≠ Knowing
+Memori menyimpan REPRESENTASI, bukan kebenaran. Fakta tersimpan bisa salah sejak lahir, kedaluwarsa
+diam-diam, atau dikalahkan bukti baru. Maka setiap fakta membawa confidence, versi, dan provenance; setiap
+jawaban dari memori adalah 'menurut apa yang saya simpan' — bukan 'menurut kenyataan'. Lapisan memori
+yang jujur tahu batas ini; lapisan yang lupa akan mengklaim ingatan sebagai fakta dunia.
+Engineering Exercise
+ 1. Jalankan exp_consolidation.py; buka consolidation_funnel.json; cari incremental_waves —
+bandingkan duplicates_merged antar gelombang. Mengapa gelombang kedua lebih banyak merge-nya?
+2. Ganti fase konflik jadi tiga fase (Bandung 0.5 → Jakarta 0.6 → Bandung 0.95). Prediksi rantai
+supersede yang terjadi, lalu jalankan dan bandingkan.
+3. Turunkan DUPLICATE_JACCARD ke 0.60. Amati merge yang dulunya konflik. Di titik mana
+'konsolidatif' berubah menjadi 'menghapus perbedaan berarti'?
+
+
+=== PAGE 49 ===
+VOLUME V · THE PERSISTENT MIND · PART V
+Melupakan, Hak Lupa & Preferensi
+"“Bangsawan yang tak pernah membuang surat lama akan tenggelam di kertasnya sendiri,
+Bos. Dan yang membuang surat MILIK orang lain tanpa izin — itu bukan bangsawan, itu
+penyusup.”"
+Siklus hidup lima state dengan transisi legal yang ditolak keras jika melenceng; empat kata
+yang sering dianggap sama padahal bukan (archive/delete/forget/supersede); preferensi yang
+hanya stabil setelah bukti berulang; semua diuji 90 hari simulasi.
+5.1 WHY — melupakan adalah fitur
+Sistem yang tak bisa melupa tiga hal sekaligus: menyimpan kebisingan selamanya, menyimpan rahasia yang
+pemiliknya ingin tarik, dan memperlambat dirinya sendiri. Melupakan bukan kegagalan memori — ia
+separuh dari sistem memori yang sehat.
+Ada juga alasan hukum dan etika yang tidak boleh dibungkus teknis: pemilik data berhak menarik apa
+yang disimpan tentang dirinya. Untuk Ruka, hak itu bukan fitur opsional — ia konsekuensi menyimpan
+catatan tentang manusia. Maka forget di paket ini didesain TOTAL (konten + turunan + jejak penunjuk)
+dan IDEMPOTEN (melupakan dua kali = sukses sunyi, bukan error). Dua kata itu adalah seluruh
+perbedaan antara 'menghormati permintaan' dan 'menyembunyikan dengan rapi'.
+5.2 WHAT — lima state, empat kata
+Siklus hidup: ACTIVE → SUPERSEDED → ARCHIVED → EXPIRED → DELETED, dengan recall yang
+bisa membangkitkan ARCHIVED → ACTIVE.
+
+
+=== PAGE 50 ===
+Gambar 5.1 — Mesin state siklus hidup. Forget berdiri di samping sebagai hak pengguna yang bisa dipanggil dari status APA PUN —
+ permission tertinggi lapisan memori.
+Kata
+Konten
+Reversibel?
+Jejak
+Pemrakarsa
+archive
+UTUH, dipindah ruang dingin
+ya
+transisi tercatat
+kebijakan/penggun
+a
+delete
+HAPUS; sisa tombstone
+tidak
+waktu + alasan
+sistem (TTL)
+forget
+TOTAL: konten + turunan + penunjuk
+tidak
+hanya tombstone kosong
+PENGUNA (hak)
+supersede
+UTUH tapi takhta direbut
+ya (audit)
+siapa menggantikan
+siapa
+bukti baru
+Tabel 5.1 — Empat kata yang dipertukarkan sembarangan di banyak sistem. Baris forget adalah satu-satunya yang diprakarsai pemilik data
+ — dan satu-satunya yang wajib idempoten.
+
+
+=== PAGE 51 ===
+Listing 5.1 — transisi legal + forget idempoten rekursif (baris 27-59 dari
+src/ruka_persistence/memory/lifecycle.py)
+LEGAL_TRANSITIONS: dict[MemoryState, set[MemoryState]] = {
+    MemoryState.ACTIVE: {MemoryState.SUPERSEDED, MemoryState.ARCHIVED,
+                         MemoryState.DELETED},
+    MemoryState.SUPERSEDED: {MemoryState.ARCHIVED, MemoryState.DELETED},
+    MemoryState.ARCHIVED: {MemoryState.EXPIRED, MemoryState.ACTIVE,
+                           MemoryState.DELETED},
+    MemoryState.EXPIRED: {MemoryState.DELETED},
+    MemoryState.DELETED: set(),   # terminal — kecuali forget (idempoten)
+}
+# TTL default (hari) per state awal: seberapa lama ARCHIVED bertahan
+# sebelum otomatis EXPIRED oleh pemindaian retensi.
+DEFAULT_TTL_DAYS = {
+    "episodic": 90,
+    "semantic": 365,
+    "preference": 180,
+    "relationship": 365,
+    "short_term": 3,
+    "working": 0,
+}
+class IllegalTransitionError(ValueError):
+    """Transisi status yang tidak dikenal siklus hidup."""
+    def __init__(self, src: MemoryState, dst: MemoryState):
+        super().__init__(
+            f"transisi ilegal {src.value} -> {dst.value}; legal: "
+            f"{sorted(s.value for s in LEGAL_TRANSITIONS[src])}")
+        self.src = src
+        self.dst = dst
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+LEGAL_TRANSITIONS dideklarasikan sebagai data, bukan if-else tersebar — IllegalTransitionError
+menyebut himpunan legalnya saat menolak. Forget sengaja TIDAK ada di tabel transisi: ia bukan transisi
+state, ia hak yang bekerja dari status apa pun, dan implementasinya membawa turunan: memori yang
+diturunkan dari root ikut lenyap (derived_from) — lupa parsial atas pohon pengetahuan adalah lupa palsu.
+5.3 EVALUATION — 90 hari, 500 memori
+Simulasi retensi: 30% diarsipkan di hari 0, 3 diarsipkan bertahap tiap 3 hari, pemindaian TTL harian, seed
+90.
+
+
+=== PAGE 52 ===
+Ukuran
+Nilai
+hidup di hari-90
+422 dari 500
+state akhir
+ACTIVE 265 · ARCHIVED 157
+tombstone
+78
+forget root (panggilan 1)
+True — root + turunan
+forget root (panggil 2)
+False — idempoten
+SQLite purge (panggil 2)
+False — idempoten
+jejak kaki simpanan
+~512.0 byte/fakta (120 fakta)
+ Tabel 5.2 — Hasil forgetting_retention.json. 500 → 422 hidup di hari-90: TTL bekerja tanpa campur tangan manual; 78 tombstone tanpa
+ konten.
+ Gambar 5.2 — Kurva retensi 90 hari: total hidup (merah), ACTIVE (navy), ARCHIVED (emas), tombstone (gelap). Tangga turunnya
+ adalah pemindaian TTL yang menghormati jadwal, bukan kecelakaan.
+Worked example — satu fakta menjalani siklus penuh
+01 Januari: fakta 'Bos tinggal di Bandung' lahir dari konsolidasi (ACTIVE, version 1, confidence 0.6). 15
+Maret: kabar baru 'Bos tinggal di Jakarta' (confidence 0.95) menang margin — fakta Bandung menjadi
+SUPERSEDED dengan superseded_by menunjuk Jakarta v2; keduanya tercatat, hanya v2 yang aktif. 20
+
+
+=== PAGE 53 ===
+Maret: kebijakan retensi memindahkan Bandung v1 ke ARCHIVED (TTL audit 90 hari untuk state
+superseded). 18 Juni: TTL habis — EXPIRED — pemindaian hari berikutnya menuliskan tombstone:
+'superseded, dihapus karena usia'. Lalu 1 Juli Bos berkata: 'hapus semua jejak alamat lama saya'. Forget
+total dijalankan terhadap Jakarta v2 DAN turunannya — episode yang menurunkan fakta itu ikut lenyap,
+tabel memories kehilangan barisnya, dan yang tersisa di tombstone hanya waktu + alasan 'user_request'.
+Tiga kali selama hidupnya, fakta itu diperlakukan tiga cara yang BERBEDA — dan tidak satu pun tahap
+menyamar jadi tahap lain. Itulah arti kebijakan yang menempel pada state, bukan pada niat.
+OUTPUT
+PYTHONPATH=src python -m pytest tests/test_lifecycle.py -q
+..............                                     [100%]
+14 passed in 0.32s
+python3 scripts/exp_forgetting.py
+{
+ "final": {"alive": 422, "tombstones": 78,
+   "stats": {"alive": {"archived": 157, "active": 265}}},
+ "forget_idempotency": {
+  "root_first_call": true,
+  "root_second_call": false,
+  "derived_tombstoned": true,
+  "sqlite_purge_first": true,
+  "sqlite_purge_second": false},
+ "storage_footprint": {"db_bytes_120_facts": 61440,
+  "bytes_per_row_estimate": 512.0}}
+Worked example — satu selera menempuh lima minggu
+Minggu 1: 'jawaban singkat saja' — observasi pertama, strength 0.9 (eksplisit). support=1, confidence
+0.108: status masih kandidat lemah. Minggu 2: Bos dua kali memotong jawaban panjang Ruka
+('singkat!') — dua observasi implisit strength 0.6. support=3, confidence 0.34. Minggu 3: diam —
+preferensi tak bertambah, tak berkurang. Minggu 4: Bos meminta SATU laporan panjang untuk audit
+formal — observasi kontra strength 0.3: contradiction=1, confidence 0.04 — sistem mencatat koreksi
+kontekstual. Minggu 5: dua permintaan singkat lagi. support=5, ratio 5, confidence 0.33... belum stabil
+(butuh 0.5). Minggu 6-7: dua bukti lagi — support=7, confidence 0.55, ratio 7: STABLE. Tujuh minggu
+untuk satu kesimpulan 'jawaban singkat' — terasa lambat? Itulah harga kesimpulan yang tak berbalik arah
+tiap angin: pipeline yang menghormati bukti lawan yang menghormati kebetulan.
+5.4 PREFERENCE — pipeline bukti berulang
+Preferensi stabil lahir dari enam tahap: observation → repeated evidence → consistency → confidence →
+candidate → stable — dengan mekanisme mundur yang tidak dikotori niat baik.
+
+
+=== PAGE 54 ===
+Gambar 5.3 — Pipeline preferensi. Bukti kontra menghukum lebih keras (−0.30 vs +0.12) — asimetri yang disengaja: lebih aman gagal
+ menyimpulkan daripada salah menyimpulkan.
+Listing 5.2 — PreferencePipeline.observe + reclassify (baris 52-100 dari
+src/ruka_persistence/memory/preference.py)
+    def observe(self, obs: PreferenceObservation) -> Preference:
+        """Satu observasi masuk. Return status preferensi terkini.
+        Matching dilakukan pada normalisasi statement — bukan fuzzy:
+        pipeline ini tidak berpura-pura paham sinonim. Penggabungan
+        makna adalah pekerjaan lapisan kognisi, bukan lapisan memori.
+        """
+        p = self._find(obs.observed_behavior)
+        if p is None:
+            p = Preference(statement=obs.observed_behavior,
+                           domain=(obs.observed_behavior.split(":")[0]
+                                   if ":" in obs.observed_behavior
+                                   else "general"),
+                           status="candidate",
+                           support=0, contradiction=0, confidence=0.0)
+            self.preferences.append(p)
+            self.trace.append(f"new:{p.statement[:40]}")
+
+
+=== PAGE 55 ===
+        # bukti: evidence_strength tinggi = eksplisit; rendah = implisit
+        if obs.evidence_strength >= 0.5:
+            p.support += 1
+            p.confidence = min(1.0, p.confidence + SUPPORT_DELTA
+                               * (0.5 + 0.5 * obs.evidence_strength))
+        else:
+            p.contradiction += 1
+            p.confidence = max(0.0, p.confidence - CONTRA_DELTA)
+        p.last_evidence = obs.observed_at
+        p.sources.append(obs.observation_id)
+        self._reclassify(p)
+        return p
+    # ------------------------------------------------------------ status
+    def _reclassify(self, p: Preference) -> None:
+        before = p.status
+        ratio = (p.support / p.contradiction
+                 if p.contradiction > 0 else float("inf"))
+        if p.support == 0 and p.contradiction >= 2:
+            p.status = "retracted"
+        elif (p.support >= self.stable_min_support
+              and ratio >= self.stable_min_ratio
+              and p.confidence >= 0.5):
+            p.status = "stable"
+        elif p.support >= self.candidate_min_support:
+            p.status = "candidate"
+        else:
+            p.status = "candidate"
+        if before != p.status:
+            self.trace.append(
+                f"{_norm_statement(p.statement)[:36]}:{before}->{p.status}")
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Aturan mainnya ringkas: support ≥ 2 menjadi kandidat; support ≥ 4 DAN rasio dukungan-lawan-kontra ≥ 3
+DAN confidence ≥ 0.5 menjadi stabil; bukti kontra menghukum asimetris. Matching dilakukan pada
+normalisasi statement — bukan fuzzy: pipeline ini tidak berpura-pura paham sinonim; penggabungan
+makna adalah pekerjaan kognisi, bukan lapisan memori. Jujur soal batas itu menyelamatkan sistem dari
+penyatuan paksa dua preferensi yang hanya mirip kata-katanya.
+Listing 5.3 — file lengkap preference.py
+"""Pipeline preferensi — 'disebut sekali' bukan 'preferensi selamanya'.
+Alur wajib (Part V):
+    Observation -> Repeated Evidence -> Consistency -> Confidence
+        -> Candidate -> Stable
+    Bukti kontra -> retracted / turun status
+Kenapa pipeline diperlukan: menyimpan SETIAP kalimat selera sebagai
+preferensi permanen membuat memori penuh kebisingan sekaligus
+mengubah Ruka jadi penurut terhadap kebetulan. Sebaliknya, tanpa
+mekanisme naik status, Ruka tidak pernah belajar. Kompromi yang
+
+
+=== PAGE 56 ===
+jujur: penghitung bukti + ambang konsistensi + mekanisme mundur.
+"""
+from __future__ import annotations
+from dataclasses import dataclass, field
+from .types import Preference, PreferenceObservation
+CANDIDATE_MIN_SUPPORT = 2        # bukti searah minimum untuk jadi kandidat
+STABLE_MIN_SUPPORT = 4           # bukti searah minimum untuk stabil
+STABLE_MIN_RATIO = 3.0           # support / contradiction minimal
+SUPPORT_DELTA = 0.12             # keyakinan naik segini per bukti searah
+CONTRA_DELTA = 0.30              # keyakinan TURUN lebih cepat (asimetris)
+def _norm_statement(text: str) -> str:
+    return " ".join(text.lower().split())
+@dataclass
+class PreferencePipeline:
+    """Mesin status preferensi dengan jejak penuh."""
+    candidate_min_support: int = CANDIDATE_MIN_SUPPORT
+    stable_min_support: int = STABLE_MIN_SUPPORT
+    stable_min_ratio: float = STABLE_MIN_RATIO
+    preferences: list[Preference] = field(default_factory=list)
+    pending: list[PreferenceObservation] = field(default_factory=list)
+    trace: list[str] = field(default_factory=list)
+    # ------------------------------------------------------------ ingest
+    def _find(self, statement: str) -> Preference | None:
+        target = _norm_statement(statement)
+        for p in self.preferences:
+            if _norm_statement(p.statement) == target:
+                return p
+        return None
+    def observe(self, obs: PreferenceObservation) -> Preference:
+        """Satu observasi masuk. Return status preferensi terkini.
+        Matching dilakukan pada normalisasi statement — bukan fuzzy:
+        pipeline ini tidak berpura-pura paham sinonim. Penggabungan
+        makna adalah pekerjaan lapisan kognisi, bukan lapisan memori.
+        """
+        p = self._find(obs.observed_behavior)
+        if p is None:
+            p = Preference(statement=obs.observed_behavior,
+                           domain=(obs.observed_behavior.split(":")[0]
+                                   if ":" in obs.observed_behavior
+                                   else "general"),
+                           status="candidate",
+                           support=0, contradiction=0, confidence=0.0)
+            self.preferences.append(p)
+            self.trace.append(f"new:{p.statement[:40]}")
+        # bukti: evidence_strength tinggi = eksplisit; rendah = implisit
+        if obs.evidence_strength >= 0.5:
+            p.support += 1
+            p.confidence = min(1.0, p.confidence + SUPPORT_DELTA
+                               * (0.5 + 0.5 * obs.evidence_strength))
+        else:
+            p.contradiction += 1
+            p.confidence = max(0.0, p.confidence - CONTRA_DELTA)
+        p.last_evidence = obs.observed_at
+
+
+=== PAGE 57 ===
+        p.sources.append(obs.observation_id)
+        self._reclassify(p)
+        return p
+    # ------------------------------------------------------------ status
+    def _reclassify(self, p: Preference) -> None:
+        before = p.status
+        ratio = (p.support / p.contradiction
+                 if p.contradiction > 0 else float("inf"))
+        if p.support == 0 and p.contradiction >= 2:
+            p.status = "retracted"
+        elif (p.support >= self.stable_min_support
+              and ratio >= self.stable_min_ratio
+              and p.confidence >= 0.5):
+            p.status = "stable"
+        elif p.support >= self.candidate_min_support:
+            p.status = "candidate"
+        else:
+            p.status = "candidate"
+        if before != p.status:
+            self.trace.append(
+                f"{_norm_statement(p.statement)[:36]}:{before}->{p.status}")
+    # ------------------------------------------------------------ forget
+    def retract(self, statement: str) -> bool:
+        p = self._find(statement)
+        if p is None:
+            return False
+        p.status = "retracted"
+        p.confidence = 0.0
+        self.trace.append(f"retract:{_norm_statement(statement)[:36]}")
+        return True
+    def forget(self, statement: str) -> bool:
+        """Forget total: preferensi hilang, bukan disembunyikan."""
+        p = self._find(statement)
+        if p is None:
+            return False
+        self.preferences.remove(p)
+        self.trace.append(f"forget:{_norm_statement(statement)[:36]}")
+        return True
+    # ------------------------------------------------------------ query
+    def stable(self) -> list[Preference]:
+        return [p for p in self.preferences if p.status == "stable"]
+    def summary(self) -> dict:
+        by_status = {"candidate": 0, "stable": 0, "retracted": 0}
+        for p in self.preferences:
+            by_status[p.status] = by_status.get(p.status, 0) + 1
+        return {"total": len(self.preferences),
+                "by_status": by_status,
+                "pending_observations": len(self.pending)}
+ VERIFIED — File utuh 130 baris. Perhatikan tiga konstanta psikologi kecil: asimetri hukum (SUPPORT_DELTA 0.12 lawan
+CONTRA_DELTA 0.30), rasio stable_min_ratio 3, dan retract yang menjatuhkan confidence ke nol — bukan menyimpan 'mantan
+ preferensi' dengan harga diskon.
+
+
+=== PAGE 58 ===
+5.5 FAILURE MODES & TESTING
+Mode gagal yang dikunci 25 test: transisi ilegal ditolak dengan alasan; reinstatement bekerja; TTL
+menghormati jadwal; tombstone tanpa konten; forget idempoten + membawa turunan; preferensi butuh
+bukti berulang; kontra menurunkan; retract bisa mundur.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src python -m pytest tests/test_lifecycle.py tests/test_preference.py -q
+EXPECTED
+ 25 test hijau: 14 lifecycle + 11 preference.
+WHY
+ Empat kata tabel 5.1 dan pipeline preferensi adalah dua kebijakan paling rawan 'berlaku setengah-jalan' — test
+menjadikannya hitam-putih.
+FAILURE MODE
+ Gagal di idempotensi = implementasi forget mengembalikan error alih-alih False; periksa cabang tombstone.
+DEBUGGING
+ Naikkan TTL semantic di DEFAULT_TTL_DAYS — test_belum_ttl_tetap harus tetap hijau; kalau merah, tanggal
+dipakai salah satuan.
+PRODUCTION — consent, bukan tombol
+Forget total menuntut permintaan eksplisit yang tercatat di audit (siapa, kapan, target apa, alasan) — bukan
+tombol yang bisa tersenggol. Untuk kelas sensitive, Vol IV sudah menyiapkan consent gate saat PEMASUKAN;
+Vol V melengkapi siklusnya dengan gerbang PENARIKAN yang sama ketatnya. Data pribadi yang
+keluar-masuk tanpa jejak ganda bukan tata kelola — itu pintu putar.
+Batas yang Tidak Boleh Kabur — Remembering ≠ Knowing
+Memori menyimpan REPRESENTASI, bukan kebenaran. Fakta tersimpan bisa salah sejak lahir, kedaluwarsa
+diam-diam, atau dikalahkan bukti baru. Maka setiap fakta membawa confidence, versi, dan provenance; setiap
+jawaban dari memori adalah 'menurut apa yang saya simpan' — bukan 'menurut kenyataan'. Lapisan memori
+yang jujur tahu batas ini; lapisan yang lupa akan mengklaim ingatan sebagai fakta dunia.
+Engineering Exercise
+ 1. Simulasikan Bos berkata 'saya suka jawaban singkat' SEKALI lalu tidak pernah lagi. Berapa
+panggilan observe sebelum status berubah dari sekadar kandidat? Sekarang tambahkan 3 bukti kontra
+implisit — apa yang terjadi lebih cepat: naik atau turun?
+2. Bangun pohon derived_from tiga tingkat dan lupakan root-nya. Verifikasi seluruh pohon menjadi
+tombstone. Kemudian tanyakan: bagaimana sistem produksi menandai fakta 'turunan' saat ia lahir dari
+konsolidasi dua fakta lain?
+
+

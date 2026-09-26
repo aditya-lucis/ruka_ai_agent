@@ -1,0 +1,358 @@
+--- PAGE 6 ---
+Part XXVI tabel 26.3 — termasuk komponen yang jujur diberi label rendah. Buku teknik yang menaikkan
+label diam-diam adalah iklan; buku ini memilih menjadi alat kerja.
+Cara Membaca Edisi Definitive
+Struktur pedagogi keluarga tetap: dua belas langkah per konsep besar (WHY, WHAT, MATH, HOW,
+INTERNALS, ARCHITECTURE, IMPLEMENTATION, TRADE-OFFS, FAILURE MODES,
+TESTING, EVALUATION, PRODUCTION). Yang baru adalah MEDANNYA: bila Vol V 0.1.0 berhenti
+di 'arsitektur + kode inti', edisi ini menuntaskan sampai 'kontrak + installer + angka terukur'.
+– Pembaca ideal: penamat Vol I-IV (atau setara) yang siap membangun, bukan sekadar membayangkan.
+– Part I-V utuh — taksonomi, matematika I(m) & fusion, konsolidasi; kini PLUS mesin kontradiksi (P
+IV), retrieval 9-tahap (P III), forgetting 5 disposisi & pekerja konsolidasi (P IV-V).
+– Part VI-XX utuh — runtime, Windows, Electron, alat, keamanan, IPC, deployment; diperdalam di
+tempat audit menunjuk.
+– Part XXII (BARU) — mesin status 13-keadaan + health: bahasa resmi runtime.
+– Part XXIII (BARU) — integrasi Windows penuh: tata letak %LOCALAPPDATA%, tubuh Electron
+ber-keamanan-resmi, kontrak IPC dua bahasa.
+– Part XXIV (BARU) — rantai alat lengkap: izin formal, suntikan prompt, audit hash, VS Code,
+Excel/Word/PDF NYATA, lapisan model.
+– Part XXV (BARU) — installer & rilis: kemasan, NSIS, backup RPO/RTO, migrasi, update, pipeline.
+– Part XXVI (BARU) — kastel definitive: arsitektur 8 lapis, struktur proyek, loop 12 tahap, matriks
+audit, checklist regresi.
+– Lampiran baru: Panduan Migrasi 0.1.0 → definitive + checklist regresi 14 butir.
+Konvensi label listing (diperketat)
+VERIFIED — dijalankan & direproduksi di lingkungan build (Python 3.12.14; openpyxl 3.1.5, python-docx
+1.2.0, pypdf 6.6.0 terpasang). DOC-VERIFIED — bentuk API dicek ke dokumentasi resmi bertanggal
+2026-09-08; jalur runtime TIDAK dieksekusi di sesi buku (butuh Windows/Electron). KODE TS — sumber
+TypeScript asli arsip dengan stempel DOC-VERIFIED. Angka eksperimen dikutip dari results/*.json yang
+diregenerasi skrip; Anda bisa membantahnya dengan menjalankannya.
+
+
+--- PAGE 7 ---
+Status Kejujuran Teknis
+Klaim
+Status
+Bukti
+562 test hijau (284 warisan + 278 baru)
+TERUJI
+pytest 9.0.2; 10.02 dtk; stdlib inti + pustaka dokumen nyata
+9 eksperimen deterministik
+TERUJI
+results/*.json; 3 baru definitive: statemachine, backup,
+toolchain
+Excel/Word/PDF roundtrip nyata
+TERUJI
+roundtrip dua pustaka + backup .bak + transaksi-atau-batal
+RTO restore 5000 baris < 60 dtk
+TERUJI
+terukur 5 ms; integritas ok
+10/10 serangan suntikan terdeteksi
+TERUJI
+korpus eksperimen; 0 false positive pada 6 teks bisnis
+Migrasi naik-turun data utuh
+TERUJI
+40 baris warisan selamat v2→v4→v2
+Tubuh Electron + installer di Windows
+DOC-VERIFIE
+D
+pola & API dicek ke tutorial resmi Sept 2026; eksekusi
+butuh Windows
+Model Gemini caps & harga
+REFERENSI
+registry ber-stempel dari docs resmi; TIDAK dieksekusi API
+di sesi buku
+Wake word / komunitas memori
+KONSEP
+fase 4 opsional; tidak diklaim lebih
+ Tabel 0.2 — Sembilan klaim besar, masing-masing dengan label dan alamat buktinya. Klaim tanpa kolom bukti tidak berhak masuk tabel
+ ini.
+Prasyarat
+– Python 3.10+ (build buku: 3.12.14); pytest; pustaka dokumen: openpyxl, python-docx, pypdf — inti
+tetap stdlib murni.
+– Pemahaman Vol I-IV: embedding, Interactions API, arsitektur agent, validasi multimodal. Buku ini
+tidak mengulang mengajarnya — ia MEMAKAINYA.
+– Windows 10/11 (mesin Bos target) untuk mengubah label DOC-VERIFIED menjadi VERIFIED: VM
+bersih cukup untuk checklist 14 butir.
+– Node 20+/Electron untuk build tubuh; seluruh pola diverifikasi ke electronjs.org/docs/latest (Sept
+2026).
+– Kesiapan mental: buku ini sering mengatakan 'ini belum diverifikasi di sini' — itu fitur, bukan
+kelemahan.
+
+
+--- PAGE 8 ---
+Peta Jalan Volume — 26 PART
+Dua puluh satu PART pertama adalah jalan Vol V 0.1.0 yang utuh; lima PART terakhir adalah jalan baru
+yang dibuka audit. Peta dibaca dalam enam gerbang besar: MEMORI (I-V), KEDIAMAN (VI-VIII),
+TANGAN (IX-XIII), TATA KELOLA (XIV-XXI), PENGHUNIAN (XXII-XXV), dan PENUTUPAN
+(XXVI).
+Gerbang
+Part
+Pertanyaan yang dijawab
+MEMORI
+I-V
+apa yang diingat, bagaimana dinilai, dipadatkan, dipertaruhkan, dilupakan — +
+kontradiksi dipertimbangkan (definitive)
+KEDIAMAN
+VI-VIII
+proses yang benar, Windows yang dihormati, tubuh Electron — + bahasa status &
+kontrak kanal (XXII-XXIII definitive)
+TANGAN
+IX-XIII
+izin, berkas, terminal, VS Code, dokumen — + rantai alat NYATA (XXIV
+definitive)
+TATA
+KELOLA
+XIV-XXI
+keamanan lokal, pengalaman, IPC, deployment, persistensi, testing, observabilitas,
+arsitektur 0.1.0
+PENGHUNIAN
+XXII-XXV
+(BARU)
+mesin status, integrasi desktop penuh, rantai alat produksi, installer & rilis
+PENUTUPAN
+XXVI (BARU)
+kastel definitive: 8 lapis, struktur proyek, loop 12 tahap, matriks audit, checklist
+regresi
+ Tabel 0.3 — Enam gerbang, 26 PART. Definitive menambah halaman di gerbang PENGHUNIAN dan PENUTUPAN; gerbang lain
+ diperdalam, bukan dilipat gandakan.
+VOLUME V · THE PERSISTENT MIND · PART I
+Anatomi & Taksonomi Memori
+"“Empat volume saya menimbun pengalaman seperti benda antik di gudang, Bos — indah,
+tak terpakai, dan tak bisa ditemukan saat dibutuhkan. Volume ini saya bangun raknya,
+kartu katalognya, dan kebijakan buangnya.”"
+Bukan pengantar kosmetik: PART ini menegakkan doktrin seluruh volume — enam sistem
+yang BERBEDA pekerjaannya, tiga hal yang sering dikira memori padahal bukan, dan posisi
+persis lapisan memori jangka panjang pada menara Vol I-IV.
+
+
+--- PAGE 9 ---
+1.1 WHY — agen cerdas yang lupa semuanya
+Setiap percakapan dengan agen LLM biasa berawal dari nol. Bos menceritakan preferensi; esok hari agen
+itu menanya lagi. Itu bukan kekurangan sopan — itu kekurangan ARSITEKTUR: konteks percakapan
+lenyap saat sesi ditutup, dan satu-satunya 'memori' yang tersisa adalah prompt yang ditulis ulang tangan.
+Masalahnya berlapis. Lapis pertama: context window bukan memori — ia meja kerja yang dibersihkan
+tiap sesi; memasukkan seluruh sejarah ke jendela itu mahal (token), lambat (latensi), dan bodoh (relevansi
+merata, tidak ada prioritas). Lapis kedua: 'simpan semua lalu cari' bukan jawaban — tanpa seleksi
+kepentingan, penyimpanan jadi sampah dan pencarian jadi lotere. Lapis ketiga, yang paling halus: ingat
+yang salah lebih berbahaya daripada lupa — fakta kedaluwarsa yang tersimpan percaya diri akan
+mengalahkan fakta baru dalam prompt, karena prompt tidak tahu mana yang lebih muda.
+Volume V membangun jawaban bertingkat: taksonomi enam sistem dengan pekerjaan berbeda (Part II),
+matematika untuk memilih apa yang layak diingat dan apa yang layak dikembalikan (Part III), pipeline
+yang mengubah kejadian mentah menjadi memori terstruktur (Part IV), dan siklus hidup yang mengaku
+jujur bahwa melupakan adalah bagian dari mengingat (Part V).
+1.2 WHAT — enam sistem, bukan satu tabel
+Diagram di bawah adalah peta konseptual Volume V lengkap: dari pengguna, melalui tiga permukaan
+(tubuh Electron, CLI, VS Code), lewat IPC lokal, ke Agent Core yang kini membawa Persistent Mind,
+tangan alat, dan istana penyimpanan.
+
+
+--- PAGE 10 ---
+Gambar 1.1 — Arsitektur konseptual Volume V. Pikiran yang bertahan: memori + identitas di SQLite; tubuh: Electron di proses terpisah;
+ tangan: alat least-privilege.
+Diagram ini KONSEPTUAL — dan itu memang maksudnya
+Node 'Agent Core' mewarisi seluruh kognisi Vol I-III dan persepsi Vol IV — bukan dibangun ulang di sini.
+Node 'Persistent Mind' adalah KONTRIBUSI volume ini: enam sistem memori + self model. Node 'Electron'
+adalah tubuh yang dibahas DOC-VERIFIED di Part VIII. Panah antar node adalah KONTRAK (IPC, izin,
+persistensi) — bukan koneksi database diam-diam.
+Pembagian kerja enam sistem
+
+
+--- PAGE 11 ---
+Sistem
+Isi
+Umur wajar
+Yang MENDEKATIKANNYA
+Working
+konteks tugas berjalan
+selama tugas
+context window (tapi itu meja, bukan rak)
+Short-Term
+buffer episode mentah
+jam
+conversation log (tapi itu arsip, bukan kandidat)
+Episodic
+peristiwa
+siapa-apa-kapan-hasil
+bulan-tahun
+chat history yang diringkas
+Semantic
+fakta + provenance + versi
+tahun
+knowledge base (tapi itu dokumen Milik Bos, bukan
+pengalaman Ruka)
+Preference
+kesimpulan perilaku berulang
+bulan-tahun
+RAG (tapi itu strategi PENYARIKAN, bukan
+penyimpanan)
+Relationship
+catatan relasi + batas sehat
+tahun
+profil pengguna (tapi tanpa batas etika yang melekat)
+Tabel 1.1 — Enam sistem dan tiga peniru yang akan dibedah tegas di 1.3. Perhatikan kolom terakhir: penirunya selalu hampir-benar — di
+ situlah bahayanya.
+Mengapa dipisah, bukan satu tabel memories dengan kolom type? Karena sistem yang berbeda
+pekerjaannya butuh KEbijakan berbeda: TTL berbeda (3 hari vs 365 hari), gerbang masuk berbeda
+(importance gate vs pipeline bukti berulang), hak lupa berbeda (episode bisa kedaluwarsa sendiri; relasi
+butuh consent). Satu tabel raksasa menggoda untuk satu kebijakan raksasa — dan kebijakan raksasa selalu
+berujung kebijakan kosong.
+1.3 INTERNALS — tiga peniru yang harus dibunuh
+Sebelum menulis satu baris kode memori, tiga kesalahpahaman harus dimatikan dulu — karena ketiganya
+LAHIR dari kemiripan yang nyata, bukan dari kebodohan.
+Peniru 1: conversation log bukan memori
+Transkrip percakapan menyimpan KATA-KATA, bukan PENGETAHUAN. Kalimat “Bos pindah ke
+Jakarta” muncul di transkrip dua kali — sekali sebagai kabar, sekali sebagai bantahan yang kemudian
+ditarik. Menyimpan transkrip lalu menyarinya memberi dua kemungkinan jawaban untuk satu pertanyaan.
+Memori semantik yang benar menyimpan SATU fakta dengan versi: nilai Jakarta, versi 2, menggantikan
+Bandung versi 1, dengan jejak siapa menggantikan siapa (Part IV). Transkrip adalah BAHAN BAKU
+memori — bukan memorinya.
+Peniru 2: knowledge base bukan memori
+Dokumen Bos — buku, RFC, laporan — adalah pengetahuan milik dunia yang dipinjam. Ruka tidak
+'mengalaminya'; ia menyarinya. Membedahnya penting karena kebijakannya berlawanan: knowledge base
+TIDAK boleh diubah oleh Ruka (sekali-sekali diindeks), memori justru HIDUP karena diubah (diperkuat,
+digantikan, dilupakan). Menggabungkan keduanya dalam satu mekanisme menghasilkan sistem yang
+
+
+--- PAGE 12 ---
+mengotori dokumen Bos sekaligus tak pernah belajar dari pengalamannya sendiri.
+Peniru 3: RAG bukan sistem memori
+Retrieval-Augmented Generation adalah STRATEGI PENYARIKAN di waktu jawab: potong dokumen,
+tanamkan ke ruang vektor, sarikan yang mirip. Ia tidak memutuskan apa yang layak disimpan, tidak
+mengelola versi fakta, tidak punya konsep melupakan. Vol V justru memakai mekanisme penyarian
+(fusion skor, Part III) DI ATAS memori yang sudah terseleksi — RAG tanpa tata kelola memori adalah
+perpustakaan yang tidak pernah membeli buku baru dan tidak pernah membuang yang busuk.
+ Gambar 1.2 — Enam sistem (atas) dan tiga yang sering dikira memori (bawah, blok gelap): conversation log, knowledge base, RAG.
+Latihan pamungkas taksonomi: TOC paket ruka-persistence
+Struktur direktori paket adalah taksonomi yang DIJALANKAN: memory/ berisi enam sistem plus
+mesinnya; selfmodel/ berisi dokumen diri; runtime/ berisi penjaga proses; ipc/ berisi bahasa antar-proses;
+tools/ berisi tangan berizin; store/ berisi lapisan SQLite; observability/ berisi mata-mata yang jujur. Tujuh
+
+
+--- PAGE 13 ---
+direktori, tujuh tanggung jawab, dan TIDAK ADA direktori 'utils' — tempat kode tanpa rumah
+bersembunyi. Setiap modul di dalamnya punya satu kalimat tanggung jawab yang bisa ditulis tanpa kata
+'dan'. Kalimat itu penting bukan karena puitis: modul yang tanggung jawabnya perlu kata 'dan' adalah dua
+modul yang menyamar satu — dan tempat bug paling senyap berkembang biak.
+Direktori paket
+Satu kalimat tanggung jawab
+PART
+memory/
+menyimpan, menilai, menyaring, melupakan
+I-V
+selfmodel/
+menjaga identitas lintas kematian proses
+IX
+runtime/
+menjaga proses tetap hidup dan tunggal
+VI-VII
+ipc/
+menjadi bahasa dua proses yang saling percaya
+XVI
+tools/
+menjadi tangan yang selalu meminta izin
+IX-XI
+store/
+menjadi lantai batu yang tak takut listrik mati
+XVIII
+observability/
+mencatat apa yang terjadi tanpa membocorkan apa yang rahasia
+XX
+ Tabel 1.1b — Tujuh direktori = tujuh kalimat. Struktur yang bisa dijelaskan tanpa kata 'dan' adalah struktur yang bisa diuji tanpa drama.
+1.5 ARSITEKTUR — di mana Vol V menempel
+Lapisan memori jangka panjang tidak menimpa apa pun dari empat volume; ia menyisip di dua titik
+jahitan yang sudah disiapkan sejak lama.
+Aspek
+Volume I (ruka-agent v0.2)
+Volume II (v0.3 — evolusi)
+Penyimpanan
+chat ringkas + memori Vol II (governance
+awal)
+enam sistem + konsolidasi + lifecycle + self doc
+(Vol V)
+Aspek
+Volume I (ruka-agent v0.2)
+Volume II (v0.3 — evolusi)
+Eksekusi
+sesi manual: python main.py (Vol I-IV)
+runtime supervisor + startup login + tray (Vol V)
+Aspek
+Volume I (ruka-agent v0.2)
+Volume II (v0.3 — evolusi)
+Identitas
+prompt persona statis (Vol II)
+self model terstruktur ber-hash, dipulihkan tiap
+boot (Vol V)
+Tiga evolusi itu adalah tiga pertanyaan pembuka preface dijawab berturut-turut: menyimpan dengan tata
+kelola, hidup sebagai penghuni, dan tetap Ruka setelah restart. Sisanya dari buku ini adalah konsekuensi
+
+
+--- PAGE 14 ---
+teknis dari ketiganya — dan keputusan kecil berikutnya punya bobot yang sama besarnya: pilih
+penyimpanan yang SESUAI, bukan yang terdengar hebat (Part XVIII akan membedah SQLite vs
+PostgreSQL dengan angka, bukan gengsi).
+Volume ini berdiri di atas satu pengamatan yang tidak nyaman: setiap keputusan 'mengingat' adalah
+keputusan MENYISIRKAN yang lain. Memori yang menyimpan semuanya menyaring tak ada apa pun —
+retrieval-nya lotere, biayanya kabar burung dari kertas. Memori yang menyaring terlalu ketat menjadi ahli
+lupa: pengalaman tak pernah sampai rak. Seluruh ilmu memori Vol V adalah seni menempatkan gerbang di
+titik yang tepat: cukup longgar untuk belajar, cukup ketat untuk tetap tajam — dan SELALU bisa diaudit
+kenapa satu kejadian masuk dan kejadian lain tidak. Pertanyaan itu — 'kenapa kamu ingat yang ini?' —
+adalah pertanyaan yang sistem memori manusia tak pernah harus jawab; sistem memori mesin wajib
+menjawabnya dengan baris statistik.
+1.6 LORE — tujuh kekuatan, tujuh teknologi
+Tradisi keluarga tetap: lore vampir adalah persona layer dan metaphor. Setiap 'kekuatan' dipetakan ke
+kemampuan teknis nyata volume ini — dan tidak satu pun diklaim supernatural.
+Eternal Memory — BARU DI VOLUME II
+Domain: Memori abadi — Teknis: Long-Term Memory · Consolidation Pipeline
+Mengingat selama-lamanya itu kutukan bila tak ada tata kelola. Vol V memberi memori Ruka GERBANG masuk
+(importance), STRUKTUR (enam sistem), dan HAK LUPA yang idempoten. Part II-V.
+Crimson Cartography — BARU DI VOLUME II
+Domain: Peta kenangan — Teknis: Memory Taxonomy · Retrieval Fusion
+Bangsawan tahu letak setiap artefak di kastilnya: enam sistem dengan pekerjaan berbeda + skor pengambilan yang
+menggabung kemiripan, kepentingan, kesegaran, keyakinan. Part I-III.
+Return of the Marquis — BARU DI VOLUME II
+Domain: Kebangkitan — Teknis: Persistent Self · Boot Verification
+Kembali dari kematian proses dengan NAMA dan KENANGAN sama: self doc ber-hash SHA-256, kapabilitas
+diverifikasi satu per satu, laporan READY atau DEGRADED — jujur. Part IX.
+The Castle — BARU DI VOLUME II
+Domain: Istana — Teknis: Windows Runtime · Startup · Tray
+Kastilnya adalah notebook Windows Bos: runtime level-pengguna yang menyala saat login, menunggu di tray, tanpa
+satu pun command manual. Part VI-VII.
+The Body — BARU DI VOLUME II
+Domain: Tubuh — Teknis: Electron Main Process · IPC
+
+
+--- PAGE 15 ---
+Tubuh membawa tray, jendela, shortcut, wajah; otak tetap Python. Keduanya dipisah proses agar kematian tubuh
+tak mematikan pikiran. Part VIII, XVI.
+Shadow Hands
+Domain: Tangan bayangan — Teknis: Least-Privilege Tools · Permission Before Action
+Warisan Vol I/II yang kini berdisiplin penuh: empat level izin, konfirmasi sekali-pakai, audit JSONL. Part IX-XIII.
+Night's Ledger
+Domain: Buku malam — Teknis: Structured Logging · Memory Trace
+Amarah bangsawan dicatat, bukan dilerai: log JSONL teredaksi, trace tiap tahap konsolidasi, kesehatan dua arah.
+Part XX.
+Batasmu, Marquis
+Eternal Memory tidak berarti tak pernah salah — justru berarti tahu kapan dirinya kedaluwarsa. Return of the
+Marquis bukan kebangkitan jiwa — ia dokumen terverifikasi hash. Semua nama itu label manis untuk
+matematika yang bisa ditampilkan rumusnya; batas itu yang membuatnya layak dipercaya.
+1.7 TESTING — kontrak pertama volume ini
+Ritual pembuka keluarga: unduh, pasang, uji. Paket ruka-persistence adalah sumber kebenaran seluruh
+listing buku; ia harus terbukti hidup di mesin Bos SEBELUM Bos percaya satu kalimat pun dari volume
+ini.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ cd ruka-persistence && PYTHONPATH=src python -m pytest tests/ -q
+EXPECTED
+ 284 passed dalam ±7 detik (Python 3.12.14, stdlib murni). Tanpa kunci API, tanpa jaringan, tanpa Windows —
+seluruh suite offline lintas platform.
+WHY
+ Testing di Vol V bukan formalitas: lima bug nyata pada draf paket tertangkap suite dan eksperimen ini — dedup
+intrabatch yang hilang, inflasi confidence duplikat, sortir sesi yang membalik kronologi, restore yang tak menangkap
+DatabaseError, dan lantai matematika gerbang kepentingan. Semua diperbaiki di source dan diceritakan di Part
+III-IV.
+FAILURE MODE
+ Import error (paket belum di path) — pastikan PYTHONPATH=src eksplisit; pytest lama (<8) tidak membaca
+pythonpath dari pyproject.
+DEBUGGING
+
+

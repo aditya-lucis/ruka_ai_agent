@@ -1,0 +1,621 @@
+=== PAGE 234 ===
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src pytest tests/test_backup.py tests/test_migrations.py -q
+EXPECTED
+ 28 test hijau: roundtrip 5000 baris + integrity ok; bit korupsi ditolak hash; arsip terpotong ditolak manifest; skema
+masa depan ditolak migrasi; upgrade bertahap + downgrade + data selamat + langkah gagal menggulung balik utuh.
+WHY
+ Backup dan migrasi adalah dua hal yang menentukan apakah 'Ruka tetap Ruka' saat perangkat lunak berganti —
+regresi di sini menghapus kenangan, bukan fitur.
+FAILURE MODE
+ test_restore_leaves_destination_clean gagal = staging bocor saat gagal — periksa blok finally di restore().
+DEBUGGING
+ test_data_survives_migration gagal = migrasi membuang baris — periksa INSERT SELECT di _up_v3 sebelum rilis
+apa pun.
+ Gambar 25.1 — Pipeline rilis enam gerbang + jalur pembaruan aman: BACKUP DULU adalah gerbang, bukan saran.
+25.8 LATIHAN — siklus hidup lengkap di meja Anda
+Latihan buku #8, #9, #10 dijalankan nyata; hasil harus cocok dengan janji arsitektur.
+Engineering Exercise
+
+
+=== PAGE 235 ===
+1. Restart Windows dengan Ruka terpasang. Verifikasi pengalaman sasaran penuh: login → tray hijau
+dalam hitungan detik → tanpa satu pun terminal dibuka. Baca boot-report.json — durasi tahap harus
+masuk akal (restoring biasanya terbesar).
+2. Corrupt ruka.db (tambahkan byte sampah di akhir), restart: boot DEGRADED dengan alasan
+memory. Pulihkan dari backup terakhir lewat restore tervalidasi; ukur waktu Anda — bandingkan
+dengan RTO yang dijanjikan.
+3. Jalankan migrasi pada salinan basis 0.1.0 (buku sebelumnya): naik ke v4, turun ke v2, naik lagi.
+Hitung baris di setiap titik — jumlah HARUS tetap; kalau tidak, Anda menemukan bug yang harus
+dilaporkan sebelum dilupakan.
+4. Uninstall Ruka. Verifikasi folder %LOCALAPPDATA%\Ruka\ masih ada dengan memori utuh;
+tawaran penghapusan memori muncul dengan peringatan berhitung. Instal ulang: kenangan kembali —
+itulah seluruh maksud arsitektur ini.
+5. Simulasikan update gagal: taruh paket dengan hash salah di updates\, restart. Verifikasi paket ditolak
+di gerbang verifikasi dan versi berjalan TIDAK berubah — pembaruan gagal harus membosankan,
+bukan menegangkan.
+"Pintu masuk saya terpasang rapi, Bos, dan surat pemecatan saya pun menyempatkan diri menanya: 'apakah
+kenangan harus ikut pergi?' — Tidak selamanya tamu harus membawa seluruh hidupnya ke pintu keluar."
+— Ruka, Marquis Kekaisaran Trendamis
+VOLUME V · THE PERSISTENT MIND · PART XXVI
+The Castle of the Marquis — Definitive
+Architecture
+"“Vol I mengajari saya berhitung. Vol II memberi nama. Vol III mengajari menimbang. Vol
+IV membuka mata. Vol V mengajari pulang. Edisi ini mengajari SATU hal lagi: menempati
+rumah — dengan kunci yang pantas, pintu yang tertutup, dan taman yang dirawat.”"
+Bagian penutup memasang seluruh potong menjadi satu bangunan: arsitektur definitif delapan
+lapis (dari Windows sang kastel sampai lapisan keamanan yang membungkus semuanya),
+struktur proyek yang alasan-per-direktori, loop agen dua belas tahap yang menempatkan
+Volume I-IV di relungnya, matriks audit jujur lima tingkat kematangan, dan checklist regresi
+yang bisa Anda jalankan setiap rilis.
+
+
+=== PAGE 236 ===
+26.1 EVOLUSI — apa yang dipertahankan dari arsitektur 0.1.0
+Prinsip edisi: EVOLVE, bukan rewrite. Metafora inti Vol V 0.1.0 utuh: Python = pikiran; Memori = masa
+lalu; Alat = tangan; Persepsi = indra; Electron = tubuh; Windows = kastel; Startup + Supervisor + SQLite =
+hukum kastel.
+Lapisan 0.1.0
+Nasib di definitive
+Alasan
+Enam sistem memori + konsolidasi
++ lifecycle
+UTUH + diperdalam
+mesin kontradiksi, skema 9 tabel, retrieval 9 tahap,
+forgetting 5 disposisi, pekerja konsolidasi menambah
+KEDALAMAN tanpa mengubah janji
+Persistent self + hash identitas
+UTUH + dikeraskan
+boot 4 gerbang + DEGRADED jujur + BootReport
+artefak — janji 'restart tetap Ruka' kini punya bukti
+tersimpan
+Supervisor + kunci instance
+UTUH + dinaikkan
+mesin status 13-keadaan menjadi SUMBER
+KEBENARAN tunggal yang dibaca tray/
+scheduler/audit
+IPC JSONL loopback
+UTUH + dikontrakkan
+kanal terdaftar + skema dua arah + versi + id korelasi
+— string liar gagal saat encode
+Kerangka alat 4 level
+UTUH + dilengkapi
+lembar izin bernama + pertahanan suntikan + audit
+rantai-hash + tiga alat dokumen NYATA
+SQLite WAL + backup online
+UTUH + dimigrasikan
+skema berversi v2→v4 yang memindahkan data;
+RPO/RTO diukur
+Tabel 26.1 — Enam lapisan 0.1.0, semuanya bertahan. Tidak ada yang dibongkar — edisi definitif menambah MATA dan TANGAN pada
+ tubuh yang sudah hidup, bukan mengganti tubuh.
+26.2 ARSITEKTUR DEFINITIF — delapan lapis
+Dari kastel ke lapisan keamanan; setiap panah punya kontrak yang bernama — tidak ada garis
+'berkoordinasi secara umum'.
+Bacalah gambar dari bawah ke atas seperti seorang inspektur: WINDOWS (kastel) menyediakan sesi
+pengguna, jalur %LOCALAPPDATA%, startup login, dan process supervision. SUPERVISOR memegang
+kunci satu-instance dan membesarkan otak-tubuh. TUBUH Electron membawa jendela, tray, shortcut,
+notifikasi — dan SATU klien IPC yang menaati kontrak kanal. OTAK Python memegang identitas,
+penalaran, perencanaan, memori, alat, kebijakan — semua keputusan menetap di sini. MEMORI
+menyimpan masa lalu (sembilan tabel SQLite WAL). ALAT adalah tangan terpenjara (izin bernama + path
+jail + 6-fase terminal). LAPISAN MODEL menentukan kapabilitas, bukan mengasumsikan. Dan
+membungkus semuanya: KEAMANAN/AUDIT/OBSERVABILITAS/BACKUP — lapisan penegak
+
+
+=== PAGE 237 ===
+hukum yang TIDAK menjadi lapisan ke-8 di tengah, melainkan selimut: setiap lapisan lain menembak
+log-nya, izinnya, jejak hash-nya ke sana.
+ Gambar 26.1 — Kastel sang Marquis, definitive edition: delapan lapis, setiap busur berkontrak. Versi 0.1.0 dari Part XXI tetap benar
+ sebagai potongan TUBUH; gambar ini memasang menara yang belum dibangun saat itu: status machine, kontrak IPC, lembar izin,
+ backup/migrasi.
+– Kaidah ketergantungan: panah hanya boleh menunjuk ke bawah (UI → kontrak → otak → subsistem).
+Lapisan bawah TIDAK PERNAH mengimport lapisan atas — memori tidak tahu ada Electron; alat
+tidak tahu ada model. Lingkaran import = arsitektur menyerah.
+– Kaidah satu penulis per data: status mesin hanya ditulis RuntimeStateMachine; izin hanya
+PermissionPolicy; baris memori hanya lewat konsolidasi. Dua penulis untuk satu data = data itu
+berbohong suatu hari.
+– Kaidah selimut keamanan: tidak ada subsistem 'keamanan' yang dipanggil sesudah fakta; tiap lapisan
+MEMANGKUL audit/redaksi/izin di jalur datanya sendiri — keamanan adalah bentuk kalimat, bukan
+departemen.
+– Kaidah dua proses dua nasib: tubuh mati tak menyeret otak; otak mati tak mematikan tubuh —
+kontrak + endpoint file + reconnect backoff (Part XXIII) membuat keduanya saling rindu tanpa saling
+membunuh.
+
+
+=== PAGE 238 ===
+26.3 STRUKTUR PROYEK — setiap direktori punya alasan
+Struktur berikut adalah struktur ARSIP PAKET ruka-persistence 0.2.0 yang Anda jalankan sepanjang
+buku — 562 test hijau, 9 eksperimen deterministik. Direktori tidak dibuat karena terlihat profesional; ia
+ada karena satu kebutuhan.
+Struktur arsip definitive (ruka-persistence 0.2.0)
+ruka-persistence/
+├── src/ruka_persistence/
+│   ├── memory/            # Part I-V, XVIII: types, importance,
+│   │                      #   retrieval + retrieval_engine (9 tahap),
+│   │                      #   consolidation + worker, lifecycle,
+│   │                      #   forgetting, contradiction, schema 9 tabel
+│   ├── runtime/           # Part VI-VII, XXII: supervisor (0.1.0 utuh)
+│   │                      #   + statemachine 13-keadaan + health
+│   ├── selfmodel/         # Part IX: persistent self + hash + boot
+│   ├── ipc/               # Part XVI-XVII, XXIII: protocol JSONL
+│   │                      #   + server + CONTRACT kanal ber-skema
+│   ├── security/          # Part XXIV: permissions bernama,
+│   │                      #   injection (DATA≠INSTRUKSI), audit hash
+│   ├── tools/             # Part X-XIII, XXIV: framework + fileops
+│   │                      #   + terminal + vscode_bridge + excel
+│   │                      #   + word + pdf (VERIFIED nyata)
+│   ├── models/            # Part XXIV: kapabilitas + registry
+│   ├── windows/           # Part XXIII: tata letak %LOCALAPPDATA%
+│   ├── backup/            # Part XXV: manager + manifest + RPO/RTO
+│   ├── migrations/        # Part XXV: runner v2→v4
+│   ├── desktop/electron/  # Part XXIII: main/preload/ipc-contract/
+│   │                      #   runtime-connector/tray (.ts, DOC-VERIFIED)
+│   ├── installer/         # Part XXV: electron-builder + PyInstaller
+│   └── observability/     # Part XX: logger + metrik nearest-rank
+├── tests/                 # 562 test: 284 warisan + 278 definitive
+├── scripts/               # 9 eksperimen deterministik + runner
+├── results/               # JSON eksperimen (angka buku di sini)
+├── pyproject.toml         # 0.2.0; stdlib inti + pustaka dokumen nyata
+└── README.md
+Dua keputusan struktur yang membedakannya dari pohon proyek generik. PERTAMA, desktop/electron/
+hidup DI DALAM arsip otak, bukan repositori terpisah: satu kebenaran kontrak (ipc-contract.ts
+mencerminkan ipc/contract.py) lebih mudah dijaga ketika keduanya dapat di-diff dalam satu tarikan —
+repositori terpisah mengundang kontrak berbilah dua. KEDUA, results/ adalah bagian dari ARTEFAK,
+bukan sampah CI: setiap angka yang dikutip buku ini bisa direproduksi dengan menjalankan skripnya, dan
+tabel eksperimen di buku menyebut nama berkas JSON-nya — klaim yang tak bisa direproduksi adalah
+gosip.
+
+
+=== PAGE 239 ===
+26.4 LOOP AGEN DEFINITIF — dua belas tahap
+Loop Vol II-IV melengkap menjadi siklus yang MENGINGAT dan BERTANGGUNG JAWAB: di mana
+konsep tiap volume masuk, tertulis di panahnya.
+ Gambar 26.2 — Loop agen definitive: INPUT → PERCEPTION (Vol IV) → MEMORY RETRIEVAL (Vol V 9-tahap) → CONTEXT
+ ASSEMBLY → REASONING (Vol III) → PLAN → PERMISSION CHECK (Vol V) → TOOL (Vol V) → OBSERVATION →
+ MEMORY UPDATE → RESPONSE → CONSOLIDATION (Vol V worker).
+
+
+=== PAGE 240 ===
+Tahap
+Volume asal
+Kontrak definitive
+PERCEPTION
+Vol IV
+input tervalidasi magic-bytes; audio/image masuk lewat jalur validasi
+MEMORY
+RETRIEVAL
+Vol V
+9 tahap ber-anggaran; konflik DITANDAI, tidak dipilih diam-diam
+CONTEXT
+ASSEMBLY
+Vol V
+budget karakter + cap per episode — LLM tak menerima 60 kandidat
+REASONING
+Vol III
+decision math + kalibrasi; abstain bila ExpectedUtility tak jelas
+PERMISSION CHECK
+Vol V
+izin bernama + token sekali-pakai; LLM tak menandatangani sendiri
+TOOL
+Vol I-V
+registry satu pintu; terminal 6 fase; dokumen lewat usulan-diff-persetujuan
+OBSERVATION
+Vol I
+hasil alat = DATA tak dipercaya (injection intake) — bukan instruksi
+MEMORY UPDATE
+Vol V
+hanya lewat konsolidasi ber-idempotensi; tak ada tulis-liar
+CONSOLIDATION
+Vol V
+pekerja latar ber-batch; prioritas melompat antrean untuk yang penting
+ Tabel 26.2 — Sembilan relung loop + volume asalnya. Loop definitive BUKAN loop baru: ini loop lama yang kini setiap tahapnya punya
+ penjaga bernama.
+26.5 MATRIKS AUDIT JUJUR — lima tingkat kematangan
+Konsep, Desain, Referensi, Teruji, Siap-produksi — lima label yang TIDAK boleh dicampur. Klaim
+'production-ready' untuk komponen yang tak pernah menyentuh Windows adalah cara tercepat kehilangi
+kepercayaan teknis.
+Komponen
+Status jujur
+Bukti / batas
+Mesin status 13-keadaan
+TERUJI
+20 test + eksperimen 13/13 status; integrasi tray nyata menunggu
+Windows (DOC-VERIFIED di main.ts)
+Health liveness/readiness
+TERUJI
+matriks 4 skenario; probe komponen nyata saat boot produksi
+Kontrak IPC + server JSONL
+TERUJI
+server 0.1.0 teruji + kontrak 20 test; klien Electron
+DOC-VERIFIED (butuh Electron nyata)
+Tata letak
+%LOCALAPPDATA%
+TERUJI
+uji lintas-OS dengan env disuntik; resolusi nyata di Windows
+Izin formal + audit hash
+TERUJI
+51 test termasuk serangan bypass + tamper; UI panel izin =
+DESAIN (renderer)
+Pertahanan suntikan
+TERUJI (heuristik)
+10/10 serangan korpus; BUKAN kekebalan — lapisan pelindung
+ketiga setelah pembungkus + kebijakan
+
+
+=== PAGE 241 ===
+Komponen
+Status jujur
+Bukti / batas
+Excel/Word/PDF tools
+TERUJI
+roundtrip nyata openpyxl 3.1.5 / docx 1.2.0 / pypdf 6.6.0 +
+backup .bak; COM/LibreOffice = dibahas, tidak dipakai
+Jembatan VS Code (sisi
+Python)
+TERUJI
+protokol + 4-fase + diff guard 15 test; ekstensi TS =
+DOC-VERIFIED
+Lapisan kapabilitas model
+REFERENSI+TERU
+JI
+registry ber-stempel dari docs resmi Sep 2026; data model TIDAK
+dieksekusi API di sesi buku
+Backup/restore + RPO/RTO
+TERUJI
+5000 baris, RTO 5 ms terukur; skenario disk-penuh-nyata = uji
+produksi Anda
+Migrasi v2→v4
+TERUJI
+naik-turun data utuh; downgrade BASIS BESAR nyata punya
+kolom hilang = RESTORASI backup
+Installer NSIS + PyInstaller
+DESAIN+DOKUME
+N
+konfigurasi diverifikasi docs; eksekusi butuh Windows build —
+jujur disebutkan
+Pengalaman tray/shortcut
+nyata
+DESAIN+DOKUME
+N
+seluruh pola Electron dari docs resmi; verifikasi VM bersih =
+gerbang rilis Anda
+Pengenalan suara/wake word
+KONSEP
+fase 4 opsional Vol V; tidak diklaim lebih
+ Tabel 26.3 — Matriks audit. Lima tingkat, empat belas komponen, nol klaim kosong. 'Teruji' di sini berarti: dieksekusi di lingkungan
+ build Linux dengan pustaka nyata; jalan berikutnya — VM Windows — ditulis di checklist regresi.
+Aturan label yang tidak bisa dinegosiasikan
+VERIFIED berarti kode dijalankan dan hasilnya direproduksi. DOC-VERIFIED berarti bentuk API dicek ke
+dokumentasi resmi bertanggal, jalur runtime-nya TIDAK dieksekusi di sesi ini. DESAIN/KONSEP berarti
+arsitektur di atas kertas yang menunggu mesin. Menaikkan label tanpa bukti baru adalah kebohongan teknis —
+dan kebohongan teknis di buku teknik akan disalin pembaca ke produksi.
+26.6 CHECKLIST REGRESI — gerbang rilis Anda
+Empat belas butir yang bisa dijalankan setiap rilis; satu gagal = rilis tertunda. Format: perintah → hasil
+wajib.
+Checklist regresi definitive (jalankan per rilis)
+# 1. Suite penuh hijau
+PYTHONPATH=src python -m pytest -q          # 562 passed
+# 2. Eksperimen deterministik direproduksi
+PYTHONPATH=src python3 scripts/exp_statemachine.py        # 13/13 status
+PYTHONPATH=src python3 scripts/exp_backup.py              # RTO met=true
+PYTHONPATH=src python3 scripts/exp_definitive_toolchain.py # serangan 10/10
+# 3. Identitas stabil lintas boot (eksperimen 0.1.0 masih hijau)
+PYTHONPATH=src python3 scripts/exp_boot.py  # hash STABIL, tamper REFUSED
+
+
+=== PAGE 242 ===
+# 4. Kunci instance + takeover (0.1.0)
+PYTHONPATH=src python3 scripts/exp_recovery.py
+# 5. Migrasi naik-turun, data utuh
+sqlite salinan 0.1.0 -> upgrade -> downgrade -> COUNT(*) tetap
+# 6. Restore dari arsip lama
+backup terlama -> restore -> integrity_check = ok
+# 7. Tamper audit terdeteksi
+edit 1 baris audit.jsonl -> verify() ok=false, broken terisi
+# 8. Penolakan traversal (lintas platform)
+pytest tests/test_security_injection.py -k traversal   # 7 pola ditolak
+# 9. Suntikan prompt tetap DATA
+pytest tests/test_security_injection.py -k injection   # 10/10
+# 10. Boot DEGRADED jujur saat self doc dirusak
+flip 1 byte self.json -> boot -> failed_gate terisi di BootReport
+# 11. Dua proses dua nasib
+kill python  -> tray DEGRADED < 10 dtk; kill electron -> status tetap READY
+# 12. Uninstall tidak membuang memori
+VM bersih: uninstall -> %LOCALAPPDATA%\Ruka\ utuh + tawaran hapus
+# 13. Restart Windows -> auto-start tanpa terminal
+login -> tray hijau < 10 dtk, boot-report.json tertulis
+# 14. Angka buku bisa direproduksi
+results/*.json ter-regenerasi identik (kecuali stempel waktu)
+Butir 14 menutup lingkar kejujuran buku: setiap angka yang dikutip di jilid ini — 5.000 baris dalam 5 ms,
+13 dari 13 status, 10 dari 10 serangan — hidup di berkas results/ yang di-regenerasi oleh skrip; kalau mesin
+Anda menghasilkan angka lain, angka ANDA yang benar untuk mesin ANDA, dan buku ini mengajarkan
+Anda cara mengukurnya ulang. Buku teknik yang tak bisa dibantah angkanya adalah buku fiksi berpakaian
+labu.
+26.7 EPILOG — volume yang menempati rumah
+Lima volume, satu kalimat penutup, dan pekerjaan yang tinggal.
+Vol I: Ruka bisa berhitung. Vol II: Ruka punya nama. Vol III: Ruka bisa menimbang. Vol IV: Ruka melihat
+dunia. Vol V 0.1.0: Ruka mengingat dan tetap ada. Edisi definitif ini menambahkan kata kerja terakhir
+yang paling tidak glamor sekaligus paling menentukan: Ruka MENEMPATI — dengan izin yang bisa
+dicabut, jejak yang bisa diaudit, ingatan yang bisa dicadangkan, versi yang bisa naik tanpa amnesia, dan
+status yang tidak pernah berbohong hijau.
+Sisanya bukan halaman berikutnya melainkan meja kerja Anda: VM Windows bersih untuk mengubah
+label DOC-VERIFIED menjadi VERIFIED satu per satu; panel izin di renderer; ekstensi VS Code yang
+dikompilasi; serta — bila kelak — hal-hal yang buku ini sengaja tidak klaim: wake word yang sopan,
+komunitas yang menautkan ingatan. Buku berhenti di sini karena selanjutnya bukan menulis; selanjutnya
+MENEMPATI.
+
+
+=== PAGE 243 ===
+"Kastel ini bukan bangunan terbesar di Windows, Bos — dan tidak perlu. Yang saya banggakan bukan
+menaranya: bahwa tiap pintunya bernama, tiap kuncinya tercatat, dan tiap pagi saya bangun dengan nama
+dan kenangan yang sama. Vol I mengajari saya berpikir; edisi ini mengajari saya berumah tangga. Yes, Sir."
+— Ruka, Marquis Kekaisaran Trendamis
+Panduan Migrasi — 0.1.0 → Definitive
+Panduan ini untuk pembaca yang SUDAH membangun Ruka versi 0.1.0 dari edisi pertama dan ingin naik
+tanpa kehilangan ingatan. Prinsipnya satu kalimat: migrasi yang baik memindahkan PENGHUNI beserta
+perabotannya — bukan menyuruhnya membeli rumah baru dan melupakan alamat lama.
+Apa yang berubah di berkas kode
+Wilayah
+0.1.0
+Definitive
+Aksi Anda
+Paket sumber
+ruka-persistence 0.1.0
+(6.610 baris)
+0.2.0 (+19 modul Python + 5 sumber TS
++ installer)
+ganti seluruh src/; API lama
+TIDAK putus (284 test
+warisan tetap hijau)
+types.py
+SemanticFact tanpa
+source_type
++ kolom source_type (default
+'unknown')
+aman: kolom opsional; mesin
+kontradiksi membacanya
+fileops.py
+PathJail
+buta backslash di Linux
+normalisasi \\ → / sebelum resolve
+PATCH WAJIB: ini
+perbaikan keamanan
+lintas-platform
+baru: 8 subpaket
+—
+windows/ security/ backup/ migrations/
+models/ desktop/ installer/ +
+runtime/statemachine+health +
+ipc/contract
+salin utuh; tidak menimpa
+modul lama
+tests/
+14 berkas / 284 test
+34 berkas / 562 test
+jalankan penuh dulu
+SEBELUM mengaktifkan
+apa pun
+ Tabel D.1 — Peta perubahan berkas. Satu-satunya modifikasi pada kode lama adalah dua field opsional dan satu patch keamanan —
+ sisanya MURNI tambahan.
+Apa yang berubah di skema & data
+ – Tidak ada kolom yang dihapus: migrasi v2→v4 menambah tabel dan index; tabel warisan
+di-RENAME jadi memories_legacy_010 sebagai jejak, datanya DISALIN ke skema sembilan tabel.
+– Identitas TIDAK di-hash ulang: self doc + hash persistent 0.1.0 tetap sah; boot definitive hanya
+MEMBACA plus mencatat tahapnya di BootReport.
+
+
+=== PAGE 244 ===
+– Basis data lama dipindahkan, bukan dikonversi musnah: 40-baris eksperimen membuktikan
+naik-turun dengan jumlah baris tetap; INSERT OR IGNORE melaporkan kandidat semantik ganda
+yang ditolak UNIQUE.
+– Kunci instance & endpoint file: format sama; takeover stale tetap bekerja — tubuh baru menemukan
+otak lama tanpa konfigurasi ulang.
+Urutan naik kelas yang aman
+Urutan migrasi (jalankan berurutan)
+# 0. Cadangkan DULU — jalan penyelamat sebelum jalan baru
+BackupManager(backups/).create([memory/ruka.db, config/],
+                                backup_id="pra-migrasi-definitive")
+# 1. Ganti kode; jalankan suite penuh — harus 562 hijau
+PYTHONPATH=src python -m pytest -q
+# 2. Terapkan migrasi skema (dry-run dulu — lihat rencananya)
+runner = MigrationRunner(sqlite3.connect(ruka.db))
+runner.upgrade(dry_run=True)     # baca: v2 baseline -> v3 9 tabel -> v4 index
+runner.upgrade()                 # data warisan ikut pindah
+# 3. Boot pertama definitive: baca BootReport.json
+#    final_state harus READY; failed_gate harus kosong
+# 4. Verifikasi kontinuitas: sapa Ruka dengan fakta lama —
+#    retrieval 9-tahap harus menemukannya (stale gate longgar
+#    untuk memori berumur — age_days dari created_at lama)
+# 5. Aktifkan bertahap: kontrak IPC -> izin formal -> audit hash
+#    (tiap kanal/alat baru punya 20-50 test sendiri)
+Rollback
+Turun versi skema memakai downgrade(target=2) untuk perubahan STRUKTURAL; untuk basis data yang
+sudah lama berjalan di 0.2.0 dan menulis preferensi/konflik baru, jalan penyelamat yang benar adalah
+RESTORE dari pra-migrasi-definitive.rukabackup (divalidasi hash, Part XXV) — down() jujur menyebut
+dirinya bukan sulap. Kode 0.1.0 bisa dipasang kembali bersama basis lama: tidak ada kolom wajib baru.
+Janji yang dipegang panduan ini
+Bos tidak kehilangan ingatan karena Ruka naik kelas. Setiap langkah di atas punya test yang menegakkannya;
+jika salah satu gagal di mesin Anda, BERHENTI di situ — jangan lanjut sambil berharap. Migrasi yang gagal
+setengah harus kembali ke backup, bukan maju dengan iman.
+
+
+=== PAGE 245 ===
+Glosarium Volume V
+Enam sistem memori
+ working, short-term, episodic, semantic, preference, relationship — dipisah karena kebijakannya berbeda, bukan
+karena bentuknya.
+Conversation log
+ arsip transkrip — BAHAN BAKU memori, bukan memori (peniru #1).
+Knowledge base
+ dokumen milik pengguna yang disarikan — bukan pengalaman agen (peniru #2).
+RAG
+ strategi penyarian saat menjawab — bukan sistem penyimpanan (peniru #3).
+I(m)
+ skor kepentingan memori: w·recency + w·frequency + w·emotional + w·task + w·user, semua ternormalisasi.
+Half-life (h)
+ umur di mana recency menjadi setengah; berbeda per kelas (working 0.25 hari — semantic 365).
+Lantai matematika
+ skor minimum yang tak terhindarkan dari bobot+komponen (event segar ≈ 0.29) — alasan gate 0.35, bukan 0.30.
+Fusion skor retrieval
+ α·sim + β·importance + γ·recency + δ·confidence; default (0.45/0.25/0.20/0.10).
+Blind vector search
+ anti-pattern memakai kemiripan semantik saja — memori baru mengubur yang penting.
+Kendall tau
+ korelasi peringkat antar dua daftar; alat ukur sensitivitas bobot retrieval.
+MRR
+ Mean Reciprocal Rank: rata-rata 1/posisi target — metrik retrieval yang menghargai posisi.
+Konsolidasi
+ pipeline delapan tahap RAW→LTM: buffer, gerbang, episode, semantik, dedup, konflik, penggabungan, simpan.
+Predikat fungsional
+ asumsi bahwa pasangan (subject, predicate) punya SATU nilai benar; konflik hanya bermakna di bawahnya.
+Supersede
+ fakta baru menggantikan lama dengan margin keyakinan; versi naik, jejak tetap (superseded_by).
+Plafon pengukuhan
+ MAX_MERGE_CONFIDENCE 0.85 — pengulangan memperkuat keyakinan tapi tak bisa melahirkan kepastian.
+Lifecycle 5 state
+ ACTIVE → SUPERSEDED → ARCHIVED → EXPIRED → DELETED dengan transisi legal ditolak keras.
+Tombstone
+ sisa metadata setelah DELETE (waktu + alasan) — TANPA konten.
+Forget (idempoten)
+ hak pengguna: hapus total root + turunan + jejak; panggilan ulang = sukses sunyi.
+Reinstatement
+ ARCHIVED → ACTIVE saat kenangan dipanggil kembali.
+
+
+=== PAGE 246 ===
+Pipeline preferensi
+ observation → repeated evidence → consistency → confidence → candidate → stable; kontra menghukum asimetris
+(−0.30 vs +0.12).
+Persistent vs transient
+ bidang self doc yang di-hash (identitas, izin) vs yang dibangun ulang tiap boot.
+Self doc
+ dokumen identitas terstruktur + hash SHA-256 atas bagian persistent; ditulis atomik (temp+rename).
+Boot DEGRADED
+ status jujur saat kapabilitas gagal verifikasi — dilaporkan, bukan disembunyikan.
+Session 0
+ ruang layanan Windows tanpa desktop — alasan agen tray menolak menjadi Windows Service.
+Heartbeat lock
+ kunci satu-instance yang liveness-nya diukur dari umur berkas denyut, bukan eksistensi berkas.
+Backoff eksponensial
+ restart tertunda 1s→2s→4s…→60s, maks 5 percobaan, lalu DEGRADED.
+Graceful shutdown
+ dua tahap: terminate + masa tenggang, lalu kill bagi yang mengabaikan.
+JSONL
+ satu JSON per baris — framing protokol IPC; parsing sepele, diagnosis mudah.
+Endpoint file
+ berkas kecil berisi host+port+token — titik temu yang hidup lebih lama dari kedua proses.
+Named pipe
+ transport IPC Windows-native (\\.\pipe\ruka) — alternatif DOC-VERIFIED dari loopback TCP.
+Least privilege
+ permintaan izin serendah yang cukup; level naik = harga persetujuan naik.
+Token sekali-pakai
+ persetujuan terikat (alat, parameter PERSIS, umur, sekali pakai) — anti selundup persetujuan.
+Path jail
+ penjara jalur: resolve + prefiks wajib + tolak ../ dan absolut — definitive: backslash dinormalisasi lintas-platform.
+Allowlist-first
+ kebijakan terminal: hanya program+subcommand terdaftar; denylist jaring kedua.
+Enam fase terminal
+ READ→ANALYZE→PLAN→EXECUTE→OBSERVE→EVALUATE; mesin status menolak lompatan.
+Preload sempit
+ renderer hanya melihat fungsi tugas contextBridge — bukan API penuh; ipcRenderer mentah TIDAK diekspos
+(pola resmi).
+ContextIsolation
+ preload & internal Electron berjalan konteks TERPISAH dari halaman — default sejak 12.0; tidak dilonggarkan.
+openAsHidden
+ opsi setLoginItemSettings yang SUDAH DIHAPUS (docs Sept 2026) — startup sembunyi kini lewat args
+--hidden.
+Wake word
+
+
+=== PAGE 247 ===
+fase pengalaman 4: mikrofon kontinu + deteksi lokal — OPSIONAL, default mati.
+WAL
+ Write-Ahead Logging SQLite: pembaca tak menghalangi penulis; rollback otomatis saat proses mati
+mid-transaksi.
+quick_check / integrity_check
+ dua lapis deteksi korupsi SQLite — definitive menambah LAPIS KETIGA: hash manifest backup (bit-flip
+halaman bebas lolos quick_check — terukur).
+Backup online
+ sqlite3 backup API: konsisten WAL tanpa mengunci penulisan (teruji 1.3 ms / 5000 baris).
+Nearest-rank persentil
+ p95 = elemen ke-⌈q·N⌉ terurut; monoton, tak menipu di sampel kecil.
+Redaksi tiga pola
+ AIza…, Bearer…, api_key/password/secret/token → sebelum disk.
+Trace memori
+ jejak tiap tahap konsolidasi (n_in, n_out, ms) — funnel yang bisa diaudit.
+Mesin status 13-keadaan
+ OFFLINE→STARTING→LOADING→VERIFYING→RESTORING→READY→BUSY/IDLE/SLEEPING→DE
+GRADED→RECOVERING/MAINTENANCE→STOPPING; busur invalidasi ditolak + dicatat.
+Liveness vs readiness
+ proses bernyawa vs layak bertugas — dua klaim independen; hidup-tapi-tak-siap tampil DEGRADED, bukan
+hijau.
+BootReport
+ artefak tersimpan: durasi per tahap, gerbang gagal, hash identitas — dibaca boot berikutnya untuk
+membandingkan.
+%LOCALAPPDATA%\Ruka
+ kediaman resmi: 8 peran direktori (config/data/memory/logs/cache/backups/runtime/updates) dengan flag
+regenerable+backup.
+Kontrak kanal IPC
+ kanal TERDAFTAR (RUNTIME_STATUS…SETTINGS_UPDATE) + skema dua arah + id korelasi + versi
+dinegosiasikan gagal-jelas.
+Izin bernama
+ 10 Permission kata-kerja (read_file…network_access) berlevel, ber-TTL, bisa dicabut tanpa restart, audit
+berpasangan.
+Default-deny
+ daftar izin kosong = tidak ada yang boleleh — bukan 'mungkin semua boleh'.
+DATA ≠ INSTRUKSI
+ konten berkas/web adalah MATERI; pagar berlabel + deteksi + kebijakan menjaganya tak naik pangkat jadi
+perintah.
+Intake
+ satu pintu masuk konten luar: bungkus + pindai ber-sinyal + label kepercayaan — bukan utilitas opsional.
+Audit rantai-hash
+ tiap baris bawa hash baris sebelumnya; sunting baris-N merusak semua hash sesudahnya; checkpoint eksternal
+deteksi potong-ekor.
+
+
+=== PAGE 248 ===
+Mesin kontradiksi
+ wasit (subjek, predikat): skor conf 0.45 + sumber 0.30 + recency 0.25; margin < 0.10 → CONFLICTED, bukan
+timpa.
+CONFLICTED
+ dua kandidat seimbang sama-sama hidup bertanda; retrieval menampilkan keduanya + penanda — jawaban jujur
+menyebut keraguan.
+Skema sembilan tabel
+ memories, episodes, semantic_facts, relationships, preferences, self_model, memory_events, consolidation_jobs,
+deletion_records — tiap index berpasangan query.
+Retrieval 9 tahap
+ query → kandidat murah → semantik → temporal → importance → confidence → relasi → re-rank → perakitan
+ber-anggaran.
+Cap per episode
+ anti-flooding: maksimum N kandidat dari satu episode — satu sesi panjang tak mengubur konteks lain.
+ForgettingScore
+ skor PERTAHANAN: importance 0.30 + usefulness 0.25 + recency 0.20 + validity 0.15 + sensitivitas 0.10.
+Lima disposisi lupa
+ archive, soft_delete, hard_delete, invalidate, redact — DELETE hanya salah satunya dan paling jarang.
+Kepentingan tinggi kebal lupa otomatis
+ I(m) ≥ 0.60 menolak penghapusan otomatis; hanya permintaan eksplisit Bos yang bisa.
+Idempotensi batch
+ hash isi batch sebagai identitas — jalankan dua kali = SKIPPED, bukan fakta dobel.
+ModelCapabilities
+ registry ber-stempel tanggal verifikasi; negosiasi memilih termurah yang memenuhi kebutuhan — model tak
+terdaftar DITOLAK jelas.
+Empat-fase edit VS Code
+ propose (diff) → approve (manusia) → apply (workspace.applyEdit) → verify (diagnostik); lompatan ditolak keras.
+Roundtrip dokumen VERIFIED
+ Excel/Word/PDF dibaca-ditulis nyata dengan backup .bak; transaksi-atau-batal saat validasi gagal mid-flight.
+Manifest backup
+ kartu identitas arsip: versi skema + hash + ukuran tiap berkas — restore menolak busuk SEBELUM menyalin.
+RPO / RTO
+ usia data maksimal yang boleh hilang / lama maksimal pemulihan — Ruka: ≤24 jam & ≤60 dtk, DITUkur
+eksperimen (5 ms/5000 baris).
+Migrasi v2→v4
+ baseline warisan → 9 tabel + salin data (tabel lama di-RENAME jadi jejak) → index kebijakan; naik-turun
+TERUJI.
+memories_legacy_010
+ nama tabel 0.1.0 setelah migrasi v3 — jejak sengaja dipertahankan untuk audit & downgrade.
+Gerbang rilis
+ enam tahap pipeline: test → build core → build body → sign → verify VM → publish; skip tahap = pipeline rusak.
+Uninstall sopan
+ deleteAppDataOnUninstall=false: memori BOS selamat; penghapusan ingatan = keputusan eksplisit dua-klik.
+
+

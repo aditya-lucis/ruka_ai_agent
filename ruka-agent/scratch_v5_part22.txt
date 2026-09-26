@@ -1,0 +1,758 @@
+=== PAGE 142 ===
+11. lintas waktu (bukan mengingat — belajar).
+VOLUME V · THE PERSISTENT MIND · PART XXII
+The Companion Runtime
+"“Lima status hanya cukup untuk menjaga anak-anak saya, Bos. Tiga belas status
+diperlukan supaya saya bisa menjelaskan diri sendiri — jujur — setiap saat.”"
+Supervisor 0.1.0 menjawab 'anak-anak hidup?'. Companion Runtime menjawab pertanyaan
+yang lebih sulit: 'Ruka sedang APA — dan boleh dipercaya-kah klaim itu?'. Mesin status
+13-keadaan dengan transisi legal yang ditolak keras, health liveness-vs-readiness yang tak
+tertukar, dan laporan boot/shutdown yang TERSIMPAN sebagai artefak.
+22.1 WHY — status yang bisa dipercaya adalah prasyarat UI yang jujur
+Supervisor 0.1.0 mengenal lima status: STOPPED, STARTING, READY, DEGRADED,
+SHUTTING_DOWN. Cukup untuk mengawasi anak. Tidak cukup untuk MENJELASKAN diri sendiri ke
+tray, ke jendela, ke Bos.
+Bayangkan tray icon Ruka hanya punya dua pilihan: hijau atau merah. Proses hidup tapi memori gagal
+terpasang — hijau? Maka Bos mengobrol dengan penghuni yang kehilangan ingatan, dan baru sadar lima
+menit kemudian. Merah? Maka Bos me-restart sesuatu yang sebenarnya baik-baik saja. Status yang miskin
+memaksa UI berbohong — dan kebohongan pertama yang ditangkap pengguna adalah kebohongan terakhir
+yang dimaafkan.
+Masalahnya bukan jumlah ikon; masalahnya TIDAK ADA SUMBER KEBENARAN TUNGGAL. Tray
+membaca variabel sendiri, health loop punya flag sendiri, supervisor punya enum sendiri — tiga penulis,
+nol kontrak. Companion Runtime menutup lubang itu dengan satu mesin status yang HANYA bisa ditulis
+lewat transisi tervalidasi, dibaca semua pihak, dan mencatat setiap penolakan. Bagian ini adalah lapisan
+yang membuat Part VI (supervisor) dan Part VIII (tubuh Electron) bisa saling percaya.
+Aspek
+Volume I (ruka-agent v0.2)
+Volume II (v0.3 — evolusi)
+Status runtime
+Vol V 0.1.0: 5 status di RuntimeSupervisor (S
+TOPPED/STARTING/READY/DEGRADE
+D/SHUTTING_DOWN), internal, tanpa
+penegakan transisi.
+Definitive: 13 status ber-enum publik + 30 busur
+legal + penolakan terekam + RuntimeHealth
+(liveness vs readiness) +
+BootReport/ShutdownReport sebagai artefak
+tersimpan.
+ Evolusi V.22 — dari 'mengawasi anak' ke 'menjelaskan diri'.
+
+
+=== PAGE 143 ===
+22.2 WHAT — tiga belas keadaan kehidupan
+Keadaan dipilih dari PENGALAMAN pengguna, bukan dari teori automata: setiap string harus bisa
+dijawab Bos dengan 'lalu apa yang harus saya lakukan?'
+Status
+Arti
+Tray / UI yang jujur
+OFFLINE
+proses tidak ada
+ikon abu; 'Ruka offline'
+STARTING
+proses lahir, kunci instance
+ikon kuning berdenyut
+LOADING
+baca identitas + konfigurasi
+'membangunkan ingatan…'
+VERIFYING
+uji kapabilitas + integritas hash
+'memeriksa diri…'
+RESTORING
+pasang memori + tool registry
+'memasang memori…'
+READY
+menunggu Bos
+hijau; siap menerima tugas
+BUSY
+mengeksekusi tugas (agent loop)
+hijau + spinner 'bekerja'
+IDLE
+lama tanpa input, masih peka
+hijau redup
+SLEEPING
+aktivitas ditanggalkan
+bulan; 'bangunkan dengan Ctrl+Shift+Space'
+DEGRADED
+hidup tapi cacat — dilaporkan
+kuning; panel 'apa yang rusak'
+RECOVERING
+mencoba pulih (backoff aktif)
+kuning berdenyut
+MAINTENANC
+E
+backup / migrasi terjadwal
+kunci inggris; 'jangan dimatikan'
+STOPPING
+dua tahap: sopan lalu tegas
+memudar
+ Tabel 22.1 — Tiga belas keadaan. Peta lengkap 30 busur legal hidup di LEGAL_TRANSITIONS; busur yang tidak ada di peta TIDAK
+ ADA — tidak ada 'mungkin boleh'.
+Tiga keputusan di tabel ini sering ditanya dan layak dijawab terbuka. Pertama, mengapa SLEEPING
+terpisah dari OFFLINE: tidur menanggalkan AKTIVITAS, bukan STATUS — self doc tetap dimuat,
+memori tetap terpasang, wake kembali ke READY tanpa LOAD ulang. Kedua, mengapa IDLE dan
+SLEEPING dua-duanya: IDLE adalah keputusan BATERAI-KEPUTUSAN waktu (menit), SLEEPING
+keputusan energi (jam); memcampurnya membuat tray berkedip tanpa makna. Ketiga, mengapa
+MAINTENANCE eksplisit: backup dan migrasi yang berjalan seolah 'READY' adalah cara terbaik
+membuat Bos mematikan Ruka di tengah menulis backup — kerusakan yang kelihatannya ajaib.
+
+
+=== PAGE 144 ===
+Gambar 22.1 — Mesin status 13-keadaan: rantai boot, hidup sehari (task/idle/sleep), dan jalur kegagalan-pemulihan. Busur yang tidak
+ tergambar TIDAK ADA: DEGRADED pulih hanya lewat RECOVERING yang sukses.
+22.3 DESIGN — transisi adalah kontrak, bukan saran
+Setiap busur punya NAMA METHOD yang berwenang memicunya. Keluar jalur = IllegalTransition yang
+dilempar, dicatat sebagai 'rejected', dan dihitung — karena pola penolakan berulang adalah sinyal bug UI
+atau upaya menyelundupkan status.
+Prinsip kerjanya tiga kata: tolak, catat, bertahan. TOLAK — transisi tak dikenal tidak dikoreksi diam-diam
+('maksudnya sih READY, ya sudahlah') karena koreksi diam adalah cara bug bersembunyi paling awet.
+CATAT — setiap penolakan masuk riwayat dengan status asal, status yang dicoba, dan nama pintu; audit
+mencari pola, bukan satu kejadian. BERTAHAN — status TIDAK berubah saat penolakan; mesin tidak
+bisa dipaksa ke keadaan lain lewat spam.
+Aturan penting kedua: DEGRADED tidak punya jalan pintas ke READY. 'Yakin sudah baikan' bukan
+transisi — pemulihan harus melewati RECOVERING yang berhasil, atau exit. Ini ketat kelihatannya
+sepele, tapi inilah yang mencegah status berkelip-kelip hijau-kuning-hijau saat subsistem menggantung:
+penyembuhan pun harus dibuktikan, bukan diharapkan.
+22.4 IMPLEMENTATION — mesin status
+Satu kelas, satu sumber kebenaran; mengubah status HANYA lewat transition() yang divalidasi.
+
+
+=== PAGE 145 ===
+Listing 22.1 — RuntimeStatus + peta busur legal + IllegalTransition
+"""Mesin status runtime — 13 keadaan kehidupan Ruka (Part XXII).
+Supervisor 0.1.0 hanya mengenal 5 status (STOPPED/STARTING/READY/
+DEGRADED/SHUTTING_DOWN) — cukup untuk mengawasi anak, terlalu miskin
+untuk MENJELASKAN diri sendiri ke tray, ke UI, ke Bos. Definitive
+Edition membedah hidupnya Ruka jadi 13 keadaan dengan TRANSISI
+LEGAL yang ditolak keras bila melenceng — karena status yang bisa
+dipercaya adalah prasyarat UI yang jujur dan recovery yang benar.
+                 OFFLINE
+                    | boot()
+                    v
+                 STARTING ──gagal──> STOPPING
+                    | mounted()
+                    v
+                 LOADING ──identitas rusak──> DEGRADED
+                    | loaded()
+                    v
+                 VERIFYING ──kapabilitas gagal──> DEGRADED
+                    | verified()
+                    v
+                 RESTORING ──memori tak terpasang──> DEGRADED
+                    | restored()
+                    v
+        task() ┌──> READY <── wake() ─── SLEEPING <── sleep() (dari IDLE)
+        done() │    │  ^ input()                      │
+                v    │ idle()                          |
+                BUSY─┘ IDLE ───────────────────────────┘
+        (READY/BUSY/IDLE) ──kegagalan──> DEGRADED
+        DEGRADED ──mulai pemulihan──> RECOVERING ──sukses──> READY
+        RECOVERING ──gagal lagi──> DEGRADED
+        DEGRADED ──jadwalkan perawatan──> MAINTENANCE ──selesai──> RECOVERING
+        semua ──exit()──> STOPPING ──> OFFLINE
+Tiga kaidah desain:
+  1. TRANSISI, BUKAN DAFTAR BEBAS: setiap busur punya alasan bisnis
+     (method yang menamainya). Keluar jalur = IllegalTransition,
+     dicatat, TIDAK diam-diam dikoreksi.
+  2. SLEEPING ≠ OFFLINE: tidur MENANGGALKAN AKTIVITAS, bukan status.
+     Wake kembali ke READY tanpa LOADING ulang — karena self doc dan
+     memori tidak pernah dilepas. (Cold boot ≠ wake: argumen
+     rekayasa, bukan metafora.)
+  3. DEGRADED BUKAN KATA BIASA: masuk dari kegagalan terVERIFIKASI
+     (identitas, kapabilitas, memori), keluar hanya lewat RECOVERING
+     yang sukses atau STOPPING. Tidak ada jalan pintas ke READY —
+     "yakin sudah baikan" bukan transisi.
+"""
+from __future__ import annotations
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+class RuntimeStatus(str, Enum):
+    """13 keadaan — nilai string agar log/JSON langsung terbaca."""
+    OFFLINE = "offline"            # proses tidak ada
+
+
+=== PAGE 146 ===
+    STARTING = "starting"          # proses lahir, kunci instance
+    LOADING = "loading"            # baca identitas + konfigurasi
+    VERIFYING = "verifying"        # uji kapabilitas + integritas
+    RESTORING = "restoring"        # pasang memori + tool registry
+    READY = "ready"                # menunggu Bos
+    BUSY = "busy"                  # mengeksekusi tugas/agent loop
+    IDLE = "idle"                  # lama tanpa input, masih peka
+    SLEEPING = "sleeping"          # aktivitas ditanggalkan
+    DEGRADED = "degraded"          # hidup tapi cacat — dilaporkan
+    RECOVERING = "recovering"      # mencoba pulih (backoff aktif)
+    MAINTENANCE = "maintenance"    # backup / migrasi terjadwal
+    STOPPING = "stopping"          # dua tahap, sopan lalu tegas
+# (dari, ke) -> nama method yang berwenang memicunya.
+LEGAL_TRANSITIONS: dict[tuple[RuntimeStatus, RuntimeStatus], str] = {
+    (RuntimeStatus.OFFLINE, RuntimeStatus.STARTING): "boot",
+    (RuntimeStatus.STARTING, RuntimeStatus.LOADING): "mounted",
+    (RuntimeStatus.STARTING, RuntimeStatus.STOPPING): "abort",
+    (RuntimeStatus.LOADING, RuntimeStatus.VERIFYING): "loaded",
+    (RuntimeStatus.LOADING, RuntimeStatus.DEGRADED): "identity_corrupt",
+    (RuntimeStatus.VERIFYING, RuntimeStatus.RESTORING): "verified",
+    (RuntimeStatus.VERIFYING, RuntimeStatus.DEGRADED): "capability_failed",
+    (RuntimeStatus.RESTORING, RuntimeStatus.READY): "restored",
+    (RuntimeStatus.RESTORING, RuntimeStatus.DEGRADED): "memory_unmountable",
+    (RuntimeStatus.READY, RuntimeStatus.BUSY): "task",
+    (RuntimeStatus.BUSY, RuntimeStatus.READY): "done",
+    (RuntimeStatus.READY, RuntimeStatus.IDLE): "idle_timeout",
+    (RuntimeStatus.IDLE, RuntimeStatus.READY): "input",
+    (RuntimeStatus.IDLE, RuntimeStatus.SLEEPING): "sleep",
+    (RuntimeStatus.SLEEPING, RuntimeStatus.READY): "wake",
+    (RuntimeStatus.READY, RuntimeStatus.DEGRADED): "failure",
+    (RuntimeStatus.BUSY, RuntimeStatus.DEGRADED): "failure",
+    (RuntimeStatus.IDLE, RuntimeStatus.DEGRADED): "failure",
+    (RuntimeStatus.DEGRADED, RuntimeStatus.RECOVERING): "begin_recovery",
+    (RuntimeStatus.RECOVERING, RuntimeStatus.READY): "recovered",
+    (RuntimeStatus.RECOVERING, RuntimeStatus.DEGRADED): "recovery_failed",
+    (RuntimeStatus.DEGRADED, RuntimeStatus.MAINTENANCE): "schedule_maintenance",
+    (RuntimeStatus.MAINTENANCE, RuntimeStatus.RECOVERING): "maintenance_done",
+    (RuntimeStatus.READY, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.BUSY, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.IDLE, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.SLEEPING, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.DEGRADED, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.MAINTENANCE, RuntimeStatus.STOPPING): "exit",
+    (RuntimeStatus.STOPPING, RuntimeStatus.OFFLINE): "stopped",
+}
+class IllegalTransition(RuntimeError):
+    """Transisi tak dikenal — BUG atau serangan, keduanya dicatat."""
+    def __init__(self, src: RuntimeStatus, dst: RuntimeStatus,
+                 attempted_via: str = ""):
+        self.src, self.dst, self.via = src, dst, attempted_via
+        legal = sorted({k[1].value for k in LEGAL_TRANSITIONS
+                        if k[0] == src})
+        super().__init__(
+
+
+=== PAGE 147 ===
+            f"transisi ilegal {src.value} -> {dst.value}"
+            + (f" (via '{attempted_via}')" if attempted_via else "")
+            + f"; dari {src.value} yang legal: {legal or '(tidak ada)'}")
+@dataclass
+class StateEvent:
+    """Satu baris riwayat: transisi legal atau PENOLAKAN ilegal."""
+    ts: float
+    kind: str                       # "transition" | "rejected"
+    from_state: str
+    to_state: str
+    via: str
+    detail: str = ""
+@dataclass
+class RuntimeStateMachine:
+    """Penjaga keadaan tunggal runtime.
+    Satu sumber kebenaran untuk "Ruka sedang apa"; tray membacanya,
+    health membandingkannya, audit mencatatnya. Tidak ada penulis
+    kedua: mengubah status HANYA lewat transition() yang divalidasi.
+    """
+    initial: RuntimeStatus = RuntimeStatus.OFFLINE
+    events: list[StateEvent] = field(default_factory=list)
+    entered_at: dict[RuntimeStatus, float] = field(default_factory=dict)
+    _state: RuntimeStatus = field(default=RuntimeStatus.OFFLINE,
+                                  init=False)
+    _rejections: int = field(default=0, init=False)
+    _clock: object = field(default=time.monotonic, repr=False,
+                           init=False)
+    def __post_init__(self) -> None:
+        self._state = self.initial
+        self.entered_at[self._state] = self._clock()
+    # ---------------------------------------------------------- baca
+    @property
+    def state(self) -> RuntimeStatus:
+        return self._state
+    @property
+    def rejections(self) -> int:
+        return self._rejections
+    def time_in_state(self, now: float | None = None) -> float:
+        t = now if now is not None else self._clock()
+        return t - self.entered_at.get(self._state, t)
+    def is_operational(self) -> bool:
+        """Status yang layak menerima tugas (tray hijau)."""
+        return self._state in (RuntimeStatus.READY, RuntimeStatus.BUSY,
+                               RuntimeStatus.IDLE)
+    def snapshot(self) -> dict:
+        return {
+            "state": self._state.value,
+            "operational": self.is_operational(),
+            "since": round(self.entered_at.get(self._state, 0.0), 3),
+            "seconds_in_state": round(self.time_in_state(), 3),
+            "rejections": self._rejections,
+        }
+    # ---------------------------------------------------------- tulis
+
+
+=== PAGE 148 ===
+    def transition(self, dst: RuntimeStatus, via: str = "",
+                   detail: str = "", *, _now: float | None = None
+                   ) -> RuntimeStatus:
+        """Validasi + jalankan transisi; lempar bila ilegal.
+        Penolakan TIDAK diam: ditulis ke events sebagai "rejected"
+        dan dihitung — pola penolakan berulang adalah sinyal bug UI
+        atau upaya menyelundup status.
+        """
+        key = (self._state, dst)
+        legal_via = LEGAL_TRANSITIONS.get(key)
+        if legal_via is None:
+            self._rejections += 1
+            self.events.append(StateEvent(
+                ts=round(self._clock(), 3), kind="rejected",
+                from_state=self._state.value, to_state=dst.value,
+                via=via, detail=detail or "transisi tak dikenal"))
+            raise IllegalTransition(self._state, dst, via)
+        # Nama method boleh menyertai untuk audit, tapi BUSUR yang
+        # berwenang — via yang tidak cocok dicatat sebagai detail.
+        effective = via or legal_via
+        mismatch = bool(via and via != legal_via)
+        self._state = dst
+        now = _now if _now is not None else self._clock()
+        self.entered_at[dst] = now
+        self.events.append(StateEvent(
+            ts=round(now, 3), kind="transition",
+            from_state=key[0].value, to_state=dst.value,
+            via=effective,
+            detail=(detail + ("; via tidak lazim" if mismatch else ""))
+            .strip("; ")))
+        return self._state
+    def reject_count_for(self, dst: RuntimeStatus) -> int:
+        return sum(1 for e in self.events
+                   if e.kind == "rejected" and e.to_state == dst.value)
+    def history(self, limit: int = 50) -> list[dict]:
+        return [e.__dict__ for e in self.events[-limit:]]
+def boot_sequence(fsm: RuntimeStateMachine,
+                  *, identity_ok: bool = True,
+                  capabilities_ok: bool = True,
+                  memory_ok: bool = True) -> RuntimeStatus:
+    """Sekuens cold-boot kanonik (Part XXII + persistent_self).
+    Melangkah OFFLINE -> READY melalui 4 gerbang; gerbang pertama
+    yang gagal memotong ke DEGRADED dengan alasan spesifik. Setelah
+    proses: tray menampilkan status YANG BENAR, bukan "READY karena
+    prosesnya hidup".
+    """
+    fsm.transition(RuntimeStatus.STARTING, "boot")
+    fsm.transition(RuntimeStatus.LOADING, "mounted")
+    if not identity_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "identity_corrupt",
+                       "hash identitas tidak cocok / dokumen rusak")
+        return fsm.state
+    fsm.transition(RuntimeStatus.VERIFYING, "loaded")
+
+
+=== PAGE 149 ===
+    if not capabilities_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "capability_failed",
+                       "kapabilitas terdaftar gagal verifikasi")
+        return fsm.state
+    fsm.transition(RuntimeStatus.RESTORING, "verified")
+    if not memory_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "memory_unmountable",
+                       "memori tak terpasang / korupsi terdeteksi")
+        return fsm.state
+    fsm.transition(RuntimeStatus.READY, "restored")
+    return fsm.state
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Listing 22.2 — RuntimeStateMachine.transition (validasi, penolakan tercatat, snapshot) (baris 135-223
+dari src/ruka_persistence/runtime/statemachine.py)
+class RuntimeStateMachine:
+    """Penjaga keadaan tunggal runtime.
+    Satu sumber kebenaran untuk "Ruka sedang apa"; tray membacanya,
+    health membandingkannya, audit mencatatnya. Tidak ada penulis
+    kedua: mengubah status HANYA lewat transition() yang divalidasi.
+    """
+    initial: RuntimeStatus = RuntimeStatus.OFFLINE
+    events: list[StateEvent] = field(default_factory=list)
+    entered_at: dict[RuntimeStatus, float] = field(default_factory=dict)
+    _state: RuntimeStatus = field(default=RuntimeStatus.OFFLINE,
+                                  init=False)
+    _rejections: int = field(default=0, init=False)
+    _clock: object = field(default=time.monotonic, repr=False,
+                           init=False)
+    def __post_init__(self) -> None:
+        self._state = self.initial
+        self.entered_at[self._state] = self._clock()
+    # ---------------------------------------------------------- baca
+    @property
+    def state(self) -> RuntimeStatus:
+        return self._state
+    @property
+    def rejections(self) -> int:
+        return self._rejections
+    def time_in_state(self, now: float | None = None) -> float:
+        t = now if now is not None else self._clock()
+        return t - self.entered_at.get(self._state, t)
+    def is_operational(self) -> bool:
+        """Status yang layak menerima tugas (tray hijau)."""
+        return self._state in (RuntimeStatus.READY, RuntimeStatus.BUSY,
+                               RuntimeStatus.IDLE)
+    def snapshot(self) -> dict:
+        return {
+            "state": self._state.value,
+
+
+=== PAGE 150 ===
+            "operational": self.is_operational(),
+            "since": round(self.entered_at.get(self._state, 0.0), 3),
+            "seconds_in_state": round(self.time_in_state(), 3),
+            "rejections": self._rejections,
+        }
+    # ---------------------------------------------------------- tulis
+    def transition(self, dst: RuntimeStatus, via: str = "",
+                   detail: str = "", *, _now: float | None = None
+                   ) -> RuntimeStatus:
+        """Validasi + jalankan transisi; lempar bila ilegal.
+        Penolakan TIDAK diam: ditulis ke events sebagai "rejected"
+        dan dihitung — pola penolakan berulang adalah sinyal bug UI
+        atau upaya menyelundup status.
+        """
+        key = (self._state, dst)
+        legal_via = LEGAL_TRANSITIONS.get(key)
+        if legal_via is None:
+            self._rejections += 1
+            self.events.append(StateEvent(
+                ts=round(self._clock(), 3), kind="rejected",
+                from_state=self._state.value, to_state=dst.value,
+                via=via, detail=detail or "transisi tak dikenal"))
+            raise IllegalTransition(self._state, dst, via)
+        # Nama method boleh menyertai untuk audit, tapi BUSUR yang
+        # berwenang — via yang tidak cocok dicatat sebagai detail.
+        effective = via or legal_via
+        mismatch = bool(via and via != legal_via)
+        self._state = dst
+        now = _now if _now is not None else self._clock()
+        self.entered_at[dst] = now
+        self.events.append(StateEvent(
+            ts=round(now, 3), kind="transition",
+            from_state=key[0].value, to_state=dst.value,
+            via=effective,
+            detail=(detail + ("; via tidak lazim" if mismatch else ""))
+            .strip("; ")))
+        return self._state
+    def reject_count_for(self, dst: RuntimeStatus) -> int:
+        return sum(1 for e in self.events
+                   if e.kind == "rejected" and e.to_state == dst.value)
+    def history(self, limit: int = 50) -> list[dict]:
+        return [e.__dict__ for e in self.events[-limit:]]
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Dua detail implementasi yang membedakan mesin status ini dari enum biasa. Pertama, snapshot()
+menghitung seconds_in_state — umur status adalah bagian dari status; 'READY selama 4 jam' dan
+'READY selama 40 milidetik' adalah dua berita berbeda bagi scheduler konsolidasi. Kedua,
+reject_count_for() menghitung penolakan per target: tiga kali mencoba melompat ke MAINTENANCE
+dari READY dalam semenit bukan kecelakaan — itu bug yang mencari tempat terjadi, dan angka ini
+
+
+=== PAGE 151 ===
+membuatnya ketahuan sebelum menjadi insiden.
+22.5 BOOT — sekuens dingin dengan empat gerbang
+Cold boot menempuh OFFLINE → STARTING → LOADING → VERIFYING → RESTORING →
+READY. Gerbang pertama yang gagal memotong ke DEGRADED dengan alasan spesifik — tray lalu
+menampilkan kebenaran, bukan 'READY karena prosesnya hidup'.
+Listing 22.3 — boot_sequence: empat gerbang yang memotong ke DEGRADED (baris 225-253 dari
+src/ruka_persistence/runtime/statemachine.py)
+def boot_sequence(fsm: RuntimeStateMachine,
+                  *, identity_ok: bool = True,
+                  capabilities_ok: bool = True,
+                  memory_ok: bool = True) -> RuntimeStatus:
+    """Sekuens cold-boot kanonik (Part XXII + persistent_self).
+    Melangkah OFFLINE -> READY melalui 4 gerbang; gerbang pertama
+    yang gagal memotong ke DEGRADED dengan alasan spesifik. Setelah
+    proses: tray menampilkan status YANG BENAR, bukan "READY karena
+    prosesnya hidup".
+    """
+    fsm.transition(RuntimeStatus.STARTING, "boot")
+    fsm.transition(RuntimeStatus.LOADING, "mounted")
+    if not identity_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "identity_corrupt",
+                       "hash identitas tidak cocok / dokumen rusak")
+        return fsm.state
+    fsm.transition(RuntimeStatus.VERIFYING, "loaded")
+    if not capabilities_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "capability_failed",
+                       "kapabilitas terdaftar gagal verifikasi")
+        return fsm.state
+    fsm.transition(RuntimeStatus.RESTORING, "verified")
+    if not memory_ok:
+        fsm.transition(RuntimeStatus.DEGRADED, "memory_unmountable",
+                       "memori tak terpasang / korupsi terdeteksi")
+        return fsm.state
+    fsm.transition(RuntimeStatus.READY, "restored")
+    return fsm.state
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Saudara dari sekuens ini, perform_boot() di health.py, membungkus boot_sequence dengan pencatatan
+waktu: durasi per tahap (stage_costs memungkinkan uji deterministik menyuntik angka), identitas hash,
+jumlah kapabilitas yang lolos vs gagal, dan jumlah memori terpulihkan — menghasilkan BootReport yang
+bahkan untuk boot gagal tetap ditulis, karena boot yang gagal tanpa jejak adalah kegagalan yang tak pernah
+diperbaiki.
+
+
+=== PAGE 152 ===
+Listing 22.4 — BootReport + ShutdownReport (artefak yang TERSIMPAN) (baris 102-193 dari
+src/ruka_persistence/runtime/health.py)
+@dataclass
+class BootReport:
+    """Artefak boot: tahap, waktu, kegagalan, status akhir.
+    Disimpan ke runtime/boot-report.json supaya boot BERIKUTNYA bisa
+    membandingkan ("boot kemarin 2.1 s, hari ini 9.8 s — apa yang
+    melambat?") — observabilitas dimulai dari sini, bukan dari
+    dashboard.
+    """
+    boot_token: str = ""
+    started_at: float = 0.0
+    finished_at: float = 0.0
+    stages: dict[str, float] = field(default_factory=dict)
+    failed_gate: str = ""
+    failure_detail: str = ""
+    final_state: str = RuntimeStatus.OFFLINE.value
+    identity_hash: str = ""
+    capabilities_verified: int = 0
+    capabilities_failed: list[str] = field(default_factory=list)
+    memories_restored: int = 0
+    @property
+    def boot_ms(self) -> float:
+        return max(0.0, (self.finished_at - self.started_at) * 1000.0)
+    def save(self, path: str | Path) -> None:
+        import json
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(self.as_dict(), ensure_ascii=False,
+                                indent=2), encoding="utf-8")
+    @classmethod
+    def load(cls, path: str | Path) -> "BootReport":
+        import json
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls(**{k: v for k, v in data.items()
+                      if k in cls.__dataclass_fields__})
+    def as_dict(self) -> dict:
+        d = {
+            "boot_token": self.boot_token,
+            "started_at": round(self.started_at, 3),
+            "boot_ms": round(self.boot_ms, 3),
+            "stages": {k: round(v, 3) for k, v in self.stages.items()},
+            "failed_gate": self.failed_gate,
+            "failure_detail": self.failure_detail,
+            "final_state": self.final_state,
+            "identity_hash": self.identity_hash,
+            "capabilities_verified": self.capabilities_verified,
+            "capabilities_failed": self.capabilities_failed,
+            "memories_restored": self.memories_restored,
+        }
+        return d
+@dataclass
+class ShutdownReport:
+
+
+=== PAGE 153 ===
+    """Artefak shutdown: sopan/terpaksa + durasi + apa yang disimpan.
+    'Graceful' tanpa bukti bukan graceful — laporan mencatat anak
+    mana yang harus dibunuh setelah masa tenggang, supaya pola
+    'selalu dipaksa' terlihat sebelum jadi insiden.
+    """
+    initiated_at: float = 0.0
+    finished_at: float = 0.0
+    outcome: str = "graceful"          # graceful | forced | aborted
+    grace_period_s: float = 5.0
+    forced_children: list[str] = field(default_factory=list)
+    state_saved: bool = False
+    memories_flushed: int = 0
+    @property
+    def duration_ms(self) -> float:
+        return max(0.0, (self.finished_at - self.initiated_at)
+                   * 1000.0)
+    def as_dict(self) -> dict:
+        return {
+            "initiated_at": round(self.initiated_at, 3),
+            "finished_at": round(self.finished_at, 3),
+            "duration_ms": round(self.duration_ms, 3),
+            "outcome": self.outcome,
+            "grace_period_s": self.grace_period_s,
+            "forced_children": self.forced_children,
+            "state_saved": self.state_saved,
+            "memories_flushed": self.memories_flushed,
+        }
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+BootReport sengaja menjadi ARTEFAK DISK, bukan sekadar log yang lewat: berkas
+runtime/boot-report.json menyimpan durasi per tahap, gerbang yang gagal, hash identitas, jumlah
+kapabilitas yang lolos vs gagal, dan jumlah memori yang dipulihkan. Boot BERIKUTNYA membacanya —
+'kemarin 1,9 detik, hari ini 9,8 detik: tahap mana yang melambat?' adalah pertanyaan observabilitas
+pertama, dan tanpa artefak tersebut ia tidak bisa dijawab. ShutdownReport memainkan peran yang sama
+untuk akhir hidup: outcome graceful atau forced, anak mana yang harus dibunuh setelah tenggang, berapa
+banyak memori yang di-flush — 'shutdown kemarin selalu forced' adalah pola yang harus terlihat
+SEBELUM jadi insiden korupsi.
+22.6 HEALTH — liveness bukan readiness
+Dua klaim yang mahal bila tertukar. LIVENESS: 'prosesnya masih bernyawa?' — heartbeat segar, event
+loop berputar; mati = restart. READINESS: 'layakkah menerima tugas?' — memori terpasang, IPC hidup,
+izin utuh; hidup tapi tidak siap = tampilkan DEGRADED, JANGAN rayu tugas.
+
+
+=== PAGE 154 ===
+Aplikasi web memisahkan /livez dan /readyz karena dua klaim itu berbeda secara KAUSAL: proses bisa
+hidup sementara dependensinya mati, dan sebaliknya. Ruka hidup tapi kehilangan memori adalah
+pengalaman terburuk bagi Bos — chat jalan, jawaban kosong, kenangan hilang diam-diam. Pemisahan ini
+membuat tray tidak pernah berbohong hijau saat memori mati, dan supervisor tidak membunuh proses
+yang sehat hanya karena satu komponen sedang menyiapkan diri.
+Listing 22.5 — RuntimeHealth.evaluate: dua klaim independen dari komponen + status mesin (baris 39-101
+dari src/ruka_persistence/runtime/health.py)
+@dataclass
+class Component:
+    """Satu subsistem yang diperiksa: nama, status, catatan jujur."""
+    name: str
+    status: ComponentStatus = ComponentStatus.UNKNOWN
+    detail: str = ""
+    latency_ms: float | None = None
+@dataclass
+class RuntimeHealth:
+    """Snapshot kesehatan — dibangun ulang tiap putaran, tak dipercaya
+    lebih tua dari heartbeat_timeout."""
+    liveness: bool = False
+    readiness: bool = False
+    state: RuntimeStatus = RuntimeStatus.OFFLINE
+    components: dict[str, Component] = field(default_factory=dict)
+    checked_at: float = field(default_factory=time.time)
+    def set(self, name: str, status: ComponentStatus,
+            detail: str = "", latency_ms: float | None = None
+            ) -> None:
+        self.components[name] = Component(name, status, detail,
+                                          latency_ms)
+    def _all(self, want: ComponentStatus) -> bool:
+        return bool(self.components) and all(
+            c.status == want for c in self.components.values())
+    def evaluate(self, fsm: RuntimeStateMachine,
+                 heartbeat_fresh: bool = True) -> RuntimeHealth:
+        """Hitung ulang liveness/readiness dari komponen + status.
+        Liveness  = denyut segar DAN minimal satu komponen hidup.
+        Readiness = status mesin operational DAN semua komponen OK.
+        Keduanya INDEPENDEN — itulah inti pemisahannya.
+        """
+        self.state = fsm.state
+        self.liveness = heartbeat_fresh and any(
+            c.status != ComponentStatus.DOWN
+            for c in self.components.values()) if self.components \
+            else heartbeat_fresh
+        self.readiness = fsm.is_operational() and self._all(
+            ComponentStatus.OK)
+        self.checked_at = time.time()
+        return self
+    def snapshot(self) -> dict:
+        return {
+            "liveness": self.liveness,
+
+
+=== PAGE 155 ===
+            "readiness": self.readiness,
+            "state": self.state.value,
+            "checked_at": round(self.checked_at, 3),
+            "components": {
+                n: {"status": c.status.value, "detail": c.detail,
+                    "latency_ms": (round(c.latency_ms, 3)
+                                   if c.latency_ms is not None else None)}
+                for n, c in self.components.items()},
+        }
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Skenario
+Liveness
+Readiness
+Aksi yang benar
+Semua sehat, READY
+benar
+benar
+terima tugas
+Memori korup, DEGRADED
+benar
+salah
+jendela jujur 'mode terbatas' + tombol pulihkan
+Heartbeat basi (GC/swap)
+salah
+—
+supervisor menunggu 1 siklus; restart bila 2
+siklus
+Kapabilitas gagal verifikasi
+benar
+salah
+DEGRADED + daftar kapabilitas yang mati di
+panel
+Tabel 22.2 — Matriks keputusan health. Baris 2 adalah kasus yang lima status 0.1.0 tak bisa ungkapkan: hidup dan tidak layak, bersamaan.
+22.7 EXPERIMENT — 13/13 status, 30 busur, penolakan terekam
+Eksperimen exp_statemachine.py berjalan jalan-hidup lengkap: boot, siklus tugas, tidur-bangun, dua
+kegagalan, dua pemulihan, perawatan, exit — lalu melempar lima transisi ilegal.
+OUTPUT
+$ PYTHONPATH=src python3 scripts/exp_statemachine.py
+{
+  "states_defined": 13,
+  "states_reached": 13,
+  "arcs_defined": 30,
+  "arcs_walked": 23,
+  "illegal_attempts": 5,
+  "illegal_rejected": 5,
+  "transitions_logged": 23
+}
+Angka jujur: 23 dari 30 busur dilalui jalan-hidup tunggal — sisanya adalah varian failure dari status yang
+sama (IDLE→DEGRADED, MAINTENANCE→STOPPING, dsb.) yang tercakup unit test per-busur;
+eksperimen sengaja TIDAK mengklaim '30/30 dalam satu skenario' karena itu akan berarti skenario yang
+
+
+=== PAGE 156 ===
+mustahil. Lima penolakan ilegal semuanya ditolak keras: OFFLINE→BUSY, OFFLINE→READY (lompat
+verifikasi!), READY→LOADING (undur sejarah), SLEEPING→BUSY (bekerja sambil tidur —
+keajaiban yang ditolak), dan DEGRADED→READY (jalan pintas tanpa pemulihan).
+22.8 FAILURE MODES — mesin status sendiri bisa sakit
+Empat kegagalan lapis ini + deteksi + pemulihannya. Happy path saja tidak pernah cukup.
+Kegagalan
+Deteksi
+Pemulihan
+UX yang jujur
+UI menulis status tanpa mesin
+(legacy code)
+rejections naik + audit 'via
+tidak lazim'
+refactor UI ke kanal
+RUNTIME_STATUS
+status tetap benar meski
+UI ketinggalan
+Spam transisi ilegal
+(bug/serangan)
+reject_count_for() >
+ambang 10/menit
+lapse rate-limit + laporan
+diagnostik
+'Ruka menolak perintah
+status palsu'
+BootReport gagal ditulis (disk
+penuh)
+eksepsi tersimpan di log
+runtime
+boot tetap lanjut; laporan di
+memori + tulis-ulang saat lega
+'boot 9,8s tanpa artefak'
+di panel
+Frozen di VERIFYING (hang
+verifikasi)
+time_in_state() > ambang
++ watchdog
+watchdog lempar FAILURE
+→ DEGRADED →
+RECOVERING
+kuning 'pemeriksaan
+macet'
+ Tabel 22.3 — Keempat kegagalan berbagi satu pola: deteksi dari DATA yang mesin sendiri keluarkan (penolakan, umur status, artefak),
+ bukan dari harapan.
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src pytest tests/test_statemachine.py tests/test_health.py -q
+EXPECTED
+ 20 test hijau: boot kanonik, gerbang potong ke DEGRADED, penolakan dihitung, tidur-bangun tanpa LOAD ulang,
+liveness tanpa readiness, artefak roundtrip disk.
+WHY
+ Mesin status adalah kontrak SEMUA konsumen — tray, scheduler, supervisor, audit; regresi di sini merusak
+kejujuran seluruh sistem, bukan satu fitur.
+FAILURE MODE
+ test_offline_to_ready_canonical_boot gagal = ada busur baru yang mengubah sekuens boot; periksa
+LEGAL_TRANSITIONS vs spesifikasi.
+DEBUGGING
+ Penolakan tak tercatat: periksa cabang 'rejected' di transition(); jangan tangkap IllegalTransition tanpa logging.
+
+

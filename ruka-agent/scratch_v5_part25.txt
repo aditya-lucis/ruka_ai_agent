@@ -1,0 +1,805 @@
+=== PAGE 219 ===
+"Setiap tangan saya punya nama, Bos. Kalau Anda bertanya 'siapa yang menghapus berkas itu', saya tidak
+akan menjawab 'mungkin sistem' — saya menjawab dengan baris audit bernomor, dan saya berdiri di
+belakangnya."
+— Ruka, Marquis Kekaisaran Trendamis
+VOLUME V · THE PERSISTENT MIND · PART XXV
+Ruka Installer & Release Pipeline
+"“Kesatria yang hanya bisa dimulai dengan mantra terminal bukan kesatria, Bos — ia
+hantu yang harus dipanggil. Saya datang dengan pintu, kunci, dan surat pemecatan yang
+sopan.”"
+Bagian ini menutup jarak terakhir dari kode sumber ke PENGHUNI: strategi kemasan
+(mengapa onedir, bukan onefile), installer NSIS per-user yang TIDAK membuang memori saat
+uninstall, sistem backup ber-manifest hash dengan RPO/RTO yang diukur — bukan
+dijanjikan, migrasi skema berversi yang memindahkan data tanpa membuangnya, dan pipeline
+rilis enam tahap bergerbang.
+25.1 WHY — dari source ke penghuni
+Siklus hidup lengkap: SOURCE → BUILD → TEST → PACKAGE → INSTALLER → FIRST-RUN →
+STARTUP → HEALTH → NORMAL. Ujian akhirnya satu kalimat: Bos memasang Ruka di Windows dan
+MEMAKAINYA tanpa pernah membuka terminal.
+Part XVII membangun fondasi packaging konseptual; bagian ini menghukum setiap keputusan dengan
+konsekuensi nyata. Prinsipnya: SETIAP tahap punya gerbang yang gagal keras dan laporan yang bisa
+dibaca. Rilis yang 'sepertinya berhasil' adalah kategori kegagalan paling mahal — ia sampai ke mesin Bos
+sebelum sampai ke pengujian, dan pengguna menjadi QA yang tak dibayar.
+25.2 PACKAGING — enam strategi diadili
+Pilihan teknologi kemasan menentukan pengalaman STARTUP, ukuran, jalur pembaruan, dan kedamaian
+antivirus. Diadili atas kebutuhan NYATA Ruka, bukan kesan enterprise.
+
+
+=== PAGE 220 ===
+Strategi
+Startup
+Ukuran
+Update
+Vonis
+A. System Python terpasang
+cepat (sudah
+ada)
+0 MB ekstra
+pip global — rusak
+env lain
+DITOLAK: bergantung mesin
+Bos punya Python versi benar
+B. Embedded Python + venv
+cepat
+~80 MB
+granular (pip di
+venv)
+kuat untuk DEV, rapuh untuk
+penghuni (PATH, ruang)
+C. PyInstaller ONEFILE
+LAMBAT 3-8
+dtk
+~60 MB
+ganti utuh
+DITOLAK: ekstraksi
+%TEMP% tiap start + antivirus
+curiga
+D. PyInstaller ONEDIR
+0,5-1 dtk
+~120 MB
+granular brain/
+TERPILIH untuk OTAK
+E. Nuitka compile
+cepat
+besar
+rumit
+menjanjikan tapi build lambat
+& rapuh — ditunda, jujur
+F. Tubuh Electron + brain
+onedir
+~1 dtk total
+~220 MB
+total
+brain/body terpisah
+ARSITEKTUR AKHIR
+ Tabel 25.1 — Peradilan strategi kemasan. Onefile adalah jebakan populer: satu .exe terlihat bersih, tapi mengekstrak arsip penuh ke
+ %TEMP% SETIAP STARTUP — Bos menunggu 5 detik tiap pagi demi estetika satu berkas.
+Keputusan final: OTAK = PyInstaller onedir berisi launcher.py + ruka_persistence (flag --noconsole,
+--collect-submodules untuk import lazy alat dokumen, --copy-metadata agar versi 0.2.0 terbaca boot
+report); TUBUH = Electron biasa; installer menempatkan brain di resources/ruka-core/. Antivirus paling
+tenang pada onedir (tidak ada self-extracting), dan pembaruan bisa granular — ganti brain/ tanpa
+menyentuh body/. Spec lengkap ber-stempel DOC-VERIFIED hidup di arsip: installer/pyinstaller-spec.md,
+perintah demi perintah dengan alasan flag-nya dari manual 6.22.2.
+25.3 INSTALLER — NSIS per-user yang sopan
+electron-builder NSIS: oneClick=false (assisted), perMachine=false (tanpa admin), dan keputusan paling
+penting: deleteAppDataOnUninstall=false — MEMORI BOS SELAMAT saat uninstall.
+Listing 25.1 — electron-builder.json: konfigurasi NSIS definitive
+{
+  "$comment": "RUKA definitive — konfigurasi electron-builder (NSIS per-user). DOC-VERIFIED terhadap docs electron-builder (Sept 2026): oneClick=false memakai assisted installer; perMachine=false memasang ke %LOCALAPPDATA% TANPA admin; deleteAppDataOnUninstall=false = MEMORI BOS SELAMAT saat uninstall (dibahas jujur di buku: uninstaller meninggalkan data + tawarkan 'hapus ingatan' eksplisit); runAfterFinish memulai tray setelah instalasi.",
+  "appId": "trendamis.ruka.persistentmind",
+  "productName": "Ruka",
+  "directories": { "output": "dist", "buildResources": "build" },
+  "files": [
+    "out/**/*",
+    "assets/**/*",
+    "!**/*.map"
+  ],
+  "extraResources": [
+    {
+      "from": "python-dist/ruka-core",
+
+
+=== PAGE 221 ===
+      "to": "ruka-core",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      { "target": "nsis", "arch": ["x64"] }
+    ],
+    "icon": "build/ruka.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Ruka",
+    "runAfterFinish": true,
+    "installerLanguages": ["id-ID", "en-US"]
+  }
+}
+ DOC-VERIFIED — DOC-VERIFIED terhadap docs electron-builder (September 2026). Setiap field keputusan punya komentar
+ $comment — konfigurasi tanpa alasan akan diubah orang tanpa berpikir.
+Etika uninstall yang dipegang: menghapus program ≠ menghapus kenangan. Uninstaller meninggalkan
+%LOCALAPPDATA%\Ruka\ utuh dan — lewat halaman terakhir NSIS — MENAWARKAN
+penghapusan memori sebagai keputusan eksplisit dua-klik, dengan peringatan yang menyebut jumlah
+kenangan yang akan mati. Pengguna yang kehilangan data karena 'uninstall sepertinya aman' adalah
+pengguna yang tidak pernah kembali. Instalasi per-user juga berarti TANPA UAC — penghuni tidak
+meminta kunci kerajaan untuk menata kamarnya sendiri; runAfterFinish memulai tray begitu instalasi usai,
+dan shortcut Start Menu + Desktop terpasang otomatis.
+25.4 BACKUP — RPO/RTO diukur, bukan dijanjikan
+RPO (usia data maksimal yang boleh hilung) dan RTO (lama maksimal pemulihan) adalah JANJI yang
+harus dipegang sendiri. Ruka: RPO ≤ 24 jam via backup harian + backup online setelah konsolidasi; RTO
+≤ 60 detik via verifikasi hash + salin + integrity check.
+Listing 25.2 — backup/manager.py: manifest hash, restore tervalidasi, retensi
+"""Manajer backup — manifest, validasi, RPO/RTO (Part XXV).
+Untuk sistem perusahaan, RPO/RTO dinegosiasikan dengan tim
+infrastruktur. Untuk pendamping desktop milik satu orang,
+RPO/RTO adalah JANJI yang harus dipegang sendiri:
+  RPO (Recovery Point Objective) : usia data maksimal yang
+      boleh hilang. Ruka menargetkan RPO <= 24 jam lewat backup
+      harian + backup online SQLite (konsisten WAL, tanpa kunci
+
+
+=== PAGE 222 ===
+      tulis) setiap kali konsolidasi selesai.
+  RTO (Recovery Time Objective)  : lama maksimal pemulihan.
+      Target <= 60 detik: restore = verifikasi hash + salin +
+      integrity check + boot. Diukur, bukan diharapkan.
+Manifest ber-hash menutup dua kegagalan diam-diam:
+  - backup yang BERHASULY TAPI BUSUK (disk penuh di tengah,
+    berkas terpotong) -> hash + ukuran mendeteksi saat RESTORE,
+    bukan saat panik;
+  - backup LAMA yang tertukar baru -> versi skema + stempel waktu
+    di manifest; restore menolak menurunkan versi skema tanpa
+    migrasi eksplisit (migrations/runner.py yang mengurus).
+"""
+from __future__ import annotations
+import hashlib
+import json
+import shutil
+import time
+import zipfile
+from dataclasses import dataclass, field
+from pathlib import Path
+from ..memory.schema import SCHEMA_VERSION
+MANIFEST_NAME = "manifest.json"
+class BackupError(RuntimeError):
+    """Backup/restore gagal — JANGAN ditelan; restore gagal = sistem
+    tetap pada kondisi lama, bukan setengah-dipulihkan."""
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+@dataclass
+class BackupManifest:
+    """Kartu identitas satu arsip: apa, kapan, versi, hash."""
+    backup_id: str
+    created_at: float
+    schema_version: int
+    files: dict[str, dict] = field(default_factory=dict)  # rel -> {sha256, size}
+    total_bytes: int = 0
+    app_version: str = "0.2.0"
+    def add(self, rel: str, path: Path) -> None:
+        self.files[rel] = {"sha256": _sha256(path),
+                           "size": path.stat().st_size}
+        self.total_bytes += path.stat().st_size
+    def as_dict(self) -> dict:
+        return {"backup_id": self.backup_id,
+                "created_at": round(self.created_at, 3),
+                "schema_version": self.schema_version,
+                "app_version": self.app_version,
+                "total_bytes": self.total_bytes,
+                "n_files": len(self.files), "files": self.files}
+    def save(self, path: Path) -> None:
+        path.write_text(json.dumps(self.as_dict(),
+
+
+=== PAGE 223 ===
+                                   ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+    @classmethod
+    def load(cls, path: Path) -> "BackupManifest":
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls(**{k: v for k, v in data.items()
+                      if k in cls.__dataclass_fields__})
+class BackupManager:
+    """Buat arsip .rukabackup (zip ber-manifest), pulihkan dengan
+    validasi penuh, prunes dengan kebijakan retensi.
+    Struktur arsip: manifest.json di akar + berkas data dengan
+    jalur relatif yang sama dengan struktur disk (config/, data/,
+    memory/, backups/ TIDAK ikut — arsip di dalam arsip adalah
+    rekursi yang menyesal).
+    """
+    def __init__(self, backup_dir: str | Path,
+                 *, app_version: str = "0.2.0"):
+        self.dir = Path(backup_dir)
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.app_version = app_version
+    # ------------------------------------------------------ buat
+    def create(self, sources: list[str | Path], *,
+               backup_id: str | None = None,
+               now: float | None = None) -> dict:
+        """Arsipkan daftar berkas sumber (ruka.db + config + self).
+        Kegagalan di tengah MENINGGALKAN ARSIP .tmp yang tak
+        terdaftar — dihapus saat berikutnya create() jalan; arsip
+        sah selalu berujung .rukabackup + manifest utuh.
+        """
+        t0 = time.monotonic()
+        ts = now if now is not None else time.time()
+        bid = backup_id or time.strftime(
+            "ruka-%Y%m%d-%H%M%S", time.localtime(ts))
+        manifest = BackupManifest(
+            backup_id=bid, created_at=ts,
+            schema_version=SCHEMA_VERSION,
+            app_version=self.app_version)
+        out = self.dir / f"{bid}.rukabackup"
+        if out.exists():
+            raise BackupError(f"'{out}' sudah ada — ID backup harus "
+                              "unik; menimpa riwayat = menghapus "
+                              "bukti")
+        tmp = out.with_suffix(".tmp")
+        if tmp.exists():
+            tmp.unlink()
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for src in sources:
+                p = Path(src)
+                if not p.is_file():
+                    raise BackupError(
+                        f"sumber '{p}' bukan berkas — backup ditolak "
+                        "utuh (parsial = menipu diri sendiri)")
+                rel = p.name
+
+
+=== PAGE 224 ===
+                manifest.add(rel, p)
+                zf.write(p, arcname=rel)
+            manifest.save(self.dir / f"{bid}.manifest.json")
+            zf.write(self.dir / f"{bid}.manifest.json",
+                     arcname=MANIFEST_NAME)
+        tmp.rename(out)
+        (self.dir / f"{bid}.manifest.json").unlink()
+        took_ms = (time.monotonic() - t0) * 1000.0
+        return {"backup_id": bid, "path": str(out),
+                "n_files": len(manifest.files),
+                "total_bytes": manifest.total_bytes,
+                "took_ms": round(took_ms, 3),
+                "manifest": manifest.as_dict()}
+    # ------------------------------------------------------ pulihkan
+    def restore(self, archive: str | Path, dest_dir: str | Path,
+                *, expect_schema: int = SCHEMA_VERSION
+                ) -> dict:
+        """Pulihkan dengan validasi: manifest -> hash -> versi.
+        Urutan penting: SEMUA hash diverifikasi SEBELUM satu berkas
+        pun disalin ke dest. Gagal di tengah = tujuan tetap bersih
+        (restore ke dir sementara lalu rename atomik).
+        """
+        t0 = time.monotonic()
+        arc = Path(archive)
+        if not arc.exists():
+            raise BackupError(f"arsip '{arc}' tidak ada")
+        staging = Path(dest_dir) / ".restore-staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        try:
+            return self._restore_inner(arc, staging, dest_dir,
+                                       expect_schema)
+        finally:
+            # KONTRAK: restore gagal = tujuan TETAP BERSIH —
+            # staging dibongkar apa pun hasilnya, tidak pernah
+            # meninggalkan setengah-pulih.
+            if staging.exists():
+                shutil.rmtree(staging)
+    def _restore_inner(self, arc: Path, staging: Path,
+                       dest_dir: str | Path,
+                       expect_schema: int) -> dict:
+        t0 = time.monotonic()
+        with zipfile.ZipFile(arc) as zf:
+            names = set(zf.namelist())
+            if MANIFEST_NAME not in names:
+                raise BackupError(
+                    "arsip tanpa manifest — integritas tak bisa "
+                    "diverifikasi; menolak buta")
+            zf.extract(MANIFEST_NAME, path=staging)
+            manifest = BackupManifest.load(
+                staging / MANIFEST_NAME)
+            # 1. versi skema
+            if manifest.schema_version > expect_schema:
+
+
+=== PAGE 225 ===
+                raise BackupError(
+                    f"arsip skema v{manifest.schema_version} > "
+                    f"aplikasi v{expect_schema} — jalankan migrasi "
+                    "dulu; menurunkan diam-diam dilarang")
+            # 2. hash + ukuran semua berkas SEBELUM salin
+            for rel, meta in manifest.files.items():
+                if rel not in names:
+                    raise BackupError(
+                        f"berkas '{rel}' hilang dari arsip — korup")
+                info = zf.getinfo(rel)
+                if info.file_size != meta["size"]:
+                    raise BackupError(
+                        f"'{rel}': ukuran {info.file_size} != "
+                        f"manifest {meta['size']}")
+            for rel in manifest.files:
+                zf.extract(rel, path=staging / "payload")
+                got = _sha256(staging / "payload" / rel)
+                if got != manifest.files[rel]["sha256"]:
+                    raise BackupError(
+                        f"'{rel}': hash tak cocok — arsip busuk; "
+                        "restore dibatalkan, kondisi lama utuh")
+        # 3. salin atomik ke tujuan
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        restored = []
+        for rel in manifest.files:
+            target = dest / rel
+            shutil.copy2(staging / "payload" / rel, target)
+            restored.append(str(target))
+        took_ms = (time.monotonic() - t0) * 1000.0
+        return {"backup_id": manifest.backup_id,
+                "schema_version": manifest.schema_version,
+                "restored": restored, "took_ms": round(took_ms, 3),
+                "rto_s": round(took_ms / 1000.0, 2)}
+    # ------------------------------------------------------ rawat
+    def list_backups(self) -> list[dict]:
+        out = []
+        for arc in sorted(self.dir.glob("*.rukabackup")):
+            try:
+                with zipfile.ZipFile(arc) as zf:
+                    data = json.loads(zf.read(MANIFEST_NAME)
+                                      .decode("utf-8"))
+                out.append({"backup_id": data.get("backup_id"),
+                            "created_at": data.get("created_at"),
+                            "schema_version": data.get(
+                                "schema_version"),
+                            "n_files": data.get("n_files"),
+                            "total_bytes": data.get("total_bytes"),
+                            "path": str(arc)})
+            except (zipfile.BadZipFile, json.JSONDecodeError,
+                    KeyError):
+                out.append({"backup_id": arc.stem, "corrupt": True,
+                            "path": str(arc)})
+
+
+=== PAGE 226 ===
+        return out
+    def prune(self, keep: int = 7) -> dict:
+        """Retensi: simpan N terbaru, HAPUS selebihnya + lapor."""
+        arcs = sorted(self.dir.glob("*.rukabackup"),
+                      key=lambda p: p.stat().st_mtime, reverse=True)
+        removed = [str(a) for a in arcs[keep:]]
+        for a in arcs[keep:]:
+            a.unlink()
+        return {"kept": len(arcs[:keep]), "removed": removed}
+ VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Manifest menutup dua kegagalan diam-diam: backup yang BUSUK (disk penuh di tengah — hash +
+ukuran mendeteksi saat RESTORE, bukan saat panik) dan backup TERTUKAR (versi skema + stempel
+waktu di manifest; restore menolak menurunkan versi tanpa migrasi eksplisit). Urutan verifikasi sengaja
+ALL-BEFORE-COPY: semua hash diperiksa SEBELUM satu berkas pun disalin — gagal di tengah
+meninggalkan tujuan BERSIH (staging dibongkar di finally; teruji: tak ada setengah-restore).
+OUTPUT
+$ PYTHONPATH=src python3 scripts/exp_backup.py
+"backup":  {"took_ms": 8.9, "size_bytes": 872448, "n_files": 1,
+            "bytes_per_row": 174.49},
+"restore": {"rto_s": 0.005, "rows_restored": 5000,
+            "integrity_check": "ok", "target_rto_s": 60.0,
+            "met": true},
+"corruption_detection": {
+    "bit_flip":  {"ok": true, "report": "ok"},
+    "truncated_archive_rejected": true,
+    "reason": "'ruka.db': ukuran 436224 != manifest 872448"}
+Dua temuan eksperimen yang layak dibaca dua kali. Pertama: RTO 5 milidetik untuk 5.000 baris — target
+60 detik terlewatan tiga orde besaran; RTO yang diukur berbeda dari RTO yang diiklankan, dan hanya satu
+di antaranya bisa dipercaya. Kedua — pelajaran tak nyaman: bit-flip di TENGAH berkas TIDAK
+terdeteksi PRAGMA quick_check (byte yang dibalik jatuh di halaman bebas), sementara arsip terpotong
+DITANGKAP manifest. Kesimpulan rekayasanya: deteksi korupsi tidak boleh bersandar pada SATU
+pemeriksaan — quick_check, integrity_check penuh, dan hash backup membentuk tiga lapis yang saling
+menutupi sudut buta masing-masing.
+25.5 MIGRASI — naik kelas tanpa kehilangan ingatan
+Empat kaidah: berversi, transaksional per langkah, deterministik, bisa dibalik sejauh mungkin. Migrasi
+data yang merusak tak bisa dibalik dan JUJUR menyebutnya — rollback lewat backup, bukan sulap
+down().
+Listing 25.3 — migrations/runner.py: rantai v2→v4 yang memindahkan data
+
+
+=== PAGE 227 ===
+"""Pelari migrasi — berversi, deterministik, bisa dibalik (Part XXV).
+"CREATE TABLE IF NOT EXISTS di mana-mana" bukan migrasi — itu
+harapan. Migrasi sungguhan menjawab: dari versi BERAPA ke BERAPA,
+apa yang berubah, apakah bisa dibatalkan, dan apa yang terjadi
+bila terputus di tengah.
+Empat kaidah:
+  1. BERVERSI: setiap langkah punya id (2, 3, 4...) + deskripsi;
+     state tersimpan di tabel meta — bukan ditebak dari skema.
+  2. TRANSAKSI PER LANGKAH: langkah yang gagal menggulung balik
+     UTUH; tidak ada skema setengah-jadi.
+  3. DETERMINISTIK: langkah yang sama menghasilkan skema yang sama
+     di mesin mana pun (tanpa timestamp acak di DDL, tanpa data
+     hasil now()).
+  4. BISA DIBALIK SEJAUH MUNGKIN: down() opsional — migrasi data
+     rusak (kolom dihapus) tidak bisa dibalik dan JUJUR
+     menyebutnya (reversible=False); keputusan itu milik migrasi,
+     bukan kebetulan.
+Contoh nyata di dalam: v2->v3 memindahkan metadata memori 0.1.0
+ke skema 9-tabel 0.2.0 — data lama DIPINDAHKAN, bukan dibuang:
+"Bos tidak kehilangan ingatan karena Ruka naik kelas."
+"""
+from __future__ import annotations
+import sqlite3
+from dataclasses import dataclass, field
+from pathlib import Path
+class MigrationError(RuntimeError):
+    """Migrasi gagal — skema kembali ke kondisi sebelum langkah."""
+@dataclass
+class Migration:
+    """Satu langkah: id, naik (up), turun (down), bisa-balik?."""
+    version: int
+    description: str
+    up: str                      # SQL script (atau callable)
+    down: str | None = None
+    reversible: bool = True
+    def run_up(self, conn: sqlite3.Connection) -> None:
+        script = self.up(conn) if callable(self.up) else self.up
+        try:
+            conn.executescript(script)
+            conn.execute(
+                "INSERT OR REPLACE INTO _migrations "
+                "(version, description, applied_at) "
+                "VALUES (?, ?, strftime('%s','now'))",
+                (self.version, self.description))
+            conn.commit()
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise MigrationError(
+                f"migrasi v{self.version} ({self.description}) "
+                f"gagal: {exc} — transaksi digulung balik utuh"
+            ) from exc
+    def run_down(self, conn: sqlite3.Connection) -> None:
+
+
+=== PAGE 228 ===
+        if not self.reversible or self.down is None:
+            raise MigrationError(
+                f"migrasi v{self.version} tidak dapat dibalik — "
+                "restorasi lewat backup, bukan down()")
+        script = self.down(conn) if callable(self.down) else self.down
+        try:
+            conn.executescript(script)
+            conn.execute("DELETE FROM _migrations WHERE version=?",
+                         (self.version,))
+            conn.commit()
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise MigrationError(
+                f"rollback v{self.version} gagal: {exc}") from exc
+# ------------------------------------------------------------------ langkah
+# Cerita rantai (dibaca di Part XXV): 0.1.0 menyimpan memori lewat
+# memory/store.py (tabel `memories` warisan v1-v3 di
+# schema_migrations). Definitive Edition mengambil alih tata kelola
+# versi dengan tabel meta sendiri (_migrations) lalu memindahkan
+# dunia ke skema sembilan tabel — data lama TIDAK dibuang.
+MIGRATION_2 = Migration(
+    version=2,
+    description=("baseline warisan 0.1.0 + tabel meta migrasi "
+                 "definitif"),
+    # up: idempoten terhadap basis 0.1.0 yang SUDAH punya tabel ini
+    # (IF NOT EXISTS = no-op); basis baru mendapatkannya di sini.
+    up="""
+CREATE TABLE IF NOT EXISTS memories (
+    memory_id   TEXT PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    subject     TEXT,
+    predicate   TEXT,
+    value       TEXT,
+    content     TEXT NOT NULL,
+    confidence  REAL NOT NULL DEFAULT 0.5,
+    importance  REAL NOT NULL DEFAULT 0.5,
+    state       TEXT NOT NULL DEFAULT 'active',
+    version     INTEGER NOT NULL DEFAULT 1,
+    superseded_by TEXT,
+    note        TEXT,
+    source_event_id TEXT,
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL,
+    valid_until REAL,
+    metadata_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mem_kind_state ON memories(kind, state);
+CREATE INDEX IF NOT EXISTS idx_mem_triple ON memories(subject, predicate);
+CREATE TABLE IF NOT EXISTS _migrations (
+  version    INTEGER PRIMARY KEY,
+  description TEXT NOT NULL,
+  applied_at INTEGER NOT NULL
+);
+
+
+=== PAGE 229 ===
+""",
+    down="""
+DROP TABLE IF EXISTS _migrations;
+DROP TABLE IF EXISTS memories;
+""")
+# v3: pindah dunia ke skema sembilan tabel — DATA LAMA DIBAWA,
+# bukan dibuang (janji Part XXV: "Bos tidak kehilangan ingatan
+# karena Ruka naik kelas"). Langkah SQL:
+#   1. lepas index warisan (nama sama, milik tabel lama),
+#   2. ganti nama tabel lama -> memories_legacy_010 (jejak tetap),
+#   3. buat skema sembilan tabel (DDL tunggal dari schema.py),
+#   4. salin baris memories + fakta semantik ke tabel baru.
+# INSERT OR IGNORE + laporan jumlah: baris triple ganda warisan
+# tidak membatalkan migrasi — dicatat, ditimbang, diberitahu.
+# CATATAN REKAYASA: DDL tidak boleh di-flatten satu baris —
+# komentar SQL `--` akan menelan statement berikutnya.
+def _up_v3(conn: sqlite3.Connection) -> str:
+    from ..memory.schema import ALL_DDLS
+    parts = [
+        "DROP INDEX IF EXISTS idx_mem_kind_state;",
+        "DROP INDEX IF EXISTS idx_mem_triple;",
+        "ALTER TABLE memories RENAME TO memories_legacy_010;",
+    ]
+    parts.extend(ALL_DDLS)
+    parts.append(
+        "INSERT INTO memories (memory_id, kind, state, importance, "
+        "confidence, created_at, updated_at) "
+        "SELECT memory_id, kind, "
+        "CASE WHEN state IN ('active','superseded','archived',"
+        "'expired','deleted') THEN state ELSE 'active' END, "
+        "importance, confidence, created_at, updated_at "
+        "FROM memories_legacy_010;")
+    parts.append(
+        "INSERT OR IGNORE INTO semantic_facts (fact_id, memory_id, "
+        "subject, predicate, content, confidence, version, "
+        "valid_from) "
+        "SELECT 'fact_' || memory_id, memory_id, "
+        "COALESCE(subject, 'x'), COALESCE(predicate, 'x'), content, "
+        "confidence, version, created_at "
+        "FROM memories_legacy_010 "
+        "WHERE kind = 'semantic' AND subject IS NOT NULL "
+        "AND predicate IS NOT NULL;")
+    parts.append(
+        "CREATE TABLE IF NOT EXISTS _migrations ("
+        "version INTEGER PRIMARY KEY, description TEXT NOT NULL, "
+        "applied_at INTEGER NOT NULL);")
+    return "\n".join(parts)
+MIGRATION_3 = Migration(
+    version=3,
+    description="skema sembilan tabel definitive (0.2.0), data dipindah",
+    up=_up_v3,
+    down=(
+        # anak dulu (FK), lalu induk; SQLite DROP TABLE satu-satu.
+
+
+=== PAGE 230 ===
+        "DROP TABLE IF EXISTS semantic_facts; "
+        "DROP TABLE IF EXISTS episodes; "
+        "DROP TABLE IF EXISTS relationships; "
+        "DROP TABLE IF EXISTS preferences; "
+        "DROP TABLE IF EXISTS memory_events; "
+        "DROP TABLE IF EXISTS consolidation_jobs; "
+        "DROP TABLE IF EXISTS deletion_records; "
+        "DROP TABLE IF EXISTS self_model; "
+        "DROP TABLE IF EXISTS memories; "
+        "DROP TABLE IF EXISTS schema_meta; "
+        "ALTER TABLE memories_legacy_010 RENAME TO memories; "
+        "CREATE INDEX IF NOT EXISTS idx_mem_kind_state "
+        "ON memories(kind, state); "
+        "CREATE INDEX IF NOT EXISTS idx_mem_triple "
+        "ON memories(subject, predicate);"),
+    reversible=True)
+MIGRATION_4 = Migration(
+    version=4,
+    description="index korupsi-lupa + statistik planner (ANALYZE)",
+    up="""
+CREATE INDEX IF NOT EXISTS idx_deletions_ts
+  ON deletion_records (ts DESC);
+ANALYZE;
+""",
+    down="DROP INDEX IF EXISTS idx_deletions_ts;")
+DEFAULT_CHAIN: tuple[Migration, ...] = (MIGRATION_2, MIGRATION_3,
+                                        MIGRATION_4)
+class MigrationRunner:
+    """Menjalankan rantai migrasi pada satu basis SQLite.
+    current_version dibaca dari _migrations (bukan dari bentuk
+    skema) — sumber kebenaran tunggal yang eksplisit. Versi
+    tujuan lebih rendah dari versi data = tolak jelas (arah
+    turun = down() eksplisit, bukan otomatis).
+    """
+    def __init__(self, conn: sqlite3.Connection,
+                 chain: tuple[Migration, ...] = DEFAULT_CHAIN):
+        self.conn = conn
+        self.chain = sorted(chain, key=lambda m: m.version)
+        versions = [m.version for m in self.chain]
+        if versions != sorted(set(versions)):
+            raise MigrationError(
+                f"rantai migrasi tak monoton: {versions}")
+        self._ensure_meta()
+    def _ensure_meta(self) -> None:
+        self.conn.executescript(
+            "CREATE TABLE IF NOT EXISTS _migrations ("
+            "version INTEGER PRIMARY KEY, description TEXT NOT NULL,"
+            " applied_at INTEGER NOT NULL);")
+        self.conn.commit()
+    def current_version(self) -> int:
+        row = self.conn.execute(
+            "SELECT MAX(version) FROM _migrations").fetchone()
+        return int(row[0] or 0)
+
+
+=== PAGE 231 ===
+    def pending(self) -> list[Migration]:
+        cur = self.current_version()
+        return [m for m in self.chain if m.version > cur]
+    # ------------------------------------------------------ naik/turun
+    def upgrade(self, target: int | None = None,
+                dry_run: bool = False) -> dict:
+        """Terapkan migrasi berurutan sampai target (default: ujung).
+        dry_run MENGEMBALIKAN rencana tanpa menyentuh basis —
+        direkam di buku sebagai prosedur pra-rilis.
+        """
+        goal = target if target is not None else \
+            self.chain[-1].version
+        if goal < self.current_version():
+            raise MigrationError(
+                f"target v{goal} < data v{self.current_version()} — "
+                "penurunan versi butuh down() eksplisit atau backup")
+        plan = [m for m in self.chain
+                if self.current_version() < m.version <= goal]
+        if dry_run:
+            return {"from": self.current_version(), "to": goal,
+                    "steps": [(m.version, m.description)
+                              for m in plan], "executed": False}
+        for m in plan:
+            m.run_up(self.conn)
+        return {"from": (self.current_version() - len(plan))
+                if plan else self.current_version(),
+                "to": self.current_version(),
+                "steps": [(m.version, m.description) for m in plan],
+                "executed": True}
+    def downgrade(self, target: int) -> dict:
+        """Balikkan migrasi turun ke target — eksplisit + bisa gagal
+        jujur pada langkah yang tak reversibel."""
+        cur = self.current_version()
+        if target >= cur:
+            raise MigrationError(
+                f"target v{target} >= data v{cur} — tak ada yang "
+                "diturunkan")
+        steps: list[tuple[int, str]] = []
+        for m in reversed(self.chain):
+            if target < m.version <= cur:
+                m.run_down(self.conn)
+                steps.append((m.version, f"rollback: {m.description}"))
+        return {"from": cur, "to": self.current_version(),
+                "steps": steps, "executed": True}
+    def status(self) -> dict:
+        cur = self.current_version()
+        return {"current_version": cur,
+                "latest_available": self.chain[-1].version,
+                "pending": [(m.version, m.description)
+                            for m in self.pending()],
+                "chain": [(m.version, m.description,
+                           m.reversible) for m in self.chain]}
+
+
+=== PAGE 232 ===
+VERIFIED — Kode ini dijalankan di lingkungan buku: 562/562 test lulus pada Python 3.12.14 (284 warisan 0.1.0 + 278 definitive;
+ openpyxl 3.1.5, python-docx 1.2.0, pypdf 6.6.0 untuk alat dokumen; pytest 9.0.2).
+Cerita rantainya adalah janji yang ditegakkan test: v2 mengadopsi baseline warisan 0.1.0 (tabel memories
+lama, idempoten terhadap basis yang sudah punya); v3 melepas index lama, MENGganti nama tabel jadi
+memories_legacy_010 (jejak tetap ada), membuat skema sembilan tabel, lalu MENYALIN baris — data
+lama pindah rumah, bukan dibuang; v4 menambah index kebijakan lupa. Eksperimen membuktikan 40
+baris warisan selamat naik ke v4 DAN turun kembali ke v2 dengan jumlah sama. Satu detail SQL yang
+menyelamatkan migrasi dari dirinya sendiri: komentar -- dalam DDL tidak boleh di-flatten satu baris —
+komentar akan menelan statement berikutnya; bug itu tertangkap saat uji dan diceritakan di sini karena
+Anda akan menemukannya juga.
+OUTPUT
+  "migration": {
+    "plan_dry_run": [[2, "baseline warisan 0.1.0 ..."],
+                     [3, "skema sembilan tabel ..."],
+                     [4, "index korupsi-lupa ..."]],
+    "upgraded_to": 4,
+    "rows_migrated": 40,
+    "facts_created": 3,
+    "legacy_table_kept": true,
+    "downgraded_to": 2,
+    "rows_after_downgrade": 40
+  }
+facts_created: 3 dari 20 kandidat semantik warisan — bukan bug: pasangan (subjek, predikat, versi) ganda
+ditolak UNIQUE dan INSERT OR IGNORE melaporkannya dengan jumlah, bukan diam. Data warisan
+yang terduplikasi adalah fakta historis; migrasi yang jujur menghitungnya, menimbangnya, dan
+memberitahukannya — bukan berpura-pura semuanya bersih.
+25.6 UPDATE — staging, verifikasi, rollback
+Pembaruan yang aman untuk penghuni lokal: UNDUH → VERIFIKASI hash → STAGING updates\ →
+BACKUP dulu → SWAP saat IDLE → VERIFY boot → atau ROLLBACK dari backups\.
+
+
+=== PAGE 233 ===
+Tahap
+Gerbang gagal-keras
+Kalau gagal
+Unduh paket
+hash SHA-256 != manifest rilis
+buang; laporkan; JANGAN ekstraksi
+Staging
+tanda tangan Authenticode tak cocok (bila rilis
+ditandatangani)
+tolak + peringatan eksplisit — build unsigned
+diberi label jujur
+Backup pra-update
+backup manager v25.4 gagal
+PEMBARUAN DIBATALKAN — swap tanpa
+jaring penyelamat dilarang
+Swap saat IDLE
+mesin status bukan IDLE/READY
+tunda; jangan menukar kaki yang dipijak
+Boot pasca-update
+BootReport failed_gate atau identitas hash
+berubah tak terduga
+rollback otomatis dari backups\ + laporan
+ Tabel 25.2 — Lima gerbang pembaruan. Perhatikan urutan nomor 3: backup TIDAK opsional — 'update sambil berdoa' adalah anti-pola
+ yang dilarang keras oleh arsitektur ini.
+Realitas yang diakui terbuka: tanpa kunci code-signing berbayar, SmartScreen akan memperingatkan
+pengguna installer pertama — itu harga jujur dari rilis indie-lokal, bukan aib yang disembunyikan.
+electron-updater menyentuh server rilis dan default OFF untuk Ruka lokal; pembaruan manual lewat folder
+updates\ (taruh paket, restart, mesin menukar saat IDLE) menutup kebutuhan tanpa membuka permukaan
+serangan jaringan yang tidak diminta.
+25.7 PIPELINE RILIS — enam tahap bergerbang
+TEST → BUILD CORE → BUILD BODY → SIGN → VERIFY VM → PUBLISH. Setiap tahap punya
+artefak dan syarat lanjut; SKIP tahap = pipeline rusak, bukan pipeline cepat.
+Tahap
+Artefak
+Syarat lanjut
+1. TEST
+562/562 hijau (10 dtk)
+nol gagal; kegagalan injeksi ikut dihitung
+2. BUILD CORE
+python-dist/ruka-core/ (onedir)
+launcher berjalan --version + boot report tertulis
+3. BUILD BODY
+dist/Ruka-Setup-x.y.z.exe
+tsc tanpa error; NSIS selesai
+4. SIGN
+installer bertanda tangan / label unsigned
+jujur
+verifikasi signtool / catat kondisi di release-notes
+5. VERIFY VM
+checklist VM bersih 8 butir
+instal → boot READY → restart auto-start → uninstall
+MEMPERTAHANKAN data → backup/restore jalan
+6. PUBLISH
+arsip + manifest SHA256 + catatan rilis
+hash manifest diumumkan bersama tautan
+Tabel 25.3 — Enam tahap. Tahap 5 memakai VM bersih karena 'berhasil di mesin saya' bukan bukti — mesin pengembang penuh asumsi
+ tersembunyi (Python terpasang, port terbuka, path lama).
+
+
+=== PAGE 234 ===
+Protokol Uji: RUN / EXPECTED / WHY / FAIL / DEBUG
+RUN
+ PYTHONPATH=src pytest tests/test_backup.py tests/test_migrations.py -q
+EXPECTED
+ 28 test hijau: roundtrip 5000 baris + integrity ok; bit korupsi ditolak hash; arsip terpotong ditolak manifest; skema
+masa depan ditolak migrasi; upgrade bertahap + downgrade + data selamat + langkah gagal menggulung balik utuh.
+WHY
+ Backup dan migrasi adalah dua hal yang menentukan apakah 'Ruka tetap Ruka' saat perangkat lunak berganti —
+regresi di sini menghapus kenangan, bukan fitur.
+FAILURE MODE
+ test_restore_leaves_destination_clean gagal = staging bocor saat gagal — periksa blok finally di restore().
+DEBUGGING
+ test_data_survives_migration gagal = migrasi membuang baris — periksa INSERT SELECT di _up_v3 sebelum rilis
+apa pun.
+ Gambar 25.1 — Pipeline rilis enam gerbang + jalur pembaruan aman: BACKUP DULU adalah gerbang, bukan saran.
+25.8 LATIHAN — siklus hidup lengkap di meja Anda
+Latihan buku #8, #9, #10 dijalankan nyata; hasil harus cocok dengan janji arsitektur.
+Engineering Exercise
+
+

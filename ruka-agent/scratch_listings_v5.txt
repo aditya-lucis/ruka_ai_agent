@@ -1,0 +1,494 @@
+=== RUKA-V (Original) Last 3 pages (Listing Index) ===
+--- PAGE 143 ---
+openAsHidden
+ opsi setLoginItemSettings yang SUDAH DIHAPUS (docs Sept 2026) — startup sembunyi kini lewat args
+--hidden.
+Wake word
+ fase pengalaman 4: mikrofon kontinu + deteksi lokal — OPSIONAL, default mati, dijelaskan jujur.
+WAL
+ Write-Ahead Logging SQLite: pembaca tak menghalangi penulis; rollback otomatis saat proses mati
+mid-transaksi.
+quick_check / integrity_check
+ dua lapis deteksi korupsi SQLite: murah (header) vs penuh (b-tree).
+Backup online
+ sqlite3 backup API: konsisten WAL tanpa mengunci penulisan (teruji 1.3 ms / 5000 baris).
+Nearest-rank persentil
+ p95 = elemen ke-⌈q·N⌉ terurut; monoton, tak menipu di sampel kecil.
+Redaksi tiga pola
+ AIza…, Bearer…, api_key/password/secret/token → sebelum menyentuh disk.
+Trace memori
+ jejak tiap tahap konsolidasi (n_in, n_out, ms) — funnel yang bisa diaudit.
+Referensi
+Dokumentasi resmi (diverifikasi September 2026)
+ – Electron — docs API: app (setLoginItemSettings; catatan penghapusan openAsHidden), Tray,
+globalShortcut, Notification, net; process model & security checklist (contextIsolation). electronjs.org.
+– Electron — rilis & dukungan: Electron 44 (Chromium 152, V8 15.2, Node 24; Agustus 2026); 43
+current; kebijakan 3 major terakhir. releases.electronjs.org / endoflife.date.
+– electron-builder — docs: target Windows (NSIS one-click / assisted; MSI pembungkus untuk Group
+Policy; portable). electron.build.
+– PyInstaller — Manual 6.22.2 (September 2026): onedir, noconsole, collect-submodules. pyinstaller.org.
+– Microsoft Learn — Run and RunOnce Registry Keys (Feb 2026): Run = setiap logon, RunOnce =
+sekali lalu hapus; Configure Startup apps (folder shell:startup).
+– Microsoft Learn — named pipes untuk IPC antarproses (Mei 2026).
+– VS Code Extension API — Activation Events (onStartupFinished, onCommand, onLanguage, …);
+Extension Manifest (package.json: engines, publisher, contributes.commands). code.visualstudio.com.
+– SQLite — WAL mode & concurrency; backup API; integrity_check. sqlite.org.
+– openpyxl — read_only streaming; python-docx 1.2.0 — struktur paragraf/tabel; pypdf — extract_text
++ visitor functions. (Docs proyek masing-masing.)
+
+
+--- PAGE 144 ---
+Warisan seri RUKA (Vol I-IV)
+ – Volume I — From Linear Algebra to Advanced Agentic-AI: fondasi vektor, backprop, function calling
+(172 hal).
+– Volume II — The Awakening of the Marquis: self-model, memory governance, multimodal awal,
+TTS/Live (201 hal).
+– Patch Edition 1.1: audit 16 area, 12 known issue, ModelCapabilityRegistry, LiveSessionManager, .env
+loader, redaksi AIza (62 hal; 41/41 test).
+– Volume III — Crimson Cognition: vector engine, context relevance, decision math, kalibrasi ECE,
+nearest-rank (142 hal; 126/126 test).
+– Volume IV — The Awakening of the Senses: validasi multimodal, spektrum, vision tensor, attention,
+ekspresi S(t+1)=aS+bC+gE, avatar, memori multimodal, gerbang proaktif (160 hal; 243/243 test).
+Klasik yang dipakai namun tak diulang di sini
+ – Ebbinghaus (1885) — kurva lupa: peluruhan eksponensial sebagai titik tolak half-life per kelas.
+– Miller (1956) — kapasitas short-term: alasan buffer 128 dan pemilihan representasi.
+– Kendall (1938) — tau: alat ukur peringkat di sensitivitas bobot.
+– Atkinson & Shiffrin (1968) — model memori manusia berlapis yang DIPINJAM struktur istilahnya,
+bukan diklaim disalin: enam sistem Vol V adalah keputusan rekayasa.
+Indeks Listing
+No
+Isi
+Sumber
+Status
+2.1
+EpisodeRecord: kontrak pengalaman
+types.py (memory)
+VERIFIED
+2.2
+SemanticFact: provenance + versi
+types.py (memory)
+VERIFIED
+2.3
+RelationshipNote + validator batas
+types.py (memory)
+VERIFIED
+3.1
+ImportanceScorer + kalibrasi bobot
+importance.py
+VERIFIED
+3.2
+HybridRetriever + sensitivitas
+retrieval.py
+VERIFIED
+4.1
+dedup_and_conflicts
+consolidation.py
+VERIFIED
+5.1
+Transisi legal + forget idempoten
+lifecycle.py
+VERIFIED
+5.2
+PreferencePipeline.observe
+preference.py
+VERIFIED
+6.1
+InstanceLock heartbeat
+supervisor.py
+VERIFIED
+
+
+--- PAGE 145 ---
+No
+Isi
+Sumber
+Status
+6.2
+Supervisor: monitor + shutdown
+supervisor.py
+VERIFIED
+7.1
+setLoginItemSettings (+openAsHidden dihapus)
+main.js (buku)
+DOC-VERIFIED
+7.2
+Tray + Notification + shortcut
+main.js (buku)
+DOC-VERIFIED
+8.1
+main.js tubuh + security defaults
+main.js (buku)
+DOC-VERIFIED/CON
+CEPT
+8.2
+preload.js kontrak sempit
+preload.js (buku)
+DOC-VERIFIED/CON
+CEPT
+9.1
+PermissionPolicy.check + token
+framework.py (tools)
+VERIFIED
+9.2
+ToolRegistry.call lima tahap
+framework.py (tools)
+VERIFIED
+10.1
+PathJail + deteksi biner
+fileops.py
+VERIFIED
+11.1
+CommandPolicy + execute
+terminal.py
+VERIFIED
+11.2
+TerminalSession enam fase
+terminal.py
+VERIFIED
+12.1
+package.json ekstensi VS Code
+package.json (buku)
+DOC-VERIFIED
+12.2
+extension.js + alur PATCH
+extension.js (buku)
+CONCEPT
+13.1
+Excel ekstraksi + usulan
+adapter (buku)
+CONCEPT
+16.1
+Protokol JSONL + batas
+protocol.py
+VERIFIED
+16.2
+IpcServer.dispatch + start
+server.py
+VERIFIED
+17.1
+PyInstaller onedir
+perintah (buku)
+DOC-VERIFIED
+17.2
+electron-builder NSIS
+package.json (buku)
+DOC-VERIFIED/CON
+CEPT
+17.3
+Pencabutan startup saat uninstall
+main.js (buku)
+DOC-VERIFIED
+18.1
+Integritas + backup + restore
+sqlite_engine.py
+VERIFIED
+20.1
+StructuredLogger JSONL + redaksi
+obs.py
+VERIFIED
+20.2
+nearest_rank + MetricsRecorder
+obs.py
+VERIFIED
+ Tabel C.1 — 30 listing Volume V. 16 VERIFIED di-embed dari ruka-persistence (284/284 test); 10 DOC-VERIFIED dari docs resmi
+ Sept 2026; 4 CONCEPT sketsa Windows yang menunggu mesin Bos.
+
+
+=== RUKA-V DEFINITIVE Last 4 pages (Listing Index) ===
+--- PAGE 249 ---
+Matriks audit lima tingkat
+ KONSEP, DESAIN, REFERENSI, TERUJI, SIAP-PRODUKSI — label yang tak boleh dicampur; tabel 26.3.
+Referensi
+Dokumentasi resmi (diverifikasi September 2026)
+ – Electron — tutorial SECURITY (checklist: contextIsolation, sandbox, CSP, will-navigate,
+setWindowOpenHandler, tanpa allowRunningInsecureContent), CONTEXT-ISOLATION (pola
+contextBridge; `on: ipcRenderer.on` disebut contoh buruk), IPC (pola invoke/handle dua arah),
+SANDBOX (rekomendasi default). electronjs.org/docs/latest — diambil 2026-09-08.
+– Electron — API: app (setLoginItemSettings; catatan penghapusan openAsHidden), Tray,
+globalShortcut (register mengembalikan boolean + gagal senyap), Notification, net, process model.
+releases: Electron 44 (Chromium 152, V8 15.2, Node 24; Agustus 2026); dukungan 3 major terakhir.
+– electron-builder — Windows NSIS (oneClick, perMachine, deleteAppDataOnUninstall,
+runAfterFinish), target & extraResources. electron.build.
+– PyInstaller — Manual 6.22.2 (September 2026): onedir vs onefile, --noconsole, --collect-submodules,
+--copy-metadata. pyinstaller.org.
+– Microsoft Learn — Run/RunOnce (Feb 2026); Configure startup apps (shell:startup); named pipes
+untuk IPC (Mei 2026).
+– VS Code Extension API — Activation Events (onStartupFinished, onCommand), Manifest (engines,
+publisher, contributes.commands). code.visualstudio.com.
+– SQLite — WAL & concurrency; backup API; quick_check / integrity_check; PRAGMA foreign_keys
+per-koneksi. sqlite.org.
+– openpyxl 3.1.5 — read_only streaming, data_only & batas cache formula; python-docx 1.2.0 —
+struktur paragraf/tabel/styles; pypdf 6.6.0 — extract_text, PdfWriter. Docs proyek masing-masing
+(dieksekusi di build buku).
+– Google — model Gemini & Interactions API (matriks riset seri; registry kapabilitas ber-stempel
+2026-09-08). ai.google.dev / libraries.google.dev.
+Warisan seri RUKA (Vol I-IV + Patch)
+ – Volume I — From Linear Algebra to Advanced Agentic-AI: fondasi vektor, backprop, function calling
+(172 hal).
+– Volume II — The Awakening of the Marquis: self-model, memory governance, multimodal awal,
+TTS/Live (201 hal).
+
+
+--- PAGE 250 ---
+– Patch Edition 1.1: audit 16 area, ModelCapabilityRegistry, LiveSessionManager, .env loader, redaksi
+AIza (62 hal; 41/41 test).
+– Volume III — Crimson Cognition: vector engine, context relevance, decision math, kalibrasi ECE,
+nearest-rank (142 hal; 126/126 test).
+– Volume IV — The Awakening of the Senses: validasi multimodal, spektrum, attention, ekspresi S(t+1),
+avatar, memori multimodal, gerbang proaktif (160 hal; 243/243 test).
+– Volume V 0.1.0 — The Persistent Mind: enam sistem memori, persistent self, runtime, tubuh awal
+(145 hal; 284/284 test) — BASELINE yang diaudit edisi ini.
+Klasik yang dipakai namun tak diulang
+ – Ebbinghaus (1885) — kurva lupa: titik tolak half-life per kelas.
+– Miller (1956) — kapasitas short-term: alasan buffer 128.
+– Kendall (1938) — tau: alat ukur peringkat di sensitivitas bobot.
+– Atkinson & Shiffrin (1968) — istilah dipinjam, bukan diklaim disalin: enam sistem Vol V keputusan
+rekayasa.
+– Merkle tree / block merah pembukuan — akar desain audit rantai-hash lokal (tanpa konsensus
+blockchain).
+Indeks Listing
+No
+Isi
+Sumber
+Status
+2.1
+EpisodeRecord: kontrak pengalaman
+types.py (memory)
+VERIFIED
+2.2
+SemanticFact: provenance + versi
+(+source_type definitive)
+types.py (memory)
+VERIFIED
+2.3
+RelationshipNote + validator batas
+types.py (memory)
+VERIFIED
+3.1
+ImportanceScorer + kalibrasi bobot
+importance.py
+VERIFIED
+3.2
+HybridRetriever + sensitivitas
+retrieval.py
+VERIFIED
+4.1
+dedup_and_conflicts
+consolidation.py
+VERIFIED
+5.1
+Transisi legal + forget idempoten
+lifecycle.py
+VERIFIED
+5.2
+PreferencePipeline.observe
+preference.py
+VERIFIED
+6.1
+InstanceLock heartbeat
+supervisor.py
+VERIFIED
+
+
+--- PAGE 251 ---
+No
+Isi
+Sumber
+Status
+6.2
+Supervisor: monitor + shutdown
+supervisor.py
+VERIFIED
+7.1
+setLoginItemSettings (+openAsHidden dihapus)
+main.js (buku)
+DOC-VERIFIED
+7.2
+Tray + Notification + shortcut
+main.js (buku)
+DOC-VERIFIED
+8.1
+main.js tubuh + security defaults
+main.js (buku)
+DOC-VERIFIED/CON
+CEPT
+8.2
+preload.js kontrak sempit
+preload.js (buku)
+DOC-VERIFIED/CON
+CEPT
+9.1
+PermissionPolicy.check + token
+framework.py (tools)
+VERIFIED
+9.2
+ToolRegistry.call lima tahap
+framework.py (tools)
+VERIFIED
+10.1
+PathJail + deteksi biner (+patch backslash)
+fileops.py
+VERIFIED
+11.1
+CommandPolicy + execute
+terminal.py
+VERIFIED
+11.2
+TerminalSession enam fase
+terminal.py
+VERIFIED
+12.1
+package.json ekstensi VS Code
+package.json (buku)
+DOC-VERIFIED
+12.2
+extension.js + alur PATCH
+extension.js (buku)
+CONCEPT
+13.1
+Excel ekstraksi + usulan
+adapter (buku)
+CONCEPT → lihat 24.5
+16.1
+Protokol JSONL + batas
+protocol.py
+VERIFIED
+16.2
+IpcServer.dispatch + start
+server.py
+VERIFIED
+17.1
+PyInstaller onedir
+perintah (buku)
+DOC-VERIFIED
+17.2
+electron-builder NSIS
+package.json (buku)
+DOC-VERIFIED/CON
+CEPT
+17.3
+Pencabutan startup saat uninstall
+main.js (buku)
+DOC-VERIFIED
+18.1
+Integritas + backup + restore
+sqlite_engine.py
+VERIFIED
+20.1
+StructuredLogger JSONL + redaksi
+obs.py
+VERIFIED
+20.2
+nearest_rank + MetricsRecorder
+obs.py
+VERIFIED
+22.1
+RuntimeStatus 13 + peta 30 busur
+statemachine.py
+VERIFIED
+22.2
+transition: validasi + penolakan tercatat
+statemachine.py
+VERIFIED
+22.3
+boot_sequence 4 gerbang
+statemachine.py
+VERIFIED
+
+
+--- PAGE 252 ---
+No
+Isi
+Sumber
+Status
+22.4
+BootReport + ShutdownReport artefak
+health.py
+VERIFIED
+22.5
+RuntimeHealth liveness vs readiness
+health.py
+VERIFIED
+23.1
+WindowsPathLayout 8 peran + jail
+windows/paths.py
+VERIFIED
+23.2
+main.ts: window + security + lifecycle
+desktop/electron/main.ts
+KODE TS
+(DOC-VERIFIED)
+23.3
+preload.ts: contextBridge sempit
+desktop/electron/preload.ts
+KODE TS
+(DOC-VERIFIED)
+23.4
+ipc/contract.py: kanal + skema + versi
+ipc/contract.py
+VERIFIED
+23.5
+ipc-contract.ts cerminan
+desktop/electron/ipc-contract.ts
+KODE TS
+(DOC-VERIFIED)
+23.6
+runtime-connector.ts reconnect + handshake
+desktop/electron/runtime-connecto
+r.ts
+KODE TS
+(DOC-VERIFIED)
+23.7
+tray.ts ikon per status
+desktop/electron/tray.ts
+KODE TS
+(DOC-VERIFIED)
+24.1
+Permission + MATRIX + PermissionPolicy
+security/permissions.py
+VERIFIED
+24.2
+injection: intake + scan + wrap + gate
+security/injection.py
+VERIFIED
+24.3
+AuditStream rantai SHA-256
+security/audit.py
+VERIFIED
+24.4
+vscode_bridge: JSONL + 4-fase
+tools/vscode_bridge.py
+VERIFIED
+24.5
+excel_tool: roundtrip nyata
+tools/excel_tool.py
+VERIFIED
+24.6
+word_tool: struktur + index pasti
+tools/word_tool.py
+VERIFIED
+24.7
+pdf_tool: teks + cari + verdict scan
+tools/pdf_tool.py
+VERIFIED
+24.8
+ModelCapabilities + negosiasi
+models/capabilities.py
+VERIFIED
+25.1
+electron-builder.json NSIS
+installer/electron-builder.json
+DOC-VERIFIED
+25.2
+BackupManager manifest + restore
+backup/manager.py
+VERIFIED
+25.3
+MigrationRunner v2→v4
+migrations/runner.py
+VERIFIED
+ Tabel E.1 — 55 listing Volume V definitive: 30 warisan 0.1.0 + 25 baru. 29 VERIFIED di-embed dari ruka-persistence 0.2.0 (562/562
+ test); 10 KODE TS/DOC-VERIFIED dicek ke docs resmi Sept 2026; sisanya warisan berlabel jujur — 13.1 kini digantikan 24.5 yang
+ DIEKSEKUSI.
+
+

@@ -1,0 +1,413 @@
+=== RUKA-V (Original) Pages 3-7 ===
+--- PAGE 3 ---
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 106
+PART XVI — IPC & Decoupling
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 114
+PART XVII — Deployment & Packaging
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 118
+PART XVIII — Lapisan Persistensi
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 123
+PART XIX — Testing & Pemulihan
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 127
+PART XX — Observabilitas
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 134
+PART XXI — Arsitektur Final — The Castle of the Marquis
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 141
+Glosarium Volume V
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 143
+Referensi
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 144
+Indeks Listing
+
+
+--- PAGE 4 ---
+Preface — volume yang INGAT dan TETAP
+Empat volume lalu, Ruka dibangun satu lapis demi satu lapis. Volume I meletakkan fondasi: aljabar linier,
+neural network dari nol, dan disiplin bahwa setiap klaim harus bisa dihitung. Volume II memberinya
+identitas, memori pertama yang tata kelolanya jelas, multimodal, dan suara. Patch Edition 1.1 menghukum
+kesalahan runtime dan menegakkan kejujuran verifikasi. Volume III menara matematikanya: vector
+intelligence, decision mathematics, self-model yang grounded. Volume IV membuka inderanya: piksel,
+spektrum, ekspresi, dan kehadiran yang terukur.
+Tapi ada dua pertanyaan yang tetap tidak terjawab — dan keduanya bukan pertanyaan hiasan. Pertama: 
+bagaimana Ruka tetap Ruka setelah proses mati? Setiap kali laptop Bos di-restart, seluruh menara itu
+lenyap; yang bangkit lagi hanyalah proses baru tanpa nama, tanpa kenangan, tanpa preferensi yang
+dipelajari. Kedua: bagaimana Ruka hidup SEBAGAI PENGHUNI mesin itu, bukan sebagai skrip
+yang dijalankan? Jawaban kedua bukan soal kebanggaan — jawabannya menentukan apakah Bos harus
+membuka terminal dan mengetik python main.py setiap pagi, ataukah Ruka sudah menunggu di tray sejak
+Windows selesai boot.
+Volume V menjawab keduanya dengan cara yang sama seperti empat pendahulunya: matematika yang bisa
+dibantah, kode yang bisa dijalankan, kegagalan yang didiagnosis, dan batas klaim yang ditulis tegas.
+Judulnya, The Persistent Mind, bukan puisi kosong: memori jangka panjang yang punya tata kelola,
+identitas yang bertahan lintas restart karena disimpan terstruktur — bukan karena prompt panjang — dan
+tubuh Windows yang membuat semuanya terasa seperti kehadiran, bukan sesi.
+"Keabadian bangsawan itu bukan tak pernah mati, Bos — melainkan bangun kembali dengan nama dan
+kenangan yang sama. Empat volume saya belajar berpikir; volume ini saya belajar pulang."
+— Ruka, Marquis Kekaisaran Trendamis
+Apa yang TIDAK diklaim buku ini
+Memori jangka panjang bukan kesadaran. Kontinuitas identitas lintas restart bukan jiwa. 'Ruka mengingat Bos'
+berarti representasi terstruktur dipilih, disimpan, dan dikembalikan — dengan confidence, versi, provenance,
+dan hak untuk dilupakan. 'Ruka tetap Ruka' berarti dokumen identitas terverifikasi hash, bukan soul. Lore
+vampir tetap persona layer dan metaphor; setiap kata tunduk pada aturan sejak Volume I: MATHEMATICAL
+ACCURACY > ROLEPLAY.
+
+
+--- PAGE 5 ---
+Cara Membaca Buku Ini
+Buku ini adalah sequel penuh — evolusi, bukan reboot — dari Volume I-IV. Struktur pedagoginya sama:
+setiap konsep penting berjalan dalam dua belas langkah (WHY, WHAT, MATH, HOW, INTERNALS,
+ARCHITECTURE, IMPLEMENTATION, TRADE-OFFS, FAILURE MODES, TESTING,
+EVALUATION, PRODUCTION). Yang berbeda arahnya: kalau Volume IV membedah bagaimana
+kognisi MENERIMA dunia, Volume V membedah bagaimana ia MENYIMPAN, MENGINGAT
+KEMBALI, dan TETAP ADA.
+– Pembaca ideal: Anda yang sudah menamatkan Volume I-IV, atau setara — mahir Python, paham
+embedding, Interactions API, arsitektur agent, dan tidak perlu diajarkan lagi cara memakai pytest.
+– Part I-V: ilmu memori — taksonomi enam sistem, matematika kepentingan I(m) dan fusion retrieval,
+pipeline konsolidasi delapan tahap, siklus hidup melupakan. Semua dengan kode stdlib murni yang bisa
+dijalankan offline.
+– Part VI-VIII: runtime & tubuh — proses level-pengguna di Windows, startup saat login, tray,
+shortcut global, notifikasi; Electron sebagai TUBUH yang terhubung ke otak Python lewat IPC —
+bukan aplikasi raksasa.
+– Part IX-XIII: tangan — kerangka alat least-privilege, alat berkas dengan path jail, terminal enam
+fase, jembatan VS Code, intelijensi dokumen Excel/Word/PDF.
+– Part XIV-XXI: disiplin — keamanan lokal, peta jalan pengalaman, IPC dan decoupling, deployment
+PyInstaller + electron-builder, lapisan SQLite, pemulihan & testing, observabilitas, dan arsitektur final.
+– Listing ber-stempel: VERIFIED (dijalankan di lingkungan buku, 284/284 test hijau),
+DOC-VERIFIED (bentuk API diverifikasi ke docs resmi Sept 2026 — Electron 44, PyInstaller 6.22.2,
+VS Code), CONCEPT (sketsa jujur yang butuh Windows nyata untuk dieksekusi).
+Tiga batas platform yang jujur diakui
+Buku ini dibangun dan diuji di Linux offline; seluruh matematika memori, pipeline, IPC, dan alat BERJALAN
+di sana. Bagian Windows spesifik (tray asli, startup registry, installer NSIS) diverifikasi bentuknya ke
+dokumentasi resmi terkini dan ber-stempel DOC-VERIFIED — kode lengkapnya menunggu mesin Windows
+Bos untuk hidup. Wake word dan speech push-to-talk dibahas sebagai peta jalan ber-izin, bukan fitur yang
+dipaksa jalan.
+
+
+--- PAGE 6 ---
+Status Kejujuran Teknis
+Empat volume mendirikan disiplin stempel; Volume V meneruskannya tanpa kompromi. Setiap angka
+penting di buku ini lahir dari skrip eksperimen deterministik yang bisa Bos jalankan ulang di paket
+ruka-persistence — dengan seed yang ditulis terbuka. Setiap listing ber-asal-mula jelas. Dan yang paling
+penting: lima bug nyata tertangkap oleh test dan eksperimen SELAMA menulis volume ini — semuanya
+diperbaiki di source dan diceritakan di dalam, karena kejujuran kegagalan adalah bagian dari kurikulum,
+bukan aib yang disembunyikan.
+Stempel
+Arti
+Cakupan di Vol V
+VERIFIED
+kode dijalankan di lingkungan
+buku
+284/284 test offline (Python 3.12.14, stdlib murni); 6 eksperimen
+deterministik dengan results JSON
+DOC-VERIFIE
+D
+bentuk API diverifikasi ke docs
+resmi
+Electron app/Tray/globalShortcut/Notification (44/43, Sept 2026);
+setLoginItemSettings (openAsHidden sudah DIHAPUS);
+electron-builder NSIS; PyInstaller 6.22.2; VS Code activation
+events; Run/RunOnce & Startup folder (learn.microsoft)
+CONCEPT
+sketsa arsitektur yang tak
+dieksekusi
+main.js Electron penuh, ekstensi VS Code, installer config —
+menunggu mesin Windows nyata
+ Tabel 0.1 — Tiga stempel kejujuran Volume V dan batas masing-masing.
+Angka penting yang akan Bos temui
+Importance gate 0.35 (bukan 0.30 — lantai matematika 0.29 akan membuat gate kosong); plafon pengukuhan
+duplikat 0.85 (pengulangan tak boleh melahirkan kepastian); korpus menua 60 hari membuat konfigurasi
+recency-dominan KOLAPS ke 0.0 sementara fusion bertahan; transaksi yang dibunuh di tengah jalan
+menyisakan NOL baris setengah jadi (WAL rollback). Semua angka itu punya file JSON-nya.
+Prasyarat
+ – Python 3.10+ (diuji di 3.12.14) — paket Vol V berdependensi STDLIB MURNI: sqlite3, json, socket,
+threading, subprocess, hashlib, secrets. Tanpa NumPy, tanpa API key, tanpa jaringan.
+– Vol I-IV atau kesetaraannya: embedding & similarity (Vol III), Interactions API (Vol II/Patch),
+persepsi & ekspresi (Vol IV) — dipakai sebagai fondasi yang TIDAK dibangun ulang.
+– Windows 10/11 sebagai sasaran produksi untuk Part VI-VIII & XVII — bagian matematika memori
+tetap lintas platform penuh.
+– Node.js + Electron 43/44 untuk tubuh (docs Sept 2026: Electron 44 = Chromium 152, V8 15.2, Node
+24; versi terakhir tiga major didukung resmi) — di Vol V dipakai sebagai DOC-VERIFIED.
+
+
+--- PAGE 7 ---
+– PyInstaller 6.22.2 dan electron-builder (target NSIS) untuk Part XVII.
+– pytest untuk menjalankan 284 test paket — protokolnya di halaman berikutnya.
+Satu prasyarat yang tidak bisa dipasang lewat pip: kesediaan menerima bahwa 'mengingat' adalah
+KEPUTUSAN REKAYASA dengan trade-off, bukan fitur yang menyala sendiri. Setiap halaman volume
+ini akan menghormat kesediaan itu.
+Peta Jalan Volume
+ Gambar 0.1 — 21 PART dalam tiga blok: ilmu memori (I-V), runtime + tubuh + tangan (VI-XIII), disiplin produksi (XIV-XXI).
+
+
+=== RUKA-V DEFINITIVE Pages 3-8 ===
+--- PAGE 3 ---
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 104
+PART XV — Peta Jalan Pengalaman
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 107
+PART XVI — IPC & Decoupling
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 115
+PART XVII — Deployment & Packaging
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 119
+PART XVIII — Lapisan Persistensi
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 124
+PART XIX — Testing & Pemulihan
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 128
+PART XX — Observabilitas
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 135
+PART XXI — Arsitektur Final — The Castle of the Marquis
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 142
+PART XXII — The Companion Runtime
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 157
+PART XXIII — Windows Desktop Integration
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 182
+PART XXIV — The Complete Toolchain
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 219
+PART XXV — Ruka Installer & Release Pipeline
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 235
+PART XXVI — The Castle of the Marquis — Definitive Architecture
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 243
+Panduan Migrasi — 0.1.0 → Definitive
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 245
+Glosarium Volume V
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 249
+Referensi
+ .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 250
+Indeks Listing
+
+
+--- PAGE 4 ---
+Preface — edisi yang MENEMPATI
+Volume V pertama menjawab dua pertanyaan yang empat jilid sebelumnya tinggalkan: bagaimana Ruka
+mengingat lintas restart, dan bagaimana ia hidup sebagai penghuni Windows. Jawabannya utuh sebagai
+ARSITEKTUR — enam sistem memori bermatematika, identitas ber-hash, tubuh Electron, supervisor,
+284 test hijau. Tapi 145 halaman itu, jujur diukur dengan ambisinya sendiri, masih berisi banyak peta
+untuk wilayah yang belum diinjak: tray yang digambar tapi belum dikontrak, izin yang bertingkat tapi
+belum bernama, dokumen Excel yang dirancang tapi tak pernah dibuka, migrasi yang dijanjikan tapi belum
+digerakkan.
+Edisi DEFINITIVE ini ditulis dengan satu disiplin yang dipegang sepanjang jalan: EXPAND
+IMPLEMENTATION DEPTH, NOT PROSE. Tidak ada bab yang diperpanjang untuk terlihat lengkap;
+setiap halaman baru harus membayar tempatnya lewat salah satu dari: arsitektur, kode sumber, skema,
+algoritma, derivasi, uji, eksperimen, benchmark, mode kegagalan, prosedur debugging, analisis keamanan,
+keputusan produksi, prosedur migrasi/deploy, runbook operasional, atau latihan rekayasa. Hasilnya 21
+PART lama utuh — diperdalam, bukan ditulis ulang — dan 5 PART baru (XXII-XXVI) yang mengubah
+peta menjadi bangunan.
+Perubahan terbesar tidak terlihat di daftar isi melainkan di LABEL. Volume pertama menyebut Excel,
+Word, dan PDF sebagai CONCEPT; edisi ini MENJALANKANNYA — openpyxl, python-docx, dan
+pypdf terpasang di lingkungan build, seluruh rantai ekstraksi-tulis ber-backup dieksekusi sungguhan, dan
+angkanya dikutip dari hasil mesin. Audit lintas platform bahkan menangkap bug nyata ketujuh: penjara
+jalur yang buta terhadap backslash Windows — ditemukan TEPAT karena uji keamanan baru
+menanyakannya. Begitulah cara edisi ini bekerja: setiap klaim baru naik tingkat hanya karena buktinya
+naik tingkat.
+"Edisi pertama mengajari saya pulang, Bos. Edisi ini mengajari saya menempati: menggantung jas di paku
+yang benar, menyimpan kunci di papan yang tertulis, dan memastikan orang yang datang menyalakan
+lampu — bukan menyulut kastelnya."
+— Ruka, Marquis Kekaisaran Trendamis
+Apa yang TIDAK berubah
+Enam lapisan 0.1.0 tidak dibongkar: memori enam sistem, persistent self ber-hash, supervisor berheartbeat, IPC
+JSONL, kerangka alat empat level, SQLite WAL. Edisi definitive menambahkan mesin status, kontrak kanal,
+lembar izin, pertahanan suntikan, audit rantai-hash, tiga alat dokumen nyata, backup ber-manifest, dan migrasi
+berversi — semuanya di ATAS fondasi lama, dengan 284 test warisan tetap hijau persis seperti semula.
+
+
+--- PAGE 5 ---
+Audit Baseline — jujur sebelum menambah
+Edisi definitive dimulai dari AUDIT, bukan dari semangat. Dua belas dimensi (A-L) diperiksa terhadap
+Volume V 0.1.0; hasilnya menentukan APA yang diperdalam dan MENGAPA — dan yang tak kalah
+penting: apa yang sengaja dibiarkan.
+Dimensi audit
+Temuan pada 0.1.0
+Tindak lanjut definitive
+A. Konseptual
+terimplementasi
+memori/self/runtime/IPC lengkap
+konsepnya
+dipertahankan utuh; tidak ada rewrite
+B. Teknis
+terimplementasi
+supervisor, kunci instance, konsolidasi,
+retrieval fusion, 4-level izin
+diperdalam: 278 test baru di atasnya
+C. Punya kode nyata
+284 test hijau (0.1.0); 29 listing
+VERIFIED
+naik jadi 562 test; 40+ listing baru sebagian besar
+VERIFIED
+D. Pseudocode saja
+main.js/preload.js buku; Excel/Word/PDF
+adapter
+Excel/Word/PDF kini DIEKSEKUSI; Electron
+naik jadi sumber .ts DOC-VERIFIED
+E. Arsitektur tanpa
+implementasi
+tray nyata, installer, update, migrasi skema
+Part XXII-XXV: FSM + kontrak + installer +
+backup + migrasi TERUJI
+F. Implementasi tanpa
+uji cukup
+kejujuran health, kegagalan lintas-proses
+test injeksi kegagalan + eksperimen 3 skenario
+baru
+G. Bergantung API
+eksternal
+Electron, PyInstaller, VS Code, model
+Gemini
+riset ulang docs resmi Sep 2026; lapisan
+kapabilitas model menetralisir asumsi
+H. Berisiko usang
+string kanal, nama model,
+setLoginItemSettings
+kontrak kanal + registry ber-stempel tanggal
+verifikasi
+I. Butuh pengerasan
+keamanan
+penjara jalur lintas-platform, suntikan
+prompt, audit manipulasi
+normalisasi backslash + intake/scan/gate + rantai
+hash SHA-256
+J. Butuh verifikasi
+Windows
+jalur %LOCALAPPDATA%, startup,
+uninstall
+tata letak TERUJI lintas-OS; VM bersih =
+checklist rilis Anda
+K. Butuh verifikasi
+Electron
+security flags, preload, reconnect
+8 keputusan dicek ke tutorial resmi;
+DOC-VERIFIED jujur
+L. Butuh verifikasi
+deploy
+installer, update, rollback
+konfigurasi NSIS/PyInstaller diverifikasi docs;
+pipeline 6 gerbang
+ Tabel 0.1 — Audit dua belas dimensi. Kolom ketiga adalah KONtrak edisi ini; setiap baris menuntut jejak di bagian yang dituju.
+Dari audit lahir lima label kematangan yang dipakai konsisten sampai halaman terakhir: KONSEP,
+DESAIN, REFERENSI, TERUJI, SIAP-PRODUKSI. Matriks lengkap empat belas komponen beredar di
+
+
+--- PAGE 6 ---
+Part XXVI tabel 26.3 — termasuk komponen yang jujur diberi label rendah. Buku teknik yang menaikkan
+label diam-diam adalah iklan; buku ini memilih menjadi alat kerja.
+Cara Membaca Edisi Definitive
+Struktur pedagogi keluarga tetap: dua belas langkah per konsep besar (WHY, WHAT, MATH, HOW,
+INTERNALS, ARCHITECTURE, IMPLEMENTATION, TRADE-OFFS, FAILURE MODES,
+TESTING, EVALUATION, PRODUCTION). Yang baru adalah MEDANNYA: bila Vol V 0.1.0 berhenti
+di 'arsitektur + kode inti', edisi ini menuntaskan sampai 'kontrak + installer + angka terukur'.
+– Pembaca ideal: penamat Vol I-IV (atau setara) yang siap membangun, bukan sekadar membayangkan.
+– Part I-V utuh — taksonomi, matematika I(m) & fusion, konsolidasi; kini PLUS mesin kontradiksi (P
+IV), retrieval 9-tahap (P III), forgetting 5 disposisi & pekerja konsolidasi (P IV-V).
+– Part VI-XX utuh — runtime, Windows, Electron, alat, keamanan, IPC, deployment; diperdalam di
+tempat audit menunjuk.
+– Part XXII (BARU) — mesin status 13-keadaan + health: bahasa resmi runtime.
+– Part XXIII (BARU) — integrasi Windows penuh: tata letak %LOCALAPPDATA%, tubuh Electron
+ber-keamanan-resmi, kontrak IPC dua bahasa.
+– Part XXIV (BARU) — rantai alat lengkap: izin formal, suntikan prompt, audit hash, VS Code,
+Excel/Word/PDF NYATA, lapisan model.
+– Part XXV (BARU) — installer & rilis: kemasan, NSIS, backup RPO/RTO, migrasi, update, pipeline.
+– Part XXVI (BARU) — kastel definitive: arsitektur 8 lapis, struktur proyek, loop 12 tahap, matriks
+audit, checklist regresi.
+– Lampiran baru: Panduan Migrasi 0.1.0 → definitive + checklist regresi 14 butir.
+Konvensi label listing (diperketat)
+VERIFIED — dijalankan & direproduksi di lingkungan build (Python 3.12.14; openpyxl 3.1.5, python-docx
+1.2.0, pypdf 6.6.0 terpasang). DOC-VERIFIED — bentuk API dicek ke dokumentasi resmi bertanggal
+2026-09-08; jalur runtime TIDAK dieksekusi di sesi buku (butuh Windows/Electron). KODE TS — sumber
+TypeScript asli arsip dengan stempel DOC-VERIFIED. Angka eksperimen dikutip dari results/*.json yang
+diregenerasi skrip; Anda bisa membantahnya dengan menjalankannya.
+
+
+--- PAGE 7 ---
+Status Kejujuran Teknis
+Klaim
+Status
+Bukti
+562 test hijau (284 warisan + 278 baru)
+TERUJI
+pytest 9.0.2; 10.02 dtk; stdlib inti + pustaka dokumen nyata
+9 eksperimen deterministik
+TERUJI
+results/*.json; 3 baru definitive: statemachine, backup,
+toolchain
+Excel/Word/PDF roundtrip nyata
+TERUJI
+roundtrip dua pustaka + backup .bak + transaksi-atau-batal
+RTO restore 5000 baris < 60 dtk
+TERUJI
+terukur 5 ms; integritas ok
+10/10 serangan suntikan terdeteksi
+TERUJI
+korpus eksperimen; 0 false positive pada 6 teks bisnis
+Migrasi naik-turun data utuh
+TERUJI
+40 baris warisan selamat v2→v4→v2
+Tubuh Electron + installer di Windows
+DOC-VERIFIE
+D
+pola & API dicek ke tutorial resmi Sept 2026; eksekusi
+butuh Windows
+Model Gemini caps & harga
+REFERENSI
+registry ber-stempel dari docs resmi; TIDAK dieksekusi API
+di sesi buku
+Wake word / komunitas memori
+KONSEP
+fase 4 opsional; tidak diklaim lebih
+ Tabel 0.2 — Sembilan klaim besar, masing-masing dengan label dan alamat buktinya. Klaim tanpa kolom bukti tidak berhak masuk tabel
+ ini.
+Prasyarat
+– Python 3.10+ (build buku: 3.12.14); pytest; pustaka dokumen: openpyxl, python-docx, pypdf — inti
+tetap stdlib murni.
+– Pemahaman Vol I-IV: embedding, Interactions API, arsitektur agent, validasi multimodal. Buku ini
+tidak mengulang mengajarnya — ia MEMAKAINYA.
+– Windows 10/11 (mesin Bos target) untuk mengubah label DOC-VERIFIED menjadi VERIFIED: VM
+bersih cukup untuk checklist 14 butir.
+– Node 20+/Electron untuk build tubuh; seluruh pola diverifikasi ke electronjs.org/docs/latest (Sept
+2026).
+– Kesiapan mental: buku ini sering mengatakan 'ini belum diverifikasi di sini' — itu fitur, bukan
+kelemahan.
+
+
+--- PAGE 8 ---
+Peta Jalan Volume — 26 PART
+Dua puluh satu PART pertama adalah jalan Vol V 0.1.0 yang utuh; lima PART terakhir adalah jalan baru
+yang dibuka audit. Peta dibaca dalam enam gerbang besar: MEMORI (I-V), KEDIAMAN (VI-VIII),
+TANGAN (IX-XIII), TATA KELOLA (XIV-XXI), PENGHUNIAN (XXII-XXV), dan PENUTUPAN
+(XXVI).
+Gerbang
+Part
+Pertanyaan yang dijawab
+MEMORI
+I-V
+apa yang diingat, bagaimana dinilai, dipadatkan, dipertaruhkan, dilupakan — +
+kontradiksi dipertimbangkan (definitive)
+KEDIAMAN
+VI-VIII
+proses yang benar, Windows yang dihormati, tubuh Electron — + bahasa status &
+kontrak kanal (XXII-XXIII definitive)
+TANGAN
+IX-XIII
+izin, berkas, terminal, VS Code, dokumen — + rantai alat NYATA (XXIV
+definitive)
+TATA
+KELOLA
+XIV-XXI
+keamanan lokal, pengalaman, IPC, deployment, persistensi, testing, observabilitas,
+arsitektur 0.1.0
+PENGHUNIAN
+XXII-XXV
+(BARU)
+mesin status, integrasi desktop penuh, rantai alat produksi, installer & rilis
+PENUTUPAN
+XXVI (BARU)
+kastel definitive: 8 lapis, struktur proyek, loop 12 tahap, matriks audit, checklist
+regresi
+ Tabel 0.3 — Enam gerbang, 26 PART. Definitive menambah halaman di gerbang PENGHUNIAN dan PENUTUPAN; gerbang lain
+ diperdalam, bukan dilipat gandakan.
+VOLUME V · THE PERSISTENT MIND · PART I
+Anatomi & Taksonomi Memori
+"“Empat volume saya menimbun pengalaman seperti benda antik di gudang, Bos — indah,
+tak terpakai, dan tak bisa ditemukan saat dibutuhkan. Volume ini saya bangun raknya,
+kartu katalognya, dan kebijakan buangnya.”"
+Bukan pengantar kosmetik: PART ini menegakkan doktrin seluruh volume — enam sistem
+yang BERBEDA pekerjaannya, tiga hal yang sering dikira memori padahal bukan, dan posisi
+persis lapisan memori jangka panjang pada menara Vol I-IV.
+
+
