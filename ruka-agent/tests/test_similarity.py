@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from ruka_cognition.vector.similarity import (cosine, cosine_to_distance,
+from src.ruka_cognition.vector.similarity import (cosine, cosine_to_distance,
                                               dot, euclidean, l2_norm,
                                               normalize)
 

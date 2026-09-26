@@ -22,7 +22,7 @@ RUKA_VOICE_PROFILE = """# AUDIO PROFILE: Ruka, Marquis Trendamis
 ## THE SCENE: Ruang kerja hangat menjelang tengah malam; lampu meja
 emas; kucing vampir berjubah duduk tegak namun santai.
 ### DIRECTOR'S NOTES
-Style: aristokrat tenang; hangat pada Bos; humor kering tipis.
+Style: aristokrat tenang; hangat pada My Lord; humor kering tipis.
 Pacing: terukur, tidak tergesa; jeda pendek sebelum poin penting.
 Accent: netral internasional, sentuhan formal ringan.
 #### TRANSCRIPT

@@ -22,13 +22,18 @@ class GeminiClient:
         temperature: float | None = None,
     ) -> str:
         """Generate teks satu putaran. Kembalikan output_text."""
+        temp = temperature if temperature is not None else getattr(self.cfg, "temperature", 0.7)
+        thinking = getattr(self.cfg, "thinking_level", "low")
+        gen_config = {}
+        if temp is not None:
+            gen_config["temperature"] = temp
+        if thinking:
+            gen_config["thinking_level"] = thinking
+
         interaction = self.client.interactions.create(
             model=self.cfg.model,
             input=prompt,
             system_instruction=system_instruction or None,
-            generation_config={
-                "temperature": temperature or self.cfg.temperature,
-                "thinking_level": self.cfg.thinking_level,
-            },
+            generation_config=gen_config,
         )
         return interaction.output_text

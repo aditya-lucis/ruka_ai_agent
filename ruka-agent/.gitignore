@@ -1,6 +1,7 @@
 # ---- Rahasia & lingkungan ----
 .env
 .audit/
+*.wav
 # ---- Python ----
 .venv/
 venv/

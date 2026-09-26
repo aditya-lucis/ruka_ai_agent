@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 VALID_ENVIRONMENTS = frozenset({"development", "staging", "production"})
-DEFAULT_MODEL = "gemini-3.6-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview"
 DEFAULT_LIVE_MODEL = "gemini-3.1-flash-live-preview"
 
@@ -57,6 +57,8 @@ class Settings:
     live_model: str
     max_iterations: int
     token_budget: int
+    temperature: float = 0.7
+    thinking_level: str = "low"
 
     def safe_snapshot(self) -> dict:
         """Config without secrets — for traces and logs."""
@@ -112,6 +114,8 @@ def load_settings(env: dict[str, str] | None = None,
         live_model=e.get("RUKA_LIVE_MODEL", DEFAULT_LIVE_MODEL).strip() or DEFAULT_LIVE_MODEL,
         max_iterations=_positive_int(e.get("RUKA_MAX_ITERATIONS"), 12),
         token_budget=_positive_int(e.get("RUKA_TOKEN_BUDGET"), 60_000),
+        temperature=float(e.get("RUKA_TEMPERATURE", "0.7")),
+        thinking_level=e.get("RUKA_THINKING_LEVEL", "low").strip() or "low",
     )
 
 def _positive_int(raw: str | None, default: int) -> int:

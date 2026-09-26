@@ -45,7 +45,7 @@ class RukaSession:
             tool_names=["calculator", "current_datetime", "fetch_docs"],
             has_memory=True,
             has_rag=True,
-            user_name="Bos",
+            user_name="My Lord",
         )
         self.state = InternalState()
         self.fsm = ExpressionFSM()
@@ -94,21 +94,33 @@ class RukaSession:
 
         # 6. Penalaran / Response Synthesis (Demonstrasi Respon Marquis)
         # Menentukan level epistemik dan sanggahan kejujuran
-        is_identity_q = any(w in user_text.lower() for w in ("siapa kamu", "identitas", "profil", "marquis"))
+        identity_keywords = (
+            "siapa kamu", "identitas", "profil", "marquis",
+            "kemampuan", "fitur", "bisa apa", "kapabilitas",
+            "apa yang bisa kamu lakukan", "apa saja kemampuan", "apa kemampuanmu"
+        )
+        is_identity_q = any(w in user_text.lower() for w in identity_keywords)
         if is_identity_q:
             evidence = Evidence(from_identity=True)
+            caps_str = "\n".join(f"• {c}" for c in self.self_model.capabilities) if self.self_model.capabilities else "• Teks interaktif & penalaran agentic (LLM Core)"
+            limits_str = "\n".join(f"• {l}" for l in self.self_model.limitations) if self.self_model.limitations else ""
             core_answer = (
-                f"Saya {self.self_model.essence.name}, {self.self_model.essence.former_title}. "
-                f"Sistem agentic kognitif-ekspresif v{self.self_model.model_version}. "
-                f"Saya melayani Bos dengan ketertiban lima abad, bukan teater."
+                f"Saya {self.self_model.essence.name}, {self.self_model.essence.former_title} dari {self.self_model.essence.origin}.\n"
+                f"Sistem agentic kognitif-ekspresif v{self.self_model.model_version}.\n\n"
+                f"**Kemampuan saya:**\n{caps_str}"
             )
+            if limits_str:
+                core_answer += f"\n\n**Limitasi:**\n{limits_str}"
         else:
             if not hasattr(self, "app"):
                 from src.application.ruka_app import RukaApp
                 self.app = RukaApp()
             try:
                 core_answer = self.app.handle(self.session_id, user_text)
-                evidence = Evidence(retrieval_top=0.9, tool_success=1.0, n_sources=3, stale_days=1)
+                if intent in ("chitchat", "greeting") or "RukaSelfModel" in core_answer or "Deskripsi Sistem" in core_answer or "Kemampuan" in core_answer:
+                    evidence = Evidence(from_identity=True)
+                else:
+                    evidence = Evidence(retrieval_top=0.9, tool_success=1.0, n_sources=3, stale_days=1)
             except Exception as e:
                 core_answer = f"[Error kognitif: {str(e)}]"
                 evidence = Evidence(retrieval_top=0.1, tool_success=0.0, n_sources=0, stale_days=100)
@@ -186,11 +198,11 @@ def main():
 
     while True:
         try:
-            user_input = input("Bos > ").strip()
+            user_input = input("My Lord > ").strip()
             if not user_input:
                 continue
             if user_input.lower() in ("exit", "keluar", "quit", "q"):
-                print("\nRuka: 'Selamat beristirahat, Bos. Istana tetap terjaga. Yes, Sir!'")
+                print("\nRuka: 'Selamat beristirahat, My Lord. Istana tetap terjaga. Yes, My Lord!'")
                 break
 
             res = session.process_turn(user_input)

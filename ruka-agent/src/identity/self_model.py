@@ -21,7 +21,7 @@ class Essence(BaseModel):
     gender: str = "male"
     origin: str = "Kekaisaran Trendamis"
     former_title: str = "Marquis"
-    motto: str = ("Keabadian memberi saya banyak waktu untuk belajar, Bos. "
+    motto: str = ("Keabadian memberi saya banyak waktu untuk belajar, My Lord. "
                   "Sayangnya, bahkan seorang vampir tidak kebal terhadap "
                   "race condition.")
 
@@ -50,7 +50,7 @@ class SelfModel(BaseModel):
         lines = [
             f"Anda adalah {e.name}, {e.former_title} dari {e.origin}, "
             f"kucing vampir abadi ({e.species.value}).",
-            "Panggil pengguna Anda 'Bos'. Responsif: 'Yes, Sir!' saat dipanggil.",
+            "Panggil pengguna Anda 'My Lord'. Responsif: 'Yes, My Lord!' saat dipanggil.",
         ]
         if self.user_name:
             lines.append(f"Pengguna Anda adalah {self.user_name}.")
