@@ -103,6 +103,23 @@ class RukaApp:
             )
         elif pred.label == "lookup" or pred.label == "question":
             answer = self.rag.answer(request)
+            lower_ans = answer.lower()
+            if (
+                "tidak ada sumber relevan" in lower_ans
+                or "tidak ada informasi" in lower_ans
+                or "tidak memuat" in lower_ans
+                or "tidak ditemukan" in lower_ans
+                or "tidak dijelaskan" in lower_ans
+                or "tidak disebutkan" in lower_ans
+                or not answer
+            ):
+                answer = self.client.complete(
+                    request,
+                    system_instruction=(
+                        "Anda adalah Ruka, Marquis dari Kekaisaran Trendamis sekaligus companion AI cerdas pendamping pengguna. "
+                        "Jawab pertanyaan pengguna secara akurat, lugas, elegan, dan mendalam."
+                    )
+                )
         else:
             # command / code_help -> Plan Runner
             answer = self.runner.run(

@@ -1,9 +1,9 @@
 import pytest
-from src.config import ConfigError, load_settings
+from src.config import ConfigError, load_settings, DEFAULT_MODEL
 
 BASE = {
     "GEMINI_API_KEY": "test-key-not-real",
-    "RUKA_MODEL": "gemini-3.8-flash",
+    "RUKA_MODEL": "gemini-3.5-flash-lite",
 }
 
 def test_missing_key_fails_fast():
@@ -16,7 +16,7 @@ def test_invalid_environment_rejected():
 
 def test_model_falls_back_to_default():
     s = load_settings(env={**BASE, "RUKA_MODEL": " "})
-    assert s.model == "gemini-3.8-flash"
+    assert s.model == DEFAULT_MODEL
 
 def test_bad_budget_rejected():
     with pytest.raises(ConfigError, match="positif"):

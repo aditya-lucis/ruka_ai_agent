@@ -1,0 +1,41 @@
+{
+  "$comment": "RUKA definitive — konfigurasi electron-builder (NSIS per-user). DOC-VERIFIED terhadap docs electron-builder (Sept 2026): oneClick=false memakai assisted installer; perMachine=false memasang ke %LOCALAPPDATA% TANPA admin; deleteAppDataOnUninstall=false = MEMORI BOS SELAMAT saat uninstall (dibahas jujur di buku: uninstaller meninggalkan data + tawarkan 'hapus ingatan' eksplisit); runAfterFinish memulai tray setelah instalasi.",
+  "appId": "trendamis.ruka.persistentmind",
+  "productName": "Ruka",
+  "directories": {
+    "output": "dist-installer",
+    "buildResources": "desktop/assets"
+  },
+  "files": [
+    "desktop/dist/**/*",
+    "desktop/assets/**/*",
+    "!**/*.map"
+  ],
+  "extraResources": [
+    {
+      "from": "python-dist/ruka-core",
+      "to": "ruka-core",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "desktop/assets/icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Ruka",
+    "runAfterFinish": true,
+    "installerLanguages": ["id-ID", "en-US"]
+  }
+}

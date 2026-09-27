@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 VALID_ENVIRONMENTS = frozenset({"development", "staging", "production"})
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TTS_MODEL = "gemini-3.1-flash-tts-preview"
 DEFAULT_LIVE_MODEL = "gemini-3.1-flash-live-preview"
 

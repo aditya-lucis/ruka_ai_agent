@@ -4,4 +4,10 @@ book
 __pycache__/
 *.py[cod]
 *$py.class
-scratch/
+scratch/
+node_modules/
+dist/
+dist-installer/
+release/
+out/
+

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
+  <title>RUKA — The Companion</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark">
+  <div class="window-container">
+    <!-- Custom Titlebar -->
+    <header class="titlebar">
+      <div class="brand">
+        <img class="brand-avatar-mini" id="miniAvatar" src="ruka-icon.png" width="22" height="22" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
+        <span class="brand-name">RUKA</span>
+        <span class="brand-title">The Companion</span>
+      </div>
+      <div class="presence-badge" id="presenceBadge">
+        <span class="presence-dot"></span>
+        <span class="presence-text" id="presenceText">Lokal</span>
+      </div>
+      <div class="window-controls">
+        <button class="win-btn" id="btnMinimize" title="Minimize" aria-label="Minimize">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M2 6h8v1H2z"/></svg>
+        </button>
+        <button class="win-btn win-close" id="btnClose" title="Tutup ke Tray" aria-label="Close to tray">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M2.2 2.2l7.6 7.6m0-7.6l-7.6 7.6" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Status Bar Banner -->
+    <div class="status-banner" id="statusBanner">
+      <div class="status-indicator">
+        <span class="status-pulse" id="statusPulse"></span>
+        <span class="status-label" id="statusLabel">Memeriksa sambungan pikiran…</span>
+      </div>
+      <div class="status-mode" id="ipcStatusMode">Loopback IPC</div>
+    </div>
+
+    <!-- Companion Presence & Core Aura -->
+    <section class="companion-core">
+      <div class="core-visual">
+        <div class="core-rings">
+          <div class="ring ring-outer"></div>
+          <div class="ring ring-middle"></div>
+          <div class="ring ring-inner" id="coreAura">
+            <img class="core-orb-img" id="coreOrb" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka Core">
+          </div>
+        </div>
+      </div>
+      <div class="core-info">
+        <div class="core-state" id="coreState">Siaga Tenang</div>
+        <div class="core-quote" id="coreQuote">"Satu Identitas, Banyak Kehadiran."</div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="chat" id="tabChat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Percakapan</span>
+      </button>
+      <button class="tab-btn" data-tab="memory" id="tabMemory">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Memori</span>
+      </button>
+      <button class="tab-btn" data-tab="tools" id="tabTools">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span>Alat & Izin</span>
+      </button>
+      <button class="tab-btn" data-tab="diagnostic" id="tabDiag">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Diagnostik</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- TAB 1: Percakapan (Chat) -->
+      <section class="tab-view active" id="viewChat">
+        <div class="chat-feed" id="chatFeed">
+          <div class="message message-system">
+            <div class="msg-bubble system-bubble">
+              <span class="system-icon">✦</span>
+              <span>RUKA Volume VI — Tubuh Desktop terhubung. Menunggu interaksi Anda.</span>
+            </div>
+          </div>
+          <div class="message message-ruka">
+            <img class="msg-avatar ruka-avatar" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
+            <div class="msg-bubble ruka-bubble">
+              <div class="msg-sender">Ruka</div>
+              <div class="msg-text">Selamat datang, Bos. Saya siap melayani perintah lokal maupun pesan yang didelegasikan dari Cloud/Telegram.</div>
+              <div class="msg-time" id="greetingTime">11:42</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-chips">
+          <button class="chip" data-text="Siapa profil aktif saat ini?">Identitas</button>
+          <button class="chip" data-text="Periksa status kamera dan mikrofon">Sensor Fisik</button>
+          <button class="chip" data-text="Cari memori tentang preferensi Bos">Preferensi</button>
+        </div>
+
+        <div class="chat-composer">
+          <textarea id="chatInput" placeholder="Tulis instruksi untuk Ruka... (Enter untuk kirim)" rows="1" maxlength="8000"></textarea>
+          <button id="btnSend" class="send-btn" title="Kirim Pesan" aria-label="Send">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- TAB 2: Memori (Memory) -->
+      <section class="tab-view" id="viewMemory">
+        <div class="view-header">
+          <h3>Sensus & Penelusuran Ingatan</h3>
+          <p>Membaca ingatan konsolidasi SQLite & FAISS tanpa merusak integritas state.</p>
+        </div>
+        <div class="memory-search-bar">
+          <input type="text" id="memorySearchInput" placeholder="Cari ingatan semantik atau episodik..." maxlength="2000">
+          <button id="btnMemorySearch" class="action-btn">Cari</button>
+        </div>
+        <div class="stats-grid" id="memoryStatsGrid">
+          <div class="stat-card">
+            <div class="stat-val" id="statEpisodic">0</div>
+            <div class="stat-lbl">Episodik</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statSemantic">0</div>
+            <div class="stat-lbl">Semantik</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statIdentity">1</div>
+            <div class="stat-lbl">Identitas</div>
+          </div>
+        </div>
+        <div class="memory-results" id="memoryResults">
+          <div class="empty-state">Ketik kata kunci untuk melihat potongan ingatan yang tersimpan.</div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Alat & Izin (Tools & Permissions) -->
+      <section class="tab-view" id="viewTools">
+        <div class="view-header">
+          <h3>Pagar Keamanan & Hak Akses Alat</h3>
+          <p>Matriks Zero-Trust: Setiap tindakan destructive memerlukan izin eksplisit.</p>
+        </div>
+        <div class="tool-list" id="toolsList">
+          <div class="tool-item">
+            <div class="tool-meta">
+              <span class="tool-name">camera.capture</span>
+              <span class="badge badge-local">LOCAL ONLY</span>
+            </div>
+            <div class="tool-desc">Sensor optik YuNet + SFace. Haram dirutekan remote.</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-meta">
+              <span class="tool-name">microphone.capture</span>
+              <span class="badge badge-local">LOCAL ONLY</span>
+            </div>
+            <div class="tool-desc">Tangkapan suara lokal Faster-Whisper.</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-meta">
+              <span class="tool-name">filesystem.read</span>
+              <span class="badge badge-remote">REMOTE OK</span>
+            </div>
+            <div class="tool-desc">Membaca berkas dalam penjara jalur (path-jail).</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-meta">
+              <span class="tool-name">terminal.execute</span>
+              <span class="badge badge-sandbox">APPROVAL REQUIRED</span>
+            </div>
+            <div class="tool-desc">Eksekusi perintah terminal dengan izin Bos.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Diagnostik -->
+      <section class="tab-view" id="viewDiagnostic">
+        <div class="view-header">
+          <h3>Diagnostik Sistem & Kejujuran Presence</h3>
+          <p>Status telemetri loopback dan kesehatan konektivitas.</p>
+        </div>
+        <div class="diag-card">
+          <div class="diag-row">
+            <span class="diag-key">Status Konektor Tubuh</span>
+            <span class="diag-val" id="diagConnState">disconnected</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-key">Protokol IPC</span>
+            <span class="diag-val">Version 2 (JSONL Loopback)</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-key">Endpoint File</span>
+            <span class="diag-val font-mono" id="diagEndpointPath">%LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-key">Kehadiran (Presence)</span>
+            <span class="diag-val" id="diagPresenceMode">MODE A (Lokal Penuh)</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-key">Kamera / Mata</span>
+            <span class="diag-val" id="diagCamera">Tersedia (YuNet/SFace)</span>
+          </div>
+          <div class="diag-row">
+            <span class="diag-key">Suara / Telinga</span>
+            <span class="diag-val" id="diagVoice">Tersedia (Faster-Whisper)</span>
+          </div>
+        </div>
+        <div class="log-console" id="logConsole">
+          <div class="log-line">[SYS] Desktop renderer loaded.</div>
+          <div class="log-line">[SYS] Waiting for heartbeat from Python runtime...</div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-note">RUKA VI · Marquis Kekaisaran Trendamis</div>
+      <div class="footer-latency" id="footerLatency">Uptime: aktif</div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

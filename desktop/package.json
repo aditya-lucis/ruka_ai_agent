@@ -1,0 +1,56 @@
+{
+  "name": "ruka-desktop",
+  "version": "0.3.0",
+  "description": "RUKA — The Persistent Mind & Companion Desktop Body",
+  "main": "out/electron/main.js",
+  "scripts": {
+    "build:ts": "tsc",
+    "build:renderer": "node scripts/copy-renderer.js",
+    "build": "tsc && node scripts/copy-renderer.js",
+    "start": "tsc && node scripts/copy-renderer.js && electron .",
+    "dev": "tsc -w",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "trendamis.ruka.persistentmind",
+    "productName": "Ruka",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "assets/**/*",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ruka",
+      "runAfterFinish": true,
+      "installerLanguages": ["id-ID", "en-US"]
+    }
+  },
+  "keywords": ["ruka", "companion", "ai-agent", "electron", "desktop"],
+  "author": "Aditya & Ruka Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.2"
+  }
+}
