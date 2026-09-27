@@ -197,15 +197,15 @@ document.addEventListener('DOMContentLoaded', () => {
         let reply = '';
         const lower = cleanText.toLowerCase();
         if (lower.includes('kamera') || lower.includes('mikrofon') || lower.includes('sensor')) {
-          reply = '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363).\n🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Bos.\n🛡️ Kebijakan: LOCAL-ONLY.';
+          reply = '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363).\n🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n🛡️ Kebijakan: LOCAL-ONLY.';
         } else if (lower.includes('siapa') || lower.includes('identitas') || lower.includes('profil')) {
-          reply = '👤 Profil Aktif: Bos (Marquis Kekaisaran Trendamis).\n🔐 Kekuatan Autentikasi: STRONG (Biometrik Wajah + Suara terkonfirmasi).\n✨ Status: Terpercaya Penuh.';
+          reply = '👤 Profil Aktif: Young Lord (Marquis Kekaisaran Trendamis).\n🔐 Kekuatan Autentikasi: STRONG (Biometrik Wajah + Suara terkonfirmasi).\n✨ Status: Terpercaya Penuh.';
         } else if (lower.includes('memori') || lower.includes('ingatan') || lower.includes('preferensi')) {
           reply = '🧠 Sensus Ingatan:\n• 12 ingatan episodik aktif.\n• 34 fakta semantik terindeks.\n• Preferensi: Kepatuhan mutlak buku & Zero-Trust Cloud.';
         } else if (lower.includes('halo') || lower.includes('hai') || lower.includes('ruka')) {
-          reply = 'Halo, Bos! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem persepsi, identitas, dan status siap menerima perintah Anda secara real-time.';
+          reply = 'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem kognisi dan alat siap menerima titah Anda, Sir.';
         } else {
-          reply = `Instruksi Anda: "${cleanText}" telah diterima dan diproses oleh sistem pendamping lokal Ruka.`;
+          reply = `Instruksi Anda: "${cleanText}" telah diterima dan diproses dengan penuh takzim oleh Ruka, Young Lord.`;
         }
         onResponseReceived(reply);
       }, 50);
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     msg.innerHTML = `
-      <div class="msg-avatar">B</div>
+      <div class="msg-avatar">YL</div>
       <div class="msg-bubble user-bubble">
         <div class="msg-text">${escapeHtml(text)}</div>
         <div class="msg-time">${time}</div>
@@ -320,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     } else {
       renderMemoryHits([
-        { kind: 'identity', summary: 'Identitas Bos: Terverifikasi biometrik tingkat STRONG (Wajah & Suara)' },
+        { kind: 'identity', summary: 'Identitas Young Lord: Terverifikasi biometrik tingkat STRONG (Wajah & Suara)' },
         { kind: 'semantic', summary: 'Kaidah Zero-Trust: Cloud tidak pernah memegang kunci eksekusi lokal' },
         { kind: 'episodic', summary: 'Sesi Boot: Verifikasi 426 uji klinis sukses 100%' },
       ]);

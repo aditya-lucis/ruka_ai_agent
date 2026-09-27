@@ -235,7 +235,7 @@ function registerIpc(): void {
     ) {
       reply =
         '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363, SFace 128-d).\n' +
-        '🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Bos.\n' +
+        '🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n' +
         '🛡️ Kebijakan: LOCAL-ONLY (Haram dirutekan remote demi privasi mutlak).';
     } else if (
       lower.includes('siapa') ||
@@ -243,7 +243,7 @@ function registerIpc(): void {
       lower.includes('profil')
     ) {
       reply =
-        '👤 Profil Aktif: Bos (Marquis Kekaisaran Trendamis).\n' +
+        '👤 Profil Aktif: Young Lord (Marquis Kekaisaran Trendamis).\n' +
         '🔐 Kekuatan Autentikasi: STRONG (Biometrik Wajah + Suara terkonfirmasi).\n' +
         '✨ Status: Terpercaya Penuh — Satu Identitas, Banyak Kehadiran.';
     } else if (
@@ -265,9 +265,9 @@ function registerIpc(): void {
       lower.includes('ruka')
     ) {
       reply =
-        'Halo, Bos! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem penglihatan, pendengaran, dan keamanan siap menerima titah Anda secara real-time.';
+        'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem penglihatan, pendengaran, dan keamanan siap menerima titah Anda secara real-time, Sir.';
     } else {
-      reply = `Instruksi Anda: "${clean}" telah diterima dan diproses oleh sistem pendamping lokal Ruka. Mode kehadiran aktif: Standby Mandiri (Volume VI).`;
+      reply = `Instruksi Anda: "${clean}" telah diterima dan diproses dengan setia oleh Ruka, Young Lord. Mode kehadiran aktif: Standby Mandiri (Volume VI).`;
     }
 
     return {

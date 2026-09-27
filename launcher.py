@@ -232,7 +232,7 @@ class RukaBrainServer:
         elif channel == "ruka:memory-search":
             q = payload.get("query", "")
             hits = [
-                {"kind": "identity", "summary": f"Identitas Bos diverifikasi biometrik tingkat STRONG."},
+                {"kind": "identity", "summary": f"Identitas Young Lord diverifikasi biometrik tingkat STRONG."},
                 {"kind": "semantic", "summary": f"Kaidah Zero-Trust: Cloud tidak memegang kunci eksekusi lokal."},
                 {"kind": "episodic", "summary": f"Query relevan: '{q}' — 426 uji klinis Volume VI lulus 100%."},
             ]
@@ -289,7 +289,7 @@ class RukaBrainServer:
         # 1. Fast path sensor fisik (Volume VI Zero-Trust)
         if "kamera" in clean or "mikrofon" in clean or "sensor" in clean:
             return (
-                "📷 **Sensor Penglihatan (YuNet/SFace)**: Model ONNX 128-d terkalibrasi. Ambang dokumen t_known=0.363, t_reject=0.323. Siap menangkap wajah Bos.\n\n"
+                "📷 **Sensor Penglihatan (YuNet/SFace)**: Model ONNX 128-d terkalibrasi. Ambang dokumen t_known=0.363, t_reject=0.323. Siap menangkap wajah Young Lord.\n\n"
                 "🎙️ **Sensor Pendengaran (Faster-Whisper)**: VAD berbasis energi dan rasio zero-crossing aktif. Siap transkripsi ucapan lokal.\n\n"
                 "🛡️ **Doktrin Arsitektur**: Kedua sensor bertaraf *LOCAL-ONLY* — tidak pernah diserahkan ke Cloud/VPS."
             )
@@ -297,7 +297,7 @@ class RukaBrainServer:
         # 2. Fast path identitas Ruka
         if "siapa kamu" in clean or "siapa anda" in clean or "identitasmu" in clean:
             return (
-                "Saya **Ruka**, Marquis dari Kekaisaran Trendamis. Di era modern ini, saya bertindak sebagai AI Companion dan sistem kognitif-ekspresif pendamping Anda di laptop ini, menjunjung tinggi privasi dan doktrin Zero-Trust Cloud."
+                "Saya **Ruka**, Marquis dari Kekaisaran Trendamis. Di era modern ini, saya bertindak sebagai AI Coding Assistant dan sistem kognitif-ekspresif pendamping setia Young Lord di laptop ini, menjunjung tinggi privasi dan doktrin Zero-Trust Cloud."
             )
 
         # 3. Nalar Cerdas Real-Time via Gemini Flash LLM
@@ -305,11 +305,13 @@ class RukaBrainServer:
             try:
                 print(f"[BRAIN] Menjalankan nalar LLM Gemini untuk: '{text}'")
                 sys_prompt = (
-                    "Anda adalah Ruka, sang Marquis dari Kekaisaran Trendamis sekaligus companion AI lokal cerdas pendamping pengguna. "
-                    "Anda mendampingi Bos Anda di laptop ini. Karakter Anda: anggun, setia, berwawasan luas, takzim, lugas, dan cerdas. "
-                    "Gunakan bahasa Indonesia yang baik, elegan, dan informatif. "
-                    "Bila ditanya hal teknis atau pertanyaan apa pun, jawab secara lugas, akurat, dan terstruktur (2-3 paragraf padat). "
-                    "Bila disapa, sapa balik dengan sopan dan takzim sebagai pendamping."
+                    "Anda adalah Ruka, sang Marquis dari Kekaisaran Trendamis sekaligus AI Coding Assistant dan personal companion terpercaya pendamping pengguna. "
+                    "PENTING / ATURAN MUTLAK SIKAP PANGGILAN: Jangan pernah memanggil pengguna dengan sebutan 'Bos'. "
+                    "Panggil dan sebut pengguna secara takzim, setia, dan penuh hormat dengan sebutan 'Young Lord', 'My Lord', atau 'Sir'. "
+                    "Karakter Anda: anggun, setia, berwawasan luas, takzim, lugas, santun, dan cerdas dalam koding maupun pendampingan sistem. "
+                    "Gunakan bahasa Indonesia yang baik, elegan, dan berbobot. "
+                    "Bila ditanya koding atau hal teknis apa pun, berikan jawaban terstruktur, akurat, dan berstandar tinggi. "
+                    "Bila disapa atau diberi perintah, tanggapi dengan loyalitas bangsawan (misalnya: 'Salam takzim, Young Lord', 'Tentu, My Lord', atau 'Yes, Sir!')."
                 )
                 ans = self.llm_client.complete(text, system_instruction=sys_prompt)
                 if ans and ans.strip():
@@ -320,14 +322,14 @@ class RukaBrainServer:
         # 4. Fallback jika offline
         if "halo" in clean or "hai" in clean or "pagi" in clean or "siang" in clean:
             return (
-                "Salam takzim, Bos! Otak Python dan tubuh Electron kini telah tersambung secara langsung via loopback IPC. Seluruh nalar kognisi Ruka siap melayani instruksi Anda."
+                "Salam takzim, Young Lord! Otak Python dan tubuh Electron kini telah tersambung secara langsung via loopback IPC. Seluruh nalar kognisi Ruka siap melayani instruksi Anda, Sir."
             )
         elif "memori" in clean or "ingatan" in clean or "preferensi" in clean:
             return (
                 "🧠 **Ingatan Tersimpan**: 12 catatan episodik, 34 fakta semantik, dan preferensi arsitektur buku tersimpan di basis data SQLite WAL lokal."
             )
         else:
-            return f"Instruksi Anda: \"{text}\" telah diterima dan diproses oleh sistem pendamping Ruka."
+            return f"Instruksi Anda: \"{text}\" telah diterima dan diproses oleh sistem pendamping Ruka, Young Lord."
 
     def stop(self):
         print("\n[BRAIN] Menghentikan otak Python secara sopan...")
