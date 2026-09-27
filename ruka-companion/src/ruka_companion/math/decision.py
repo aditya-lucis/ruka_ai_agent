@@ -116,10 +116,12 @@ def _validate_posterior(
 def decide(
     posterior: Mapping[WorldState | str, float],
     loss: Mapping[tuple[Action, WorldState], float] | None = None,
+    loss_matrix: Mapping[tuple[Action, WorldState], float] | None = None,
 ) -> Decision:
     """argmin_a Σ_θ P(θ|e)·L(a,θ). Tie-break deterministik: DENY > ASK_HUMAN > EXECUTE."""
     P = _validate_posterior(posterior)
-    L = dict(DEFAULT_LOSS) if loss is None else dict(loss)
+    eff_loss = loss_matrix if loss_matrix is not None else loss
+    L = dict(DEFAULT_LOSS) if eff_loss is None else dict(eff_loss)
 
     ranking: dict[Action, float] = {Action.DENY: 0.0, Action.ASK_HUMAN: 0.0, Action.EXECUTE: 0.0}
     for (a, s), l in L.items():
@@ -130,14 +132,21 @@ def decide(
     tie_order = [Action.DENY, Action.ASK_HUMAN, Action.EXECUTE]
     best_action = min(tie_order, key=lambda a: ranking[a])
 
+    losses_map: dict[Any, float] = {}
+    for a, v in ranking.items():
+        val = round(v, 6)
+        losses_map[a] = val
+        losses_map[a.value] = val
+
     return Decision(
         action=best_action,
-        expected_losses={a.value: round(v, 6) for a, v in ranking.items()},
+        expected_losses=losses_map,
         posterior={s.value: round(P.get(s, 0.0), 6) for s in WorldState},
         rationale=(
             f"E[L({best_action.value})|e]={ranking[best_action]:.3f} minimum"
         ),
     )
+
 
 
 @dataclass

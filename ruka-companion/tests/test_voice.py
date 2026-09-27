@@ -258,3 +258,141 @@ class TestSpeaker:
         out = ext.embed(np.zeros(16000, dtype=np.float32))
         assert out.shape == (128,)
         assert ext.capability()["available"] is True
+
+
+class TestVoiceExtended:
+    """Uji tambahan Voice Subsystem (Part XI & XII)."""
+
+    def test_audio_buffer_slice(self):
+        samples = np.arange(16000, dtype=np.float32)
+        buf = AudioBuffer(samples=samples, fs=16000)
+        sliced = AudioBuffer(samples=buf.samples[:8000], fs=buf.fs)
+        assert sliced.duration_s == 0.5
+        assert len(sliced.samples) == 8000
+
+    def test_audio_buffer_energy_db(self):
+        # Loud signal
+        buf_loud = AudioBuffer(samples=np.ones(16000, dtype=np.float32) * 0.5, fs=16000)
+        assert buf_loud.rms == pytest.approx(0.5)
+
+        # Silent signal
+        buf_silent = AudioBuffer(samples=np.zeros(16000, dtype=np.float32), fs=16000)
+        assert buf_silent.rms == 0.0
+
+    def test_audio_core_framing_zero_frame_len_raises(self):
+        samples = np.zeros(16000, dtype=np.float32)
+        with pytest.raises(ValueError):
+            AudioCore.frame(samples, fs=16000, frame_ms=0, hop_ms=10)
+
+    def test_audio_core_framing_zero_hop_raises(self):
+        samples = np.zeros(16000, dtype=np.float32)
+        with pytest.raises(ValueError):
+            AudioCore.frame(samples, fs=16000, frame_ms=25, hop_ms=0)
+
+    def test_audio_core_framing_sample_too_short(self):
+        samples = np.zeros(100, dtype=np.float32)
+        with pytest.raises(ValueError):
+            AudioCore.frame(samples, fs=16000, frame_ms=25, hop_ms=10)
+
+    def test_audio_core_normalize_peak_already_normalized(self):
+        samples = np.array([1.0, -1.0, 0.5], dtype=np.float32)
+        norm = AudioCore.normalize_peak(samples, target=1.0)
+        assert np.allclose(samples, norm)
+
+    def test_audio_core_resample_upsample(self):
+        samples = np.zeros(8000, dtype=np.float32)
+        resampled = AudioCore.resample_linear(samples, fs_in=8000, fs_out=16000)
+        assert len(resampled) == 16000
+
+    def test_vad_config_defaults(self):
+        cfg = VADConfig()
+        assert cfg.frame_ms > 0
+        assert cfg.min_speech_ms > 0
+        assert cfg.energy_threshold > 0
+
+    def test_vad_segment_ms_helper(self):
+        seg = segment_ms(16000, 32000, fs=16000)
+        assert seg == (1000, 2000)
+
+    def test_vad_continuous_loud_speech(self):
+        fs = 16000
+        t = np.arange(16000) / fs
+        loud_speech = (0.8 * np.sin(2 * np.pi * 300 * t)).astype(np.float32)
+        vad = EnergyVAD()
+        res = vad.detect(loud_speech, fs=fs)
+        assert res.speech_ratio > 0.8
+        assert len(res.segments_ms) >= 1
+
+    def test_vad_multi_segments(self):
+        fs = 16000
+        t1 = np.arange(8000) / fs  # 0.5s speech
+        t_gap = np.zeros(8000, dtype=np.float32)  # 0.5s silence
+        s1 = (0.8 * np.sin(2 * np.pi * 200 * t1)).astype(np.float32)
+        s2 = (0.8 * np.sin(2 * np.pi * 200 * t1)).astype(np.float32)
+        combined = np.concatenate([s1, t_gap, s2])
+        vad = EnergyVAD()
+        res = vad.detect(combined, fs=fs)
+        assert len(res.segments_ms) == 2
+
+    def test_asr_transcribe_with_prompt(self):
+        asr = WhisperASR("tiny")
+        mock_model = MagicMock()
+        mock_segment = MagicMock()
+        mock_segment.start = 0.0
+        mock_segment.end = 1.0
+        mock_segment.text = "laporan keuangan"
+        mock_info = MagicMock()
+        mock_info.language = "id"
+        mock_model.transcribe.return_value = ([mock_segment], mock_info)
+        asr._model = mock_model
+
+        buf = AudioBuffer(samples=np.zeros(16000, dtype=np.float32), fs=16000)
+        tr = asr.transcribe(buf, initial_prompt="Konteks keuangan")
+        assert tr.text == "laporan keuangan"
+
+    def test_asr_transcription_empty_segments(self):
+        asr = WhisperASR("tiny")
+        mock_model = MagicMock()
+        mock_info = MagicMock()
+        mock_info.language = "en"
+        mock_model.transcribe.return_value = ([], mock_info)
+        asr._model = mock_model
+
+        buf = AudioBuffer(samples=np.zeros(16000, dtype=np.float32), fs=16000)
+        tr = asr.transcribe(buf)
+        assert tr.text == ""
+        assert len(tr.segments) == 0
+
+    def test_mfcc_coefficients_different_n_mfcc(self):
+        sig = np.sin(np.linspace(0, 10, 8000)).astype(np.float32)
+        feats_13 = mfcc(sig, fs=16000, n_mfcc=13)
+        assert feats_13.shape[1] == 13
+
+    def test_speaker_profile_variance_floor(self):
+        prof = SpeakerProfile(
+            profile_id="bos",
+            mean=np.ones(10),
+            cov_diag=np.zeros(10),  # zero variance
+            n_frames=50,
+            variance_floor=1e-3,
+        )
+        assert np.all(prof.cov_diag >= 1e-3)
+
+    def test_acoustic_gaussian_threshold_update(self):
+        prov = AcousticGaussianProvider(threshold=1.5)
+        assert prov.threshold == 1.5
+
+    def test_dvector_provider_unbound_raises(self):
+        ext = ExternalDVectorProvider()
+        with pytest.raises(RuntimeError):
+            ext.embed(np.zeros(16000, dtype=np.float32))
+
+    def test_microphone_source_target_fs(self):
+        assert TARGET_FS == 16000
+
+    def test_transcription_dataclass_fields(self):
+        tr = Transcription(text="test", language="id", duration_s=1.5, latency_s=0.2, segments=[])
+        assert tr.text == "test"
+        assert tr.language == "id"
+        assert tr.duration_s == 1.5
+

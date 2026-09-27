@@ -194,3 +194,255 @@ class TestPresence:
         assert rep["cloud_link"] == "CONNECTED"
         assert len(rep["capabilities"]) == 5
         assert rep["privacy"] == {"mic": "OFF", "camera": "OFF"}
+
+
+from ruka_companion.sdk.manifest import (
+    PluginManifest,
+    PLUGIN_PERMISSIONS,
+    RISKY_PERMISSIONS,
+)
+from ruka_companion.sdk.registry import (
+    PluginRegistry,
+    PluginState,
+)
+from ruka_companion.plugins.summarizer import Summarizer, summarize
+
+
+class TestPluginManifest:
+    def test_valid_manifest(self):
+        m = PluginManifest(
+            plugin_id="notes-summarizer",
+            name="Notes Summarizer",
+            version="1.0.0",
+            description="Ekstraktif TF-MMR summarizer untuk memori Ruka.",
+            ruka_compat="0.1.x",
+            permissions=["memory.read", "event.subscribe"],
+            entrypoint="ruka_companion.plugins.summarizer:summarize",
+        )
+        assert m.plugin_id == "notes-summarizer"
+        assert m.as_dict()["version"] == "1.0.0"
+
+    def test_invalid_slug_rejected(self):
+        with pytest.raises(ValueError):
+            PluginManifest(
+                plugin_id="Invalid_Slug!",
+                name="Bad",
+                version="1.0.0",
+                description="Deskripsi panjang memenuhi syarat batas minimal.",
+                ruka_compat="0.1.0",
+                entrypoint="x:y",
+            )
+
+    def test_invalid_semver_rejected(self):
+        with pytest.raises(ValueError):
+            PluginManifest(
+                plugin_id="bad-semver",
+                name="Bad",
+                version="v1",
+                description="Deskripsi panjang memenuhi syarat batas minimal.",
+                ruka_compat="0.1.0",
+                entrypoint="x:y",
+            )
+
+    def test_unknown_permission_default_deny(self):
+        with pytest.raises(ValueError, match="izin tak dikenal"):
+            PluginManifest(
+                plugin_id="eager-tool",
+                name="Eager",
+                version="1.0.0",
+                description="Deskripsi panjang memenuhi syarat batas minimal.",
+                ruka_compat="0.1.0",
+                permissions=["super_admin.root"],
+                entrypoint="x:y",
+            )
+
+    def test_duplicate_permissions_rejected(self):
+        with pytest.raises(ValueError, match="izin duplikat"):
+            PluginManifest(
+                plugin_id="dup-perm",
+                name="Dup",
+                version="1.0.0",
+                description="Deskripsi panjang memenuhi syarat batas minimal.",
+                ruka_compat="0.1.0",
+                permissions=["memory.read", "memory.read"],
+                entrypoint="x:y",
+            )
+
+    def test_risky_permission_requires_declaration(self):
+        m = PluginManifest(
+            plugin_id="terminal-tool",
+            name="Terminal Tool",
+            version="1.0.0",
+            description="Plugin yang mengeksekusi perintah shell berbahaya.",
+            ruka_compat="0.1.0",
+            permissions=["terminal.execute"],
+            entrypoint="x:y",
+            must_declare_risk=False,
+        )
+        with pytest.raises(ValueError, match="menuntut must_declare_risk=True"):
+            m.validate_risk()
+
+    def test_declared_risk_without_notes_rejected(self):
+        m = PluginManifest(
+            plugin_id="terminal-tool",
+            name="Terminal Tool",
+            version="1.0.0",
+            description="Plugin yang mengeksekusi perintah shell berbahaya.",
+            ruka_compat="0.1.0",
+            permissions=["terminal.execute"],
+            entrypoint="x:y",
+            must_declare_risk=True,
+            risk_notes="",
+        )
+        with pytest.raises(ValueError, match="tanpa risk_notes"):
+            m.validate_risk()
+
+
+class TestPluginRegistry:
+    def test_lifecycle_and_order(self):
+        reg = PluginRegistry()
+        m_base = PluginManifest(
+            plugin_id="base-plugin",
+            name="Base",
+            version="0.1.0",
+            description="Plugin fondasi dasar yang dibutuhkan dependensi.",
+            ruka_compat="0.1.0",
+            permissions=["memory.read"],
+            entrypoint="pkg.base:init",
+        )
+        m_dep = PluginManifest(
+            plugin_id="child-plugin",
+            name="Child",
+            version="0.1.0",
+            description="Plugin turunan yang bergantung pada base-plugin.",
+            ruka_compat="0.1.0",
+            permissions=["memory.write"],
+            dependencies=["base-plugin"],
+            entrypoint="pkg.child:init",
+        )
+
+        reg.discover(m_base)
+        reg.discover(m_dep)
+
+        reg.validate("base-plugin")
+        reg.validate("child-plugin")
+
+        # Topologically, base-plugin must come before child-plugin
+        order = reg.install_order()
+        assert order.index("base-plugin") < order.index("child-plugin")
+
+    def test_cycle_dependency_rejected(self):
+        reg = PluginRegistry()
+        m1 = PluginManifest(
+            plugin_id="p-one",
+            name="One",
+            version="0.1.0",
+            description="Deskripsi panjang memenuhi syarat batas minimal.",
+            ruka_compat="0.1.0",
+            dependencies=["p-two"],
+            entrypoint="p1:x",
+        )
+        m2 = PluginManifest(
+            plugin_id="p-two",
+            name="Two",
+            version="0.1.0",
+            description="Deskripsi panjang memenuhi syarat batas minimal.",
+            ruka_compat="0.1.0",
+            dependencies=["p-one"],
+            entrypoint="p2:x",
+        )
+        reg.discover(m1)
+        reg.discover(m2)
+
+        rec = reg.validate("p-one")
+        assert rec.state == PluginState.REJECTED
+        assert "ber-SIKLUS" in rec.rejection_reason
+
+    def test_risky_permission_install_without_owner_confirm_rejected(self):
+        reg = PluginRegistry()
+        m = PluginManifest(
+            plugin_id="eager-shell",
+            name="Eager",
+            version="0.1.0",
+            description="Deskripsi panjang memenuhi syarat batas minimal.",
+            ruka_compat="0.1.0",
+            permissions=["terminal.execute"],
+            entrypoint="x:y",
+            must_declare_risk=True,
+            risk_notes="butuh shell",
+        )
+        reg.discover(m)
+        reg.validate("eager-shell")
+        reg.stage("eager-shell")
+
+        rec = reg.install("eager-shell", owner_confirm=False)
+        assert rec.state == PluginState.REJECTED
+        assert "butuh konfirmasi pemilik" in rec.rejection_reason
+
+    def test_install_enable_and_permission_enforcement(self):
+        reg = PluginRegistry()
+        m = PluginManifest(
+            plugin_id="reader-tool",
+            name="Reader",
+            version="0.1.0",
+            description="Deskripsi panjang memenuhi syarat batas minimal.",
+            ruka_compat="0.1.0",
+            permissions=["memory.read"],
+            entrypoint="x:y",
+        )
+        reg.discover(m)
+        reg.validate("reader-tool")
+        reg.stage("reader-tool")
+        reg.install("reader-tool")
+
+        # In INSTALLED state, cannot use permission until ENABLED
+        allowed, reason = reg.check_permission("reader-tool", "memory.read")
+        assert allowed is False
+        assert "harus ENABLED" in reason
+
+        reg.enable("reader-tool")
+        allowed, reason = reg.check_permission("reader-tool", "memory.read")
+        assert allowed is True
+        assert reason == "granted"
+
+        # Permission not requested is denied
+        allowed2, _ = reg.check_permission("reader-tool", "memory.write")
+        assert allowed2 is False
+
+        # When disabled, permission denied
+        reg.disable("reader-tool")
+        allowed3, _ = reg.check_permission("reader-tool", "memory.read")
+        assert allowed3 is False
+
+        # Removal clears permissions
+        reg.remove("reader-tool")
+        assert reg._get("reader-tool").state == PluginState.REMOVED
+        assert len(reg._get("reader-tool").granted_permissions) == 0
+
+
+class TestReferencePlugin:
+    def test_tf_mmr_summarizer_deterministic(self):
+        text = (
+            "Ruka adalah asisten AI pribadi yang setia. "
+            "Dia memiliki arsitektur zero-trust berdaulat. "
+            "Sistem memorinya menggunakan version vector dan tombstone. "
+            "Semua aksi penting membutuhkan konfirmasi pemilik. "
+            "Telegram bot bertindak sebagai jembatan komunikasi jarak jauh. "
+            "Kamera dan suara memberikan persepsi multimodal. "
+            "Dengan prinsip default deny keamanan laptop selalu terjaga. "
+            "Ruka siap mendampingi Tuanku setiap saat."
+        )
+        res1 = summarize(text, k=3)
+        res2 = summarize(text, k=3)
+
+        assert res1 == res2
+        assert res1["n_sentences"] == 8
+        assert len(res1["selected"]) == 3
+        assert res1["method"] == "tf+mmr-extractive"
+        assert len(res1["summary"]) > 0
+
+    def test_empty_text_summarization(self):
+        res = summarize("", k=3)
+        assert res["summary"] == ""
+        assert res["n_sentences"] == 0
+

@@ -1,3 +1,7 @@
 .venv
 .pytest_cache
 book
+__pycache__/
+*.py[cod]
+*$py.class
+scratch/

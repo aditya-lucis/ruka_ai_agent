@@ -217,3 +217,142 @@ class TestRecognize:
         matcher.set_calibration(t_known=0.7, t_reject=0.3)
         assert matcher.t_known == 0.7
         assert matcher.t_reject == 0.3
+
+
+# ============================================================ Extended Tests
+class TestVisionExtended:
+    def test_frame_dataclass(self):
+        pixels = np.zeros((480, 640, 3), dtype=np.uint8)
+        f = Frame(pixels=pixels, index=1, captured_at_ms=12345)
+        assert f.pixels.shape == (480, 640, 3)
+        assert f.index == 1
+        assert f.captured_at_ms == 12345
+
+    def test_sensor_state_all_values(self):
+        for s in SensorState:
+            assert isinstance(s.value, str)
+
+    def test_sensor_fsm_error_state(self):
+        fsm = SensorStateMachine(SensorState.ACTIVE)
+        fsm.transition("ERROR")
+        assert fsm.state == SensorState.ERROR
+        # From ERROR can go to OFF
+        fsm.transition("OFF")
+        assert fsm.state == SensorState.OFF
+
+    def test_face_profile_multiple_embeddings(self):
+        prof = FaceProfile("multi")
+        for i in range(5):
+            e = np.zeros(128)
+            e[i] = 1.0
+            prof.add(e)
+        assert len(prof.embeddings) == 5
+
+    def test_face_profile_multiple_embeddings_averaging(self):
+        prof = FaceProfile("mean_test")
+        e1 = np.ones(128)
+        e2 = np.ones(128) * 3.0
+        prof.add(e1)
+        prof.add(e2)
+        mean = np.mean(prof.embeddings, axis=0)
+        assert np.allclose(mean, np.ones(128) * 2.0, atol=1e-12)
+
+    def test_matcher_incremental_enroll(self):
+        matcher = FaceIdentityMatcher(t_known=0.5, t_reject=0.2)
+        emb1 = np.ones(128)
+        emb2 = np.ones(128) * 0.9
+        matcher.enroll("person1", [emb1])
+        assert len(matcher.profiles["person1"].embeddings) == 1
+        matcher.enroll("person1", [emb2])
+        assert len(matcher.profiles["person1"].embeddings) == 2
+
+    def test_cosine_to_similarity_bounds(self):
+        # Cosine range [-1, 1] → similarity [0, 1]
+        for c in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+            s = cosine_to_similarity(c)
+            assert 0.0 <= s <= 1.0
+
+    def test_cosine_to_similarity_monotone(self):
+        vals = [cosine_to_similarity(c) for c in [-1.0, -0.5, 0.0, 0.5, 1.0]]
+        for i in range(len(vals) - 1):
+            assert vals[i] <= vals[i + 1]
+
+    def test_camera_source_capability_fields(self):
+        cam = CameraSource(device_index=0)
+        cap = cam.capability()
+        assert "layer" in cap
+        assert "kind" in cap
+        assert "sensor_state" in cap
+
+    def test_face_detection_dataclass(self):
+        det = FaceDetection(
+            box=(10.0, 20.0, 100.0, 120.0),
+            score=0.95,
+            landmarks=((1.0, 2.0), (3.0, 4.0), (5.0, 6.0), (7.0, 8.0), (9.0, 10.0)),
+        )
+        assert det.box == (10.0, 20.0, 100.0, 120.0)
+        assert det.score == 0.95
+        assert len(det.landmarks) == 5
+
+    def test_sface_match_cosine_basic_and_zero_rejected(self):
+        a = np.array([1.0, 0.0, 0.0])
+        b = np.array([1.0, 0.0, 0.0])
+        assert SFaceEmbedder.match_cosine(a, b) == pytest.approx(1.0)
+        zero = np.zeros(3)
+        with pytest.raises(ValueError, match="embedding nol"):
+            SFaceEmbedder.match_cosine(zero, b)
+
+    def test_matcher_margin_computation(self):
+        matcher = FaceIdentityMatcher(t_known=0.5, t_reject=0.2)
+        e_bos = np.zeros(128)
+        e_bos[0] = 1.0
+        e_alice = np.zeros(128)
+        e_alice[1] = 1.0
+        matcher.enroll("bos", [e_bos])
+        matcher.enroll("alice", [e_alice])
+        q = np.zeros(128)
+        q[0] = 0.8
+        q[1] = 0.6
+        res = matcher.match(q)
+        assert res.profile_id == "bos"
+        assert res.score == pytest.approx(0.8, abs=1e-3)
+        assert res.margin == pytest.approx(0.2, abs=1e-3)
+        assert res.verdict == "KNOWN"
+
+    def test_matcher_invalid_calibration_rejected(self):
+        matcher = FaceIdentityMatcher(t_known=0.5, t_reject=0.2)
+        with pytest.raises(ValueError, match="kalibrasi tak valid"):
+            matcher.set_calibration(t_known=0.3, t_reject=0.5)
+        with pytest.raises(ValueError, match="kalibrasi tak valid"):
+            matcher.set_calibration(t_known=1.5, t_reject=0.5)
+
+    def test_sensor_fsm_history_tracking(self):
+        fsm = SensorStateMachine(SensorState.OFF)
+        fsm.transition("IDLE")
+        fsm.transition("ARMED")
+        fsm.transition("ACTIVE")
+        hist = fsm.history()
+        assert len(hist) == 3
+        assert hist[0][1] == "OFF" and hist[0][2] == "IDLE"
+        assert hist[1][1] == "IDLE" and hist[1][2] == "ARMED"
+        assert hist[2][1] == "ARMED" and hist[2][2] == "ACTIVE"
+
+    def test_camera_frames_inactive_raises(self):
+        cam = CameraSource(device_index=99)
+        with pytest.raises(RuntimeError, match="kamera belum aktif"):
+            next(cam.frames())
+
+    def test_camera_close_idempotent_from_off(self):
+        cam = CameraSource(device_index=0)
+        assert cam.fsm.state == SensorState.OFF
+        cam.close()
+        assert cam.fsm.state == SensorState.OFF
+
+    def test_face_match_frozen_immutability(self):
+        matcher = FaceIdentityMatcher(t_known=0.5, t_reject=0.2)
+        match_res = matcher.match(np.ones(128))
+        assert match_res.verdict == "UNAVAILABLE"
+        with pytest.raises(Exception):
+            match_res.score = 0.99
+
+

@@ -39,6 +39,7 @@ class FSM:
         initial: str,
         terminal: Iterable[str] = (),
         invariants: Mapping[str, Callable[[str], bool]] | None = None,
+        guards: Mapping[str, Callable[[Any], bool]] | None = None,
     ):
         self.name = name
         self.states: frozenset[str] = frozenset(states)
@@ -46,6 +47,7 @@ class FSM:
         self.terminal: frozenset[str] = frozenset(terminal)
         self._delta: dict[tuple[str, str], Transition] = {}
         self.invariants: dict[str, Callable[[str], bool]] = dict(invariants or {})
+        self.guards: dict[str, Callable[[Any], bool]] = dict(guards or {})
 
         for t in transitions:
             if t.source not in self.states or t.target not in self.states:
@@ -64,12 +66,18 @@ class FSM:
                 raise ValueError(f"terminal {s} bukan anggota S")
 
     # ------------------------------------------------------------- operasi
-    def fire(self, state: str, event: str) -> str | None:
+    def fire(self, state: str, event: str, ctx: Any = None) -> str | None:
         """δ(state, event) → status baru, atau None bila ilegal. TANPA efek samping."""
         if state not in self.states:
             raise ValueError(f"status {state} tak dikenal")
         t = self._delta.get((state, event))
-        return t.target if t is not None else None
+        if t is None:
+            return None
+        if t.guard is not None and t.guard in self.guards:
+            if not self.guards[t.guard](ctx):
+                return None
+        return t.target
+
 
     def fire_checked(self, state: str, event: str) -> str:
         """fire() yang menolak keras bila ilegal — untuk kode produksi."""
@@ -268,9 +276,14 @@ class Digraph:
                 return False
         return len(self.topological_order()) == len(self.nodes)
 
+def topological_order(g: Digraph) -> list[str]:
+    """Kahn topological sort helper."""
+    return g.topological_order()
+
 
 class DAG:
     """Wrapper DAG kompatibel dengan test terdahulu berbasis Digraph."""
+
 
     def __init__(self) -> None:
         self.graph = Digraph()

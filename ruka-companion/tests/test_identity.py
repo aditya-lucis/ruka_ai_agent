@@ -4,6 +4,7 @@ Strictly follows RUKA-VI Chapter IX & XXV testing protocol.
 
 from __future__ import annotations
 
+import time
 import pytest
 
 from ruka_companion.math.decision import Action
@@ -261,3 +262,229 @@ class TestRelationship:
 
         assert eng.get("alice").interaction_count == 3
         assert eng.get("alice").healthy_ratio == pytest.approx(2 / 3)
+
+
+class TestIdentityExtended:
+    """Tambahan uji 4-lapis identitas: Recognition, Authentication, Authorization/Delegation, Trust, Relasi."""
+
+    def test_unregistered_profile_unknown_state(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        # Sinyal negatif kuat -> bukan Bos
+        ev = _evidence(ModalitySignal(modality=Modality.VOICE, llr=-5.0))
+        r = eng.recognize(ev)
+        assert r.state == RecognitionState.UNKNOWN
+        assert r.posterior_prob < 0.2
+
+    def test_low_confidence_llr(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        # Sinyal positif sangat lemah
+        ev = _evidence(ModalitySignal(modality=Modality.VOICE, llr=0.4))
+        r = eng.recognize(ev)
+        assert r.state in (RecognitionState.LOW_CONFIDENCE, RecognitionState.UNKNOWN)
+
+    def test_reject_state_large_negative_llr(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=-8.0),
+            ModalitySignal(modality=Modality.FACE, llr=-8.0),
+        )
+        r = eng.recognize(ev)
+        assert r.state == RecognitionState.UNKNOWN
+        assert r.posterior_prob < 0.01
+
+    def test_winner_takes_it_multiple_profiles(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        eng.enroll(PROFILE_ALICE)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=4.0),
+            ModalitySignal(modality=Modality.FACE, llr=4.0),
+        )
+        r = eng.recognize(ev)
+        assert r.profile_id in ("bos", "alice")
+        assert r.state == RecognitionState.KNOWN
+
+    def test_evidence_discount_applied_on_correlated_signals(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        # Dua sinyal voice independen vs 1 sinyal
+        ev_single = _evidence(ModalitySignal(modality=Modality.VOICE, llr=2.0))
+        ev_dual = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=2.0),
+            ModalitySignal(modality=Modality.FACE, llr=2.0),
+        )
+        r_single = eng.recognize(ev_single)
+        r_dual = eng.recognize(ev_dual)
+        assert r_dual.posterior_prob > r_single.posterior_prob
+
+    def test_two_same_modalities_not_strong(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        # Dua sinyal modality yang sama (keduanya VOICE)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=3.0),
+            ModalitySignal(modality=Modality.VOICE, llr=3.0),
+        )
+        r = eng.recognize(ev)
+        auth = eng.authenticate(r)
+        # Harus tetap WEAK karena hanya ada 1 modalitas independen
+        assert auth == AuthenticationStrength.WEAK
+
+    def test_unknown_recognition_gives_none_auth(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(ModalitySignal(modality=Modality.VOICE, llr=-10.0))
+        r = eng.recognize(ev)
+        assert r.state == RecognitionState.UNKNOWN
+        auth = eng.authenticate(r)
+        assert auth == AuthenticationStrength.NONE
+
+    def test_mfa_overrides_weak_evidence(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(ModalitySignal(modality=Modality.VOICE, llr=1.0))
+        r = eng.recognize(ev)
+        auth = eng.authenticate(r, mfa_confirmed=True)
+        assert auth == AuthenticationStrength.MFA_CONFIRMED
+
+    def test_suspicious_recognition_gives_none_or_weak_auth(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=5.0),
+            ModalitySignal(modality=Modality.FACE, llr=-5.0),
+        )
+        r = eng.recognize(ev)
+        assert r.state == RecognitionState.SUSPICIOUS
+        auth = eng.authenticate(r)
+        assert auth in (AuthenticationStrength.NONE, AuthenticationStrength.WEAK)
+
+    def test_suspicious_state_forces_deny_or_ask(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=5.0),
+            ModalitySignal(modality=Modality.FACE, llr=-5.0),
+        )
+        r = eng.recognize(ev)
+        auth = eng.authenticate(r)
+        action = eng.decide_action(r, auth, risk_cost=10.0)
+        assert action in (Action.ASK, Action.DENY)
+        assert action != Action.EXECUTE
+
+    def test_unknown_state_denies_medium_risk(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(ModalitySignal(modality=Modality.VOICE, llr=-5.0))
+        r = eng.recognize(ev)
+        auth = eng.authenticate(r)
+        action = eng.decide_action(r, auth, risk_cost=30.0)
+        assert action in (Action.DENY, Action.ASK)
+
+    def test_mfa_confirmed_allows_destructive_action(self):
+        eng = IdentityEngine()
+        eng.enroll(PROFILE_BOS)
+        ev = _evidence(
+            ModalitySignal(modality=Modality.VOICE, llr=3.0),
+            ModalitySignal(modality=Modality.FACE, llr=3.0),
+        )
+        r = eng.recognize(ev)
+        auth = eng.authenticate(r, mfa_confirmed=True)
+        action = eng.decide_action(r, auth, risk_cost=100.0)
+        assert action in (Action.ASK, Action.ASK_HUMAN)
+
+    def test_delegation_expired_at_check(self):
+        reg = DelegationRegistry()
+        grant = reg.propose("bos", "alice", {"filesystem.read"}, ttl_ms=100)
+        reg.confirm(grant.grant_id)
+        now = int(time.time() * 1000)
+
+        # Before expiry
+        ok, _ = reg.check("alice", "filesystem.read", now_ms=now)
+        assert ok is True
+
+        # After expiry
+        ok_expired, reason = reg.check("alice", "filesystem.read", now_ms=now + 500)
+        assert ok_expired is False
+        assert "EXPIRED" in reason or "state=" in reason
+
+    def test_delegation_double_activate_raises(self):
+        reg = DelegationRegistry()
+        grant = reg.propose("bos", "alice", {"filesystem.read"})
+        reg.confirm(grant.grant_id)
+        with pytest.raises(ValueError, match="aktivasi ilegal"):
+            grant.activate()
+
+    def test_delegation_revoke_with_reason(self):
+        reg = DelegationRegistry()
+        grant = reg.propose("bos", "alice", {"filesystem.read"})
+        reg.confirm(grant.grant_id)
+        reg.revoke(grant.grant_id, reason="security_audit")
+        assert grant.state == DelegationState.REVOKED
+        assert grant.revoked_reason == "security_audit"
+
+    def test_delegation_invalid_ttl_raises(self):
+        reg = DelegationRegistry()
+        with pytest.raises(ValueError, match="ttl_ms > 0"):
+            reg.propose("bos", "alice", {"filesystem.read"}, ttl_ms=-100)
+
+    def test_delegation_unknown_grant_keyerror(self):
+        reg = DelegationRegistry()
+        with pytest.raises(KeyError):
+            reg.confirm("dlg-nonexistent")
+        with pytest.raises(KeyError):
+            reg.revoke("dlg-nonexistent")
+
+    def test_trust_unverified_device_penalty(self):
+        model = TrustModel()
+        est_verified = model.estimate(
+            recognition_state=RecognitionState.KNOWN,
+            posterior=0.9,
+            auth=AuthenticationStrength.STRONG,
+            device_verified=True,
+        )
+        est_unverified = model.estimate(
+            recognition_state=RecognitionState.KNOWN,
+            posterior=0.9,
+            auth=AuthenticationStrength.STRONG,
+            device_verified=False,
+        )
+        assert est_verified.trust > est_unverified.trust
+
+    def test_trust_posterior_out_of_bounds_raises(self):
+        model = TrustModel()
+        with pytest.raises(ValueError, match="posterior"):
+            model.estimate(RecognitionState.KNOWN, posterior=1.5, auth=AuthenticationStrength.STRONG)
+        with pytest.raises(ValueError, match="posterior"):
+            model.estimate(RecognitionState.KNOWN, posterior=-0.1, auth=AuthenticationStrength.STRONG)
+
+    def test_trust_healthy_ratio_out_of_bounds_raises(self):
+        model = TrustModel()
+        with pytest.raises(ValueError, match="healthy_ratio"):
+            model.estimate(RecognitionState.KNOWN, posterior=0.8, auth=AuthenticationStrength.STRONG, healthy_ratio=1.2)
+
+    def test_relationship_stranger_initial(self):
+        eng = RelationshipEngine()
+        assert eng.get("unknown_person") is None
+
+    def test_relationship_type_transitions(self):
+        eng = RelationshipEngine()
+        rel = Relationship(profile_id="charlie", rel_type=RelationshipType.UNKNOWN)
+        eng.upsert(rel)
+        assert eng.get("charlie").rel_type == RelationshipType.UNKNOWN
+
+        rel_upgraded = Relationship(profile_id="charlie", rel_type=RelationshipType.INTRODUCED)
+        eng.upsert(rel_upgraded)
+        assert eng.get("charlie").rel_type == RelationshipType.INTRODUCED
+
+    def test_relationship_negative_interactions_decay_ratio(self):
+        eng = RelationshipEngine()
+        rel = Relationship(profile_id="bad_actor", rel_type=RelationshipType.SERVICE)
+        eng.upsert(rel)
+        for _ in range(5):
+            eng.record_interaction("bad_actor", positive=False)
+        assert eng.get("bad_actor").healthy_ratio == 0.0
+

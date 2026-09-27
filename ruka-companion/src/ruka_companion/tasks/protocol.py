@@ -217,6 +217,10 @@ class RemoteTask:
         self.fire(TaskEvents.FAIL)
         self.error = error
 
+    def mark_cancelled(self, error: str = "cancelled") -> None:
+        self.fire(TaskEvents.CANCEL)
+        self.error = error
+
     # --------------------------------------------------------------- metadata
     def digest(self) -> str:
         """Sidik jari task (id + nonce + capability) — untuk audit & dedupe."""

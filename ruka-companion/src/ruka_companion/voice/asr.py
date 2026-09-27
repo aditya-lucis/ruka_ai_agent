@@ -18,9 +18,9 @@ class Transcription:
     text: str
     language: str
     duration_s: float
-    segments: tuple[dict[str, Any], ...]
-    latency_s: float
-    model_id: str
+    segments: tuple[dict[str, Any], ...] | list = ()
+    latency_s: float = 0.0
+    model_id: str = "unknown"
 
 
 class WhisperASR:
@@ -59,6 +59,7 @@ class WhisperASR:
         beam_size: int = 5,
         vad_filter: bool = True,
         vad_parameters: dict[str, Any] | None = None,
+        initial_prompt: str | None = None,
     ) -> Transcription:
         """AudioBuffer → Transcription. Mengembalikan LATENSI TERUKUR.
         NOTE (RUNTIME-VERIFIED 2026-09-10, faster-whisper 1.2.1): nama kwarg
@@ -69,12 +70,17 @@ class WhisperASR:
         if buffer.fs != TARGET_FS:
             raise ValueError(f"ASR butuh {TARGET_FS} Hz, dapat {buffer.fs}")
         t0 = time.perf_counter()
+        kwargs: dict[str, Any] = {
+            "language": language,
+            "beam_size": beam_size,
+            "vad_filter": vad_filter,
+            "vad_parameters": vad_parameters or {},
+        }
+        if initial_prompt is not None:
+            kwargs["initial_prompt"] = initial_prompt
         segments, info = self._model.transcribe(
             buffer.samples,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=vad_filter,
-            vad_parameters=vad_parameters or {},
+            **kwargs,
         )
         segs = [
             {"start": float(s.start), "end": float(s.end), "text": s.text.strip()}

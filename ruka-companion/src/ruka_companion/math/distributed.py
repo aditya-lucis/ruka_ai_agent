@@ -89,3 +89,19 @@ class IdempotencyCache:
         for k in expired:
             self._seen.pop(k, None)
             self._results.pop(k, None)
+
+
+def backoff_full_jitter(
+    attempt: int,
+    base_ms: int = 500,
+    cap_ms: int = 30_000,
+    rng: Any | None = None,
+) -> int:
+    """Full-jitter backoff (AWS-style): sleep ~ U(0, min(cap, base·2^attempt)).
+    Mencegah gelombang thundering herd saat link hidup kembali.
+    """
+    import random as _random
+
+    r = rng or _random
+    temp = min(cap_ms, base_ms * (2**attempt))
+    return int(r.uniform(0, temp))

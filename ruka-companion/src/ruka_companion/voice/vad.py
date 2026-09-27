@@ -22,6 +22,11 @@ class VADConfig:
     min_speech_ms: int = 120
     max_hangover_ms: int = 200
 
+    @property
+    def energy_threshold(self) -> float:
+        """Computed threshold = ratio * noise_floor_init."""
+        return self.speech_threshold_ratio * self.noise_floor_init
+
 
 @dataclass
 class VADResult:
@@ -32,12 +37,30 @@ class VADResult:
 
 
 def segment_ms(
-    voiced: np.ndarray, hop_ms: int, min_speech_ms: int, hangover_ms: int
-) -> list[tuple[int, int]]:
-    """Kompresi boolean frame → segmen [start_ms, end_ms] + hangover ekor."""
+    voiced_or_start: np.ndarray | int,
+    hop_ms_or_end: int = 0,
+    min_speech_ms: int | None = None,
+    hangover_ms: int = 0,
+    *,
+    fs: int | None = None,
+) -> list[tuple[int, int]] | tuple[int, int]:
+    """Dual API:
+    1. segment_ms(voiced_array, hop_ms, min_speech_ms, hangover_ms) → segmen list
+    2. segment_ms(start_sample, end_sample, fs=fs) → (start_ms, end_ms)
+    """
+    # Convenience: sample indices → ms
+    if fs is not None:
+        start_sample = int(voiced_or_start)
+        end_sample = int(hop_ms_or_end)
+        return (int(start_sample * 1000 / fs), int(end_sample * 1000 / fs))
+
+    # Original boolean frame → segments
+    voiced = np.asarray(voiced_or_start)
+    hop_ms_i = int(hop_ms_or_end)
+    min_ms = int(min_speech_ms) if min_speech_ms is not None else 120
     segs: list[tuple[int, int]] = []
-    hangover_frames = max(1, int(round(hangover_ms / hop_ms)))
-    min_frames = max(1, int(round(min_speech_ms / hop_ms)))
+    hangover_frames = max(1, int(round(hangover_ms / hop_ms_i)))
+    min_frames = max(1, int(round(min_ms / hop_ms_i)))
     i = 0
     n = voiced.size
     while i < n:
@@ -54,7 +77,7 @@ def segment_ms(
                     j = k
                 k += 1
             if (j - i) >= min_frames:
-                segs.append((i * hop_ms, j * hop_ms))
+                segs.append((i * hop_ms_i, j * hop_ms_i))
             i = j
         else:
             i += 1

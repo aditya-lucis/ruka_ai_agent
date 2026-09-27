@@ -77,6 +77,13 @@ class SpeakerProfile:
     created_at_ms: int = 0
     variance_floor: float = 1e-4
 
+    def __post_init__(self) -> None:
+        """Enforce variance floor on cov_diag at construction time."""
+        self.mean = np.asarray(self.mean, dtype=np.float64)
+        self.cov_diag = np.maximum(
+            np.asarray(self.cov_diag, dtype=np.float64), self.variance_floor
+        )
+
     def logpdf_frame_mean(self, feats: np.ndarray) -> float:
         """(1/T) sum_t log N(f_t; mu, diag(sigma^2))"""
         var = np.maximum(self.cov_diag, self.variance_floor)

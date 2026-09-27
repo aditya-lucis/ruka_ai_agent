@@ -97,13 +97,23 @@ class AudioCore:
         hop_ms: int = HOP_MS,
     ) -> np.ndarray:
         """Potong jadi matriks frame (n_frames × frame_len).
-        Zero-pad ekor bila sisa < 1 frame — panjang keluaran konsisten.
+        Raises ValueError for invalid frame_ms/hop_ms or too-short samples.
         """
+        if frame_ms <= 0:
+            raise ValueError("frame_ms harus > 0")
+        if hop_ms <= 0:
+            raise ValueError("hop_ms harus > 0")
         s = np.asarray(samples, dtype=np.float32).ravel()
-        frame_len = max(1, int(fs * frame_ms / 1000))
-        hop = max(1, int(fs * hop_ms / 1000))
+        frame_len = int(fs * frame_ms / 1000)
+        hop = int(fs * hop_ms / 1000)
+        if frame_len <= 0:
+            raise ValueError("frame_len harus > 0")
+        if hop <= 0:
+            raise ValueError("hop harus > 0")
         if s.size < frame_len:
-            s = np.pad(s, (0, frame_len - s.size))
+            raise ValueError(
+                f"samples terlalu pendek ({s.size}) untuk frame_len={frame_len}"
+            )
         n_frames = 1 + (s.size - frame_len) // hop
         idx = np.arange(frame_len)[None, :] + hop * np.arange(n_frames)[:, None]
         return s[idx]  # n_frames × frame_len

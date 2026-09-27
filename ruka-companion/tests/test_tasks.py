@@ -227,3 +227,153 @@ class TestTaskQueue:
 
         # Antrean sekarang kosong
         assert q.take_ready() is None
+
+    def test_validate_task_ttl_zero_or_negative_raises(self):
+        with pytest.raises(TaskValidationError, match="ttl_ms > 0"):
+            validate_task("filesystem.read", {}, ttl_ms=0)
+        with pytest.raises(TaskValidationError, match="ttl_ms > 0"):
+            validate_task("filesystem.read", {}, ttl_ms=-500)
+
+    def test_remote_task_mark_failed(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.fire(TaskEvents.DELIVER)
+        task.fire(TaskEvents.RECEIVE)
+        task.fire(TaskEvents.BEGIN_POLICY)
+        task.fire(TaskEvents.POLICY_PASS)
+        task.mark_failed("disk out of space")
+        assert task.status == TaskStates.FAILED
+        assert task.error == "disk out of space"
+
+    def test_remote_task_mark_cancelled(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.mark_cancelled("cancelled by user")
+        assert task.status == TaskStates.CANCELLED
+        assert task.error == "cancelled by user"
+
+    def test_remote_task_terminal_states_immutable(self):
+        for term_status in [TaskStates.COMPLETED, TaskStates.FAILED, TaskStates.EXPIRED, TaskStates.CANCELLED]:
+            task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+            task.status = term_status
+            with pytest.raises(ValueError, match="transisi task ilegal"):
+                task.fire(TaskEvents.START_AUTH)
+
+    def test_task_waiting_permission_denied(self):
+        task = RemoteTask(capability="terminal.execute", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.fire(TaskEvents.DELIVER)
+        task.fire(TaskEvents.RECEIVE)
+        task.fire(TaskEvents.BEGIN_POLICY)
+        task.fire(TaskEvents.POLICY_NEEDS_HUMAN)
+        assert task.status == TaskStates.WAITING_PERMISSION
+        task.fire(TaskEvents.DENIED)
+        assert task.status == TaskStates.FAILED
+
+    def test_task_executing_fail(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.fire(TaskEvents.DELIVER)
+        task.fire(TaskEvents.RECEIVE)
+        task.fire(TaskEvents.BEGIN_POLICY)
+        task.fire(TaskEvents.POLICY_PASS)
+        assert task.status == TaskStates.EXECUTING
+        task.fire(TaskEvents.FAIL)
+        assert task.status == TaskStates.FAILED
+
+    def test_task_executing_expire(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.fire(TaskEvents.DELIVER)
+        task.fire(TaskEvents.RECEIVE)
+        task.fire(TaskEvents.BEGIN_POLICY)
+        task.fire(TaskEvents.POLICY_PASS)
+        assert task.status == TaskStates.EXECUTING
+        task.fire(TaskEvents.EXPIRE)
+        assert task.status == TaskStates.EXPIRED
+
+    def test_task_queue_reconnect_max_age_ms(self):
+        base = 1_000_000
+        clock = base
+        policy = QueuePolicy(max_age_ms=60_000)  # 1 menit
+        q = TaskQueue(policy=policy, clock_ms=lambda: clock)
+        task = RemoteTask(
+            capability="filesystem.read",
+            payload={},
+            requester="telegram:BOS",
+            ttl_ms=300_000,  # TTL 5 menit
+            created_at_ms=base,
+        )
+        q.enqueue(task)
+
+        # 70s later, within TTL but exceeds max_age_ms
+        clock = base + 70_000
+        outcome = q.on_reconnect()
+        assert outcome["expired"] == 1
+        assert task.status == TaskStates.EXPIRED
+
+    def test_task_queue_take_ready_skips_and_expires_expired_task(self):
+        base = 1_000_000
+        clock = base
+        q = TaskQueue(clock_ms=lambda: clock)
+        task = RemoteTask(
+            capability="filesystem.read",
+            payload={},
+            requester="telegram:BOS",
+            ttl_ms=5_000,
+            created_at_ms=base,
+        )
+        q.enqueue(task)
+
+        # Jam melompat 6 detik kemudian (expired)
+        clock = base + 6_000
+        taken = q.take_ready()
+        assert taken is None
+        assert task.status == TaskStates.EXPIRED
+        assert task.error == "expired at take"
+
+    def test_task_queue_stats_and_pending(self):
+        base = 1_000_000
+        q = TaskQueue(clock_ms=lambda: base)
+        t1 = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS", created_at_ms=base)
+        t2 = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS", created_at_ms=base)
+        q.enqueue(t1)
+        q.enqueue(t2)
+
+        stats = q.stats()
+        assert stats.get(TaskStates.QUEUED) == 2
+        pending = q.pending()
+        assert len(pending) == 2
+
+    def test_task_auth_fail_transitions_to_failed(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        assert task.status == TaskStates.AUTHENTICATING
+        task.fire(TaskEvents.AUTH_FAIL)
+        assert task.status == TaskStates.FAILED
+
+    def test_task_delivered_to_expire(self):
+        task = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS")
+        task.fire(TaskEvents.START_AUTH)
+        task.fire(TaskEvents.AUTH_OK)
+        task.fire(TaskEvents.DELIVER)
+        assert task.status == TaskStates.DELIVERED
+        task.fire(TaskEvents.EXPIRE)
+        assert task.status == TaskStates.EXPIRED
+
+    def test_task_queue_reconnect_terminal_skipped(self):
+        base = 1_000_000
+        q = TaskQueue(clock_ms=lambda: base)
+        t_done = RemoteTask(capability="filesystem.read", payload={}, requester="telegram:BOS", created_at_ms=base)
+        q.enqueue(t_done)
+        t_done.status = TaskStates.COMPLETED
+
+        outcome = q.on_reconnect()
+        assert outcome["terminal_skipped"] == 1
+        assert outcome["kept"] == 0
+

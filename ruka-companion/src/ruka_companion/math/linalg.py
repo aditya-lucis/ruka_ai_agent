@@ -99,3 +99,9 @@ def rank(A: np.ndarray, tol: float = 1e-10) -> int:
         raise ValueError("rank butuh matriks 2-D")
     s = np.linalg.svd(A, compute_uv=False)
     return int(np.sum(s > tol))
+
+def l2_norm(x: np.ndarray) -> float:
+    """‖x‖₂ = √(∑ x_i²)."""
+    x = _as_vector(x, "x")
+    return float(np.linalg.norm(x))
+
