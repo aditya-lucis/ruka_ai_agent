@@ -38,11 +38,11 @@ const api = {
     },
   },
   chat: {
-    send(text: string): Promise<Envelope> {
+    send(text: string, attachment?: any): Promise<Envelope> {
       if (typeof text !== 'string') {
         throw new TypeError('chat.send menerima string');
       }
-      return ipcRenderer.invoke(IPC.CHAT_SEND, text.slice(0, 8000));
+      return ipcRenderer.invoke(IPC.CHAT_SEND, text.slice(0, 8000), attachment);
     },
     onStream(cb: (env: Envelope) => void): () => void {
       const wrapped = (_e: unknown, env: Envelope): void => cb(env);
@@ -94,6 +94,14 @@ const api = {
         throw new TypeError('settings.update menerima objek');
       }
       return ipcRenderer.invoke(IPC.SETTINGS_UPDATE, patch);
+    },
+  },
+  voice: {
+    transcribe(wavBase64: string): Promise<Envelope> {
+      if (typeof wavBase64 !== 'string') {
+        throw new TypeError('voice.transcribe menerima string base64');
+      }
+      return ipcRenderer.invoke(IPC.VOICE_TRANSCRIBE, wavBase64);
     },
   },
 };

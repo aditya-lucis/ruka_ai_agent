@@ -23,6 +23,10 @@
         <span class="presence-dot"></span>
         <span class="presence-text" id="presenceText">Lokal</span>
       </div>
+      <button class="voice-toggle-btn active" id="btnToggleVoice" title="Suara Ruka: Aktif (Klik untuk membisukan)">
+        <svg class="icon-speaker" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        <span class="voice-status-text">Suara Ruka</span>
+      </button>
       <div class="window-controls">
         <button class="win-btn" id="btnMinimize" title="Minimize" aria-label="Minimize">
           <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M2 6h8v1H2z"/></svg>
@@ -94,8 +98,13 @@
             <img class="msg-avatar ruka-avatar" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
             <div class="msg-bubble ruka-bubble">
               <div class="msg-sender">Ruka</div>
-              <div class="msg-text">Salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini... seluruh subsistem kognisi, sensor, dan cakar pertahanan telah siaga penuh. Ada hal menarik yang ingin Anda titahkan malam ini, Sir?</div>
-              <div class="msg-time" id="greetingTime">11:42</div>
+              <div class="msg-text">Salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini... seluruh subsistem kognisi, sensor visual kamera, mikrofon wicara, dan cakar pertahanan telah siaga penuh. Ada hal menarik yang ingin Anda titahkan malam ini, Sir?</div>
+              <div class="msg-footer">
+                <button class="msg-speak-btn" title="Dengarkan Suara Ruka">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                </button>
+                <div class="msg-time" id="greetingTime">11:42</div>
+              </div>
             </div>
           </div>
         </div>
@@ -106,11 +115,41 @@
           <button class="chip" data-text="Cari memori tentang preferensi Young Lord">Preferensi</button>
         </div>
 
+        <!-- Attachment Bar -->
+        <div class="attachment-bar hidden" id="attachmentBar">
+          <div class="attachment-thumbnail-wrapper" id="attachmentThumbnailWrapper">
+            <img id="attachmentThumbnail" src="" alt="Lampiran" class="attachment-thumb-img hidden">
+            <div id="attachmentFileIcon" class="attachment-file-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+          </div>
+          <div class="attachment-details">
+            <span class="attachment-name" id="attachmentName">lampiran.png</span>
+            <span class="attachment-meta" id="attachmentMeta">120 KB · Siap di-scan Ruka</span>
+          </div>
+          <button class="attachment-remove-btn" id="btnRemoveAttachment" title="Hapus lampiran">&times;</button>
+        </div>
+
+        <!-- Chat Composer -->
         <div class="chat-composer">
-          <textarea id="chatInput" placeholder="Tulis instruksi untuk Ruka... (Enter untuk kirim)" rows="1" maxlength="8000"></textarea>
-          <button id="btnSend" class="send-btn" title="Kirim Pesan" aria-label="Send">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
+          <div class="composer-tools">
+            <input type="file" id="fileInput" style="display: none;" accept="image/*,.txt,.py,.js,.ts,.json,.md,.html,.css,.csv,.log,.pdf,.c,.cpp">
+            <button type="button" class="tool-icon-btn" id="btnAttachFile" title="Lampirkan Gambar atau Berkas (Scan Dokumen/Kode)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <button type="button" class="tool-icon-btn" id="btnOpenCamera" title="Akses Kamera (Sensor Optik YuNet & SFace)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+          </div>
+          <textarea id="chatInput" placeholder="Tulis instruksi atau bicara dengan Ruka... (Enter kirim)" rows="1" maxlength="8000"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="tool-icon-btn mic-btn" id="btnMic" title="Bicara dengan Suara (Klik untuk bicara)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </button>
+            <button id="btnSend" class="send-btn" title="Kirim Pesan" aria-label="Send">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -225,6 +264,44 @@
       <div class="footer-note">RUKA VI · Sang Marquis Kekaisaran Trendamis</div>
       <div class="footer-latency" id="footerLatency">Uptime: aktif</div>
     </footer>
+
+    <!-- Camera HUD Viewfinder Modal -->
+    <div class="camera-modal hidden" id="cameraModal">
+      <div class="camera-backdrop" id="cameraBackdrop"></div>
+      <div class="camera-dialog">
+        <div class="camera-dialog-header">
+          <div class="camera-title-badge">
+            <span class="camera-rec-dot"></span>
+            <span>Sensor Optik Marquis Trendamis (YuNet Active)</span>
+          </div>
+          <button class="cam-close-btn" id="btnCloseCamera" title="Tutup Sensor">&times;</button>
+        </div>
+        <div class="camera-frame-container">
+          <video id="cameraVideo" autoplay playsinline muted></video>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <div class="camera-hud-overlay">
+            <div class="hud-corner top-left"></div>
+            <div class="hud-corner top-right"></div>
+            <div class="hud-corner bottom-left"></div>
+            <div class="hud-corner bottom-right"></div>
+            <div class="hud-reticle"></div>
+            <div class="hud-telemetry">
+              <span>FOV: 78°</span>
+              <span>OPTIC: LOCAL-ONLY</span>
+              <span>SFace 128-d</span>
+            </div>
+            <div class="hud-scan-line"></div>
+          </div>
+        </div>
+        <div class="camera-dialog-footer">
+          <span class="camera-hint">Arahkan ke wajah, objek, atau kode untuk diteliti Ruka</span>
+          <button class="snap-btn" id="btnSnapPhoto">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 4h-3.17L14.6 2H9.4L8.17 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
+            <span>Ambil Foto & Berikan ke Ruka</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

@@ -205,19 +205,19 @@ function registerIpc(): void {
     return connector.envelope(IPC.RUNTIME_STATUS);
   });
 
-  ipcMain.handle(IPC.CHAT_SEND, async (_e, text: string) => {
+  ipcMain.handle(IPC.CHAT_SEND, async (_e, text: string, attachment?: any) => {
     if (!isRendererAllowed(IPC.CHAT_SEND)) {
       throw new Error('Kanal dilarang');
     }
     const clean = String(text).trim();
 
-    // Bila koneksi loopback ke Python aktif, coba kirim ke Python dengan timeout 35s
+    // Bila koneksi loopback ke Python aktif, coba kirim ke Python dengan timeout 45s
     if (connector.getState() === 'connected') {
       try {
         return await connector.request(
           IPC.CHAT_SEND,
-          { text: clean.slice(0, 8000) },
-          35000
+          { text: clean.slice(0, 8000), attachment },
+          45000
         );
       } catch (err: any) {
         // Fallback respons di bawah
@@ -280,6 +280,38 @@ function registerIpc(): void {
         delta: reply,
         done: true,
       },
+      ts: Date.now() / 1000,
+    } as Envelope;
+  });
+
+  ipcMain.handle(IPC.VOICE_TRANSCRIBE, async (_e, wavBase64: string) => {
+    if (!isRendererAllowed(IPC.VOICE_TRANSCRIBE)) {
+      throw new Error('Kanal dilarang');
+    }
+    if (connector.getState() === 'connected') {
+      try {
+        return await connector.request(
+          IPC.VOICE_TRANSCRIBE,
+          { audio: String(wavBase64) },
+          30000
+        );
+      } catch (err: any) {
+        return {
+          type: 'error',
+          channel: IPC.VOICE_TRANSCRIBE,
+          correlationId: `err-${Date.now()}`,
+          protocolVersion: PROTOCOL_VERSION,
+          payload: { error: err.message },
+          ts: Date.now() / 1000,
+        } as Envelope;
+      }
+    }
+    return {
+      type: 'error',
+      channel: IPC.VOICE_TRANSCRIBE,
+      correlationId: `err-${Date.now()}`,
+      protocolVersion: PROTOCOL_VERSION,
+      payload: { error: 'Otak Python belum tersambung' },
       ts: Date.now() / 1000,
     } as Envelope;
   });

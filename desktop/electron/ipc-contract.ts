@@ -31,6 +31,8 @@ export const IPC = {
   SETTINGS_UPDATE: 'ruka:settings-update',
   /** Dorongan status runtime -> renderer (event). */
   RUNTIME_EVENT: 'ruka:runtime-event',
+  /** Transkripsi audio lokal/Google via Python brain (req/res). */
+  VOICE_TRANSCRIBE: 'ruka:voice-transcribe',
 } as const;
 
 /** Tipe amplop — cerminan Envelope Python (protokol v2). */
@@ -56,6 +58,7 @@ export const RENDERER_ALLOWED = new Set<string>([
   IPC.PERMISSION_REQUEST,
   IPC.SETTINGS_GET,
   IPC.SETTINGS_UPDATE,
+  IPC.VOICE_TRANSCRIBE,
 ]);
 
 /** Validasi kanal — dipanggil handler main utk setiap pesan masuk. */

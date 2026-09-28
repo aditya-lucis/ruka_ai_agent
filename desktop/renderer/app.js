@@ -1,10 +1,11 @@
 /**
  * RUKA DESKTOP COMPANION — RENDERER LOGIC
  * Interaksi UI via API sempit `window.ruka` (Preload ContextBridge)
+ * Fitur: Saling Ngobrol dengan Suara (STT/TTS), Akses Kamera HUD Lokal, & Multimodal Scan Gambar/Berkas
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Elements
+  // Elements: Window & Navigation
   const btnMinimize = document.getElementById('btnMinimize');
   const btnClose = document.getElementById('btnClose');
   const statusPulse = document.getElementById('statusPulse');
@@ -24,10 +25,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const diagConnState = document.getElementById('diagConnState');
   const greetingTime = document.getElementById('greetingTime');
 
+  // Elements: Voice (TTS & STT)
+  const btnToggleVoice = document.getElementById('btnToggleVoice');
+  const btnMic = document.getElementById('btnMic');
+
+  // Elements: Attachment & Scan
+  const btnAttachFile = document.getElementById('btnAttachFile');
+  const fileInput = document.getElementById('fileInput');
+  const attachmentBar = document.getElementById('attachmentBar');
+  const attachmentThumbnailWrapper = document.getElementById('attachmentThumbnailWrapper');
+  const attachmentThumbnail = document.getElementById('attachmentThumbnail');
+  const attachmentFileIcon = document.getElementById('attachmentFileIcon');
+  const attachmentName = document.getElementById('attachmentName');
+  const attachmentMeta = document.getElementById('attachmentMeta');
+  const btnRemoveAttachment = document.getElementById('btnRemoveAttachment');
+
+  // Elements: Camera Viewfinder HUD
+  const btnOpenCamera = document.getElementById('btnOpenCamera');
+  const cameraModal = document.getElementById('cameraModal');
+  const cameraBackdrop = document.getElementById('cameraBackdrop');
+  const btnCloseCamera = document.getElementById('btnCloseCamera');
+  const cameraVideo = document.getElementById('cameraVideo');
+  const cameraCanvas = document.getElementById('cameraCanvas');
+  const btnSnapPhoto = document.getElementById('btnSnapPhoto');
+
+  // State Management
+  let voiceEnabled = true;
+  let isRecording = false;
+  let speechRecognition = null;
+  let cameraStream = null;
+  let currentAttachment = null; // { type, isImage, name, mime_type, data, text_content }
+  let availableVoices = [];
+
   // Set greeting time
   if (greetingTime) {
     const now = new Date();
     greetingTime.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  // Bind initial speech synthesis voices
+  if ('speechSynthesis' in window) {
+    const populateVoices = () => {
+      availableVoices = window.speechSynthesis.getVoices();
+    };
+    populateVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
   }
 
   // 1. Window Controls
@@ -102,18 +146,16 @@ document.addEventListener('DOMContentLoaded', () => {
     logConsole.scrollTop = logConsole.scrollHeight;
   }
 
-  // Cek apakah API `window.ruka` tersedia dari preload
+  // Preload IPC initialization
   if (window.ruka) {
     appendLog('Preload contextBridge API detected.');
 
-    // Berlangganan perubahan status
     if (window.ruka.runtime?.onStateChange) {
       window.ruka.runtime.onStateChange((newState) => {
         updateStateUI(newState);
       });
     }
 
-    // Polling status awal
     window.ruka.runtime.status()
       .then((env) => {
         const s = env?.payload?.state || 'connected';
@@ -124,7 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStateUI('disconnected');
       });
 
-    // Berlangganan streaming balasan chat
     if (window.ruka.chat?.onStream) {
       window.ruka.chat.onStream((env) => {
         if (env?.payload?.delta) {
@@ -133,21 +174,451 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Ambil statistik memori awal
     refreshMemoryStats();
   } else {
     appendLog('Running in standalone browser preview (window.ruka unavailable).');
     updateStateUI('disconnected');
   }
 
-  // 4. Chat Handling
+  // ==========================================================================
+  // FITUR 1: SUARA (SPEECH SYNTHESIS & SPEECH-TO-TEXT)
+  // ==========================================================================
+
+  // Toggle Voice Output (Mulut Ruka)
+  btnToggleVoice?.addEventListener('click', () => {
+    voiceEnabled = !voiceEnabled;
+    if (voiceEnabled) {
+      btnToggleVoice.classList.remove('muted');
+      btnToggleVoice.classList.add('active');
+      btnToggleVoice.title = 'Suara Ruka: Aktif (Klik untuk membisukan)';
+      btnToggleVoice.querySelector('.voice-status-text').textContent = 'Suara Ruka';
+      appendLog('[VOICE] Suara Ruka diaktifkan.');
+    } else {
+      btnToggleVoice.classList.remove('active');
+      btnToggleVoice.classList.add('muted');
+      btnToggleVoice.title = 'Suara Ruka: Bisu (Klik untuk aktifkan)';
+      btnToggleVoice.querySelector('.voice-status-text').textContent = 'Bisu';
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      appendLog('[VOICE] Suara Ruka dibisukan.');
+    }
+  });
+
+  // Pembersih teks untuk suara: Hapus stage directions dalam tanda kurung / bintang
+  function cleanTextForSpeech(raw) {
+    return raw
+      .replace(/\([^)]*\)/g, ' ')      // Hapus (Aku menyeringai...)
+      .replace(/\[[^\]]*\]/g, ' ')     // Hapus [Sensor...]
+      .replace(/\*([^*]+)\*/g, '$1')   // Hilangkan markdown *teks*
+      .replace(/```[\s\S]*?```/g, ' ') // Hilangkan blok kode
+      .replace(/`([^`]+)`/g, '$1')     // Hilangkan inline code
+      .replace(/https?:\/\/\S+/g, ' ') // Hilangkan tautan url
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Fungsi Berbicara Ruka (Text-to-Speech)
+  function speakRukaResponse(text, speakBtn) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel(); // Hentikan ucapan sebelumnya
+
+    const spokenText = cleanTextForSpeech(text);
+    if (!spokenText) return;
+
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    
+    // Cari suara terbaik (Bahasa Indonesia atau suara dalam/berwibawa)
+    if (availableVoices.length === 0) {
+      availableVoices = window.speechSynthesis.getVoices();
+    }
+    const idVoice = availableVoices.find(v => v.lang.startsWith('id') || v.lang.startsWith('ms'));
+    const gbVoice = availableVoices.find(v => v.lang.includes('en-GB') || v.name.includes('David') || v.name.includes('George'));
+    
+    if (idVoice) {
+      utterance.voice = idVoice;
+    } else if (gbVoice) {
+      utterance.voice = gbVoice;
+    }
+
+    // Karakter Kucing Vampir Aristokrat: Nada agak rendah (pitch 0.88), tenang terukur (rate 0.95)
+    utterance.pitch = 0.88;
+    utterance.rate = 0.95;
+
+    if (speakBtn) {
+      speakBtn.classList.add('speaking');
+    }
+
+    utterance.onend = () => {
+      if (speakBtn) speakBtn.classList.remove('speaking');
+    };
+
+    utterance.onerror = () => {
+      if (speakBtn) speakBtn.classList.remove('speaking');
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Pasang listener suara pada bubble pembuka awal
+  const initialSpeakBtn = chatFeed.querySelector('.message-ruka .msg-speak-btn');
+  if (initialSpeakBtn) {
+    initialSpeakBtn.addEventListener('click', () => {
+      const text = chatFeed.querySelector('.message-ruka .msg-text')?.innerText || '';
+      speakRukaResponse(text, initialSpeakBtn);
+    });
+  }
+
+  // ==========================================================================
+  // FITUR 1B: MIKROFON (SPEECH-TO-TEXT VIA WEB AUDIO WAV ENCODER + PYTHON ASR)
+  // ==========================================================================
+  let audioStream = null;
+  let audioContext = null;
+  let scriptProcessor = null;
+  let recordedAudioSamples = [];
+  let recordTimerInterval = null;
+  let recordSeconds = 0;
+
+  function encodeWAV(samples, sampleRate = 16000) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    function writeString(offset, string) {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    }
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, 1, true); // Mono channel
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // byte rate (sampleRate * 1 channel * 2 bytes)
+    view.setUint16(32, 2, true); // block align
+    view.setUint16(34, 16, true); // 16-bit
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  async function startRecording() {
+    try {
+      appendLog('[VOICE] Membuka mikrofon via Web Audio API...');
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const source = audioContext.createMediaStreamSource(audioStream);
+      scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      recordedAudioSamples = [];
+      isRecording = true;
+      recordSeconds = 0;
+
+      scriptProcessor.onaudioprocess = (e) => {
+        if (!isRecording) return;
+        const input = e.inputBuffer.getChannelData(0);
+        for (let i = 0; i < input.length; i++) {
+          recordedAudioSamples.push(input[i]);
+        }
+      };
+
+      source.connect(scriptProcessor);
+      scriptProcessor.connect(audioContext.destination);
+
+      btnMic.classList.add('recording');
+      btnMic.title = 'Sedang merekam... (Klik lagi untuk selesai & kirim)';
+      chatInput.placeholder = '🔴 Merekam suara Anda (00:00)... Klik tombol mikrofon lagi setelah selesai';
+      coreState.textContent = 'Mendengarkan Suara';
+      coreAura.style.filter = 'drop-shadow(0 0 16px #f38ba8)';
+
+      recordTimerInterval = setInterval(() => {
+        recordSeconds++;
+        const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+        const s = String(recordSeconds % 60).padStart(2, '0');
+        chatInput.placeholder = `🔴 Merekam suara Anda (${m}:${s})... Klik mikrofon lagi untuk selesai`;
+      }, 1000);
+
+      appendLog('[VOICE] Mikrofon aktif merekam (16kHz Mono PCM).');
+    } catch (err) {
+      appendLog(`[VOICE-ERROR] Gagal membuka mikrofon: ${err.message}`);
+      alert(`Tidak dapat mengakses mikrofon: ${err.message}\nPastikan izin mikrofon diberikan di Windows.`);
+      stopRecording(false);
+    }
+  }
+
+  async function stopRecording(shouldTranscribe = true) {
+    if (!isRecording) return;
+    isRecording = false;
+
+    if (recordTimerInterval) {
+      clearInterval(recordTimerInterval);
+      recordTimerInterval = null;
+    }
+
+    if (scriptProcessor) {
+      scriptProcessor.disconnect();
+      scriptProcessor = null;
+    }
+    if (audioStream) {
+      audioStream.getTracks().forEach((track) => track.stop());
+      audioStream = null;
+    }
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().catch(() => {});
+      audioContext = null;
+    }
+
+    btnMic.classList.remove('recording');
+    btnMic.setAttribute('title', 'Bicara dengan Suara (Mikrofon)');
+    coreState.textContent = 'Harmoni Penuh';
+    coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
+
+    if (!shouldTranscribe || recordedAudioSamples.length < 4000) {
+      chatInput.placeholder = 'Tulis instruksi atau bicara dengan Ruka... (Enter kirim)';
+      return;
+    }
+
+    chatInput.placeholder = '⏳ Menerjemahkan suara Young Lord ke teks…';
+    appendLog(`[VOICE] Mengodekan ${recordedAudioSamples.length} sampel PCM ke WAV...`);
+
+    const wavBlob = encodeWAV(recordedAudioSamples, 16000);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      const base64Wav = dataUrl.split(',')[1];
+
+      if (window.ruka?.voice?.transcribe) {
+        try {
+          appendLog('[VOICE] Mengirim WAV ke Python ASR...');
+          const resp = await window.ruka.voice.transcribe(base64Wav);
+          const recognizedText = resp?.payload?.text || '';
+          const errMsg = resp?.payload?.error;
+
+          if (recognizedText && recognizedText.trim()) {
+            appendLog(`[VOICE] Transkripsi sukses: "${recognizedText}"`);
+            chatInput.value = recognizedText;
+            chatInput.placeholder = 'Tulis instruksi atau bicara dengan Ruka... (Enter kirim)';
+            // Otomatis kirim pesan suara ke Ruka!
+            sendMessage(recognizedText);
+          } else {
+            appendLog(`[VOICE] Tidak ada kata terdeteksi: ${errMsg || 'suara terlalu pelan'}`);
+            chatInput.placeholder = errMsg || 'Suara tidak terdengar jelas. Coba bicara lebih dekat ke mikrofon.';
+          }
+        } catch (ipcErr) {
+          appendLog(`[VOICE-ERROR] Transcribe IPC gagal: ${ipcErr.message}`);
+          chatInput.placeholder = 'Gagal transkripsi suara.';
+        }
+      } else {
+        appendLog('[VOICE] window.ruka.voice.transcribe tidak tersedia.');
+        chatInput.placeholder = 'ASR loopback belum tersambung.';
+      }
+    };
+    reader.readAsDataURL(wavBlob);
+  }
+
+  btnMic?.addEventListener('click', () => {
+    if (!isRecording) {
+      startRecording();
+    } else {
+      stopRecording(true);
+    }
+  });
+
+  // ==========================================================================
+  // FITUR 2: AKSES KAMERA (SENSOR OPTIK YUNET & SFACE HUD)
+  // ==========================================================================
+
+  btnOpenCamera?.addEventListener('click', async () => {
+    try {
+      cameraModal.classList.remove('hidden');
+      appendLog('[CAMERA] Menginisialisasi sensor optik kamera...');
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: false,
+      });
+      cameraVideo.srcObject = cameraStream;
+      await cameraVideo.play();
+      coreState.textContent = 'Mata Sensor Aktif';
+      coreAura.style.filter = 'drop-shadow(0 0 16px #89b4fa)';
+      appendLog('[CAMERA] Sensor visual YuNet aktif & menayangkan feed.');
+    } catch (err) {
+      appendLog(`[CAMERA-ERROR] Akses kamera gagal: ${err.message}`);
+      alert(`Tidak dapat mengakses kamera: ${err.message}\nPastikan izin kamera diberikan di Windows.`);
+      closeCameraModal();
+    }
+  });
+
+  function closeCameraModal() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      cameraStream = null;
+    }
+    cameraVideo.srcObject = null;
+    cameraModal.classList.add('hidden');
+    coreState.textContent = 'Harmoni Penuh';
+    coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
+    appendLog('[CAMERA] Sensor optik ditutup.');
+  }
+
+  btnCloseCamera?.addEventListener('click', closeCameraModal);
+  cameraBackdrop?.addEventListener('click', closeCameraModal);
+
+  // Ambil Foto dari Kamera dan Masukkan ke Attachment
+  btnSnapPhoto?.addEventListener('click', () => {
+    if (!cameraVideo.videoWidth) return;
+
+    cameraCanvas.width = cameraVideo.videoWidth;
+    cameraCanvas.height = cameraVideo.videoHeight;
+    const ctx = cameraCanvas.getContext('2d');
+    ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+
+    const dataUrl = cameraCanvas.toDataURL('image/jpeg', 0.88);
+    const filename = `snapshot_optik_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.jpg`;
+
+    setAttachment({
+      type: 'image',
+      isImage: true,
+      name: filename,
+      mime_type: 'image/jpeg',
+      data: dataUrl,
+      sizeStr: `${Math.round(dataUrl.length * 0.75 / 1024)} KB`,
+    });
+
+    closeCameraModal();
+    chatInput.placeholder = 'Tanyakan sesuatu atau titahkan Ruka untuk meneliti foto ini...';
+    chatInput.focus();
+    appendLog(`[CAMERA] Tangkapan citra "${filename}" siap dikirim ke nalar Ruka.`);
+  });
+
+  // ==========================================================================
+  // FITUR 3: SCAN GAMBAR & BERKAS (MULTIMODAL ATTACHMENTS)
+  // ==========================================================================
+
+  btnAttachFile?.addEventListener('click', () => {
+    fileInput?.click();
+  });
+
+  fileInput?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  });
+
+  // Drag and drop gambar/file ke composer atau chat view
+  const dragTarget = document.querySelector('.chat-composer');
+  dragTarget?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dragTarget.style.borderColor = 'var(--accent-purple)';
+    dragTarget.style.boxShadow = '0 0 16px var(--accent-glow)';
+  });
+
+  dragTarget?.addEventListener('dragleave', () => {
+    dragTarget.style.borderColor = 'var(--border-color)';
+    dragTarget.style.boxShadow = 'none';
+  });
+
+  dragTarget?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragTarget.style.borderColor = 'var(--border-color)';
+    dragTarget.style.boxShadow = 'none';
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  });
+
+  function processSelectedFile(file) {
+    const isImg = file.type.startsWith('image/');
+    const sizeKB = Math.round(file.size / 1024);
+    const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
+
+    const reader = new FileReader();
+
+    if (isImg) {
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        setAttachment({
+          type: 'image',
+          isImage: true,
+          name: file.name,
+          mime_type: file.type || 'image/jpeg',
+          data: dataUrl,
+          sizeStr: sizeStr,
+        });
+        appendLog(`[ATTACH] Gambar "${file.name}" (${sizeStr}) terpasang.`);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Kode atau berkas teks/dokumen
+      reader.onload = (ev) => {
+        const textContent = ev.target.result;
+        setAttachment({
+          type: 'file',
+          isImage: false,
+          name: file.name,
+          mime_type: file.type || 'text/plain',
+          text_content: textContent,
+          sizeStr: sizeStr,
+        });
+        appendLog(`[ATTACH] Dokumen/kode "${file.name}" (${sizeStr}) terpasang.`);
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  function setAttachment(att) {
+    currentAttachment = att;
+    attachmentName.textContent = att.name;
+    attachmentMeta.textContent = `${att.sizeStr} · Siap di-scan nalar Ruka`;
+
+    if (att.isImage) {
+      attachmentThumbnail.src = att.data;
+      attachmentThumbnail.classList.remove('hidden');
+      attachmentFileIcon.classList.add('hidden');
+    } else {
+      attachmentThumbnail.classList.add('hidden');
+      attachmentFileIcon.classList.remove('hidden');
+    }
+
+    attachmentBar.classList.remove('hidden');
+  }
+
+  btnRemoveAttachment?.addEventListener('click', () => {
+    currentAttachment = null;
+    attachmentBar.classList.add('hidden');
+    if (fileInput) fileInput.value = '';
+    appendLog('[ATTACH] Lampiran dibatalkan.');
+  });
+
+  // ==========================================================================
+  // FITUR 4: CHAT HANDLING (PENGIRIMAN DENGAN MULTIMODAL & BALASAN SUARA)
+  // ==========================================================================
+
   function sendMessage(text) {
-    if (!text || !text.trim()) return;
-    const cleanText = text.trim();
+    const cleanText = (text || '').trim();
+    if (!cleanText && !currentAttachment) return;
+
+    const attachmentToSend = currentAttachment;
 
     // 1. Tampilkan pesan user di UI seketika
-    appendUserMessage(cleanText);
+    appendUserMessage(cleanText, attachmentToSend);
     chatInput.value = '';
+
+    // Bersihkan attachment bar
+    currentAttachment = null;
+    attachmentBar.classList.add('hidden');
+    if (fileInput) fileInput.value = '';
     chatFeed.scrollTop = chatFeed.scrollHeight;
 
     // Animasi thinking seketika
@@ -163,26 +634,34 @@ document.addEventListener('DOMContentLoaded', () => {
       // Gantikan indikator mengetik dengan teks jawaban
       const bubbleContainer = typingBubble.querySelector('.ruka-bubble');
       const textEl = typingBubble.querySelector('.msg-text');
+      const speakBtn = typingBubble.querySelector('.msg-speak-btn');
+
       if (textEl) {
         textEl.innerHTML = '';
         streamTextIntoElement(textEl, responseText, () => {
           coreState.textContent = 'Harmoni Penuh';
-          // Tambahkan waktu
-          const now = new Date();
-          const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          const timeEl = document.createElement('div');
-          timeEl.className = 'msg-time';
-          timeEl.textContent = time;
-          bubbleContainer.appendChild(timeEl);
+          coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
           chatFeed.scrollTop = chatFeed.scrollHeight;
+
+          // Pasang click listener pada tombol speak
+          if (speakBtn) {
+            speakBtn.onclick = () => {
+              speakRukaResponse(responseText, speakBtn);
+            };
+          }
+
+          // Otomatis bersuara jika mode suara aktif
+          if (voiceEnabled) {
+            speakRukaResponse(responseText, speakBtn);
+          }
         });
       }
     };
 
     // 3. Kirim via IPC (Preload contextBridge)
     if (window.ruka?.chat?.send) {
-      appendLog(`[IPC] Mengirim pesan: "${cleanText.slice(0, 30)}..."`);
-      window.ruka.chat.send(cleanText)
+      appendLog(`[IPC] Mengirim pesan: "${cleanText.slice(0, 30)}..." (Attachment: ${attachmentToSend ? attachmentToSend.name : 'none'})`);
+      window.ruka.chat.send(cleanText, attachmentToSend)
         .then((resp) => {
           const delta = resp?.payload?.delta || 'Perintah telah dicatat.';
           onResponseReceived(delta);
@@ -196,7 +675,11 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         let reply = '';
         const lower = cleanText.toLowerCase();
-        if (lower.includes('kamera') || lower.includes('mikrofon') || lower.includes('sensor')) {
+        if (attachmentToSend?.isImage) {
+          reply = `Hmm... saya telah menatap citra "${attachmentToSend.name}" yang Anda perlihatkan, Young Lord. Berdasarkan sensor penglihatan saya, komposisi dan polanya terpindai jelas. Ada detail khusus yang ingin Anda telaah lebih mendalam, Sir?`;
+        } else if (attachmentToSend) {
+          reply = `Heh... berkas "${attachmentToSend.name}" telah masuk ke dalam analisis cakar saya, My Lord. Sintaks dan strukturnya tersusun rapi, namun mari kita optimalkan jika ada logika yang butuh disempurnakan, Sir.`;
+        } else if (lower.includes('kamera') || lower.includes('mikrofon') || lower.includes('sensor')) {
           reply = '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363).\n🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n🛡️ Kebijakan: LOCAL-ONLY.';
         } else if (lower.includes('siapa') || lower.includes('identitas') || lower.includes('profil')) {
           reply = '👤 Profil Pengguna: Young Lord (Marquis Kekaisaran Trendamis).\n🦇 Entitas: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n🔐 Autentikasi: STRONG (Biometrik Wajah & Suara Terverifikasi).\n✨ Status: Tenang, Agak Tengil, dan Setia Mutlak.';
@@ -215,6 +698,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function createTypingBubble() {
     const msg = document.createElement('div');
     msg.className = 'message message-ruka';
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     msg.innerHTML = `
       <img class="msg-avatar ruka-avatar" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
       <div class="msg-bubble ruka-bubble">
@@ -226,6 +711,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="typing-dot"></span>
           </div>
         </div>
+        <div class="msg-footer">
+          <button class="msg-speak-btn" title="Dengarkan Suara Ruka">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          </button>
+          <div class="msg-time">${time}</div>
+        </div>
       </div>
     `;
     return msg;
@@ -235,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lines = fullText.split('\n');
     let lineIdx = 0;
     let charIdx = 0;
-    const speedMs = fullText.length > 200 ? 5 : 12;
+    const speedMs = fullText.length > 200 ? 4 : 8;
 
     const interval = setInterval(() => {
       if (lineIdx >= lines.length) {
@@ -261,15 +752,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }, speedMs);
   }
 
-  function appendUserMessage(text) {
+  function appendUserMessage(text, attachment) {
     const msg = document.createElement('div');
     msg.className = 'message message-user';
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let attachmentHtml = '';
+    if (attachment) {
+      if (attachment.isImage) {
+        attachmentHtml = `
+          <div class="msg-attachment-item">
+            <img class="msg-attachment-img" src="${attachment.data}" alt="${escapeHtml(attachment.name)}">
+          </div>
+        `;
+      } else {
+        attachmentHtml = `
+          <div class="msg-attachment-item">
+            <div class="msg-attachment-file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>${escapeHtml(attachment.name)}</span>
+            </div>
+          </div>
+        `;
+      }
+    }
+
     msg.innerHTML = `
       <div class="msg-avatar">YL</div>
       <div class="msg-bubble user-bubble">
-        <div class="msg-text">${escapeHtml(text)}</div>
+        ${attachmentHtml}
+        ${text ? `<div class="msg-text">${escapeHtml(text)}</div>` : ''}
         <div class="msg-time">${time}</div>
       </div>
     `;
@@ -281,8 +794,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lastRukaBubble) {
       lastRukaBubble.textContent += delta;
       chatFeed.scrollTop = chatFeed.scrollHeight;
-    } else {
-      appendRukaMessage(delta);
     }
   }
 

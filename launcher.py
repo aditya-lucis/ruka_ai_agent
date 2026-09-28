@@ -65,7 +65,8 @@ class RukaBrainServer:
     def _init_cognition(self):
         print(f"[BRAIN] Menginisialisasi kesadaran RUKA Marquis of Trendamis...")
         try:
-            from ruka_companion.identity.engine import IdentityEngine, IdentityProfile, ModalitySignal, Modality
+            from ruka_companion.identity.engine import IdentityEngine, IdentityProfile
+            from ruka_companion.identity.types import ModalitySignal, Modality
             from ruka_companion.vision.camera import SensorState
             from ruka_companion.presence.engine import PresenceCalculator
             self.identity_engine = IdentityEngine()
@@ -223,9 +224,10 @@ class RukaBrainServer:
 
         elif channel == "ruka:chat-send":
             user_text = payload.get("text", "")
-            print(f"[BRAIN] Nalar saraf & RAG memproses: '{user_text}'")
+            attachment = payload.get("attachment")
+            print(f"[BRAIN] Nalar saraf & RAG memproses: '{user_text}', attachment={bool(attachment)}")
             if self.brain is not None:
-                reply = self.brain.think_and_reply(user_text)
+                reply = self.brain.think_and_reply(user_text, attachment=attachment)
             else:
                 reply = self._generate_response(user_text)
             return {
@@ -237,6 +239,41 @@ class RukaBrainServer:
                     "seq": 1,
                     "delta": reply,
                     "done": True,
+                },
+                "ts": time.time(),
+            }, None
+
+        elif channel == "ruka:voice-transcribe":
+            audio_b64 = payload.get("audio", "")
+            if "," in audio_b64:
+                audio_b64 = audio_b64.split(",", 1)[1]
+            text = ""
+            err_msg = None
+            if audio_b64:
+                try:
+                    import base64
+                    import io
+                    import speech_recognition as sr
+                    raw_wav = base64.b64decode(audio_b64)
+                    recognizer = sr.Recognizer()
+                    with sr.AudioFile(io.BytesIO(raw_wav)) as source:
+                        audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data, language="id-ID")
+                    print(f"[BRAIN] Transkripsi suara sukses: '{text}'")
+                except sr.UnknownValueError:
+                    err_msg = "Suara tidak terdengar jelas atau hening."
+                except Exception as ex:
+                    print(f"[BRAIN] Transkripsi error: {ex}")
+                    err_msg = str(ex)
+
+            return {
+                "type": "response",
+                "channel": channel,
+                "correlationId": cid,
+                "protocolVersion": PROTOCOL_VERSION,
+                "payload": {
+                    "text": text,
+                    "error": err_msg,
                 },
                 "ts": time.time(),
             }, None

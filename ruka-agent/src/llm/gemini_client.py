@@ -29,12 +29,20 @@ class GeminiClient:
             temperature=temp,
         )
 
-        model_candidates = [
-            getattr(self.cfg, "model", "gemini-3.5-flash-lite"),
+        configured_model = getattr(self.cfg, "model", "")
+        raw_candidates = [
+            "gemma-4-26b-a4b-it",
+            "gemma-4-31b-it",
             "gemini-3.5-flash-lite",
-            "gemini-3.5-flash",
             "gemini-3.8-flash",
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+            configured_model,
         ]
+        model_candidates = []
+        for m in raw_candidates:
+            if m and m not in model_candidates:
+                model_candidates.append(m)
 
         last_err = None
         for m in model_candidates:
@@ -47,6 +55,7 @@ class GeminiClient:
                 if res and res.text:
                     return res.text.strip()
             except Exception as e:
+                # print(f"[DEBUG-MODEL] {m} failed: {e}")
                 last_err = e
                 continue
 

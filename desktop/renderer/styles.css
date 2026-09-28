@@ -137,6 +137,34 @@ img.brand-avatar-mini {
   box-shadow: 0 0 6px var(--accent-green);
 }
 
+.voice-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: rgba(203, 166, 247, 0.12);
+  border: 1px solid rgba(203, 166, 247, 0.3);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent-purple);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: var(--transition-fast);
+}
+
+.voice-toggle-btn:hover {
+  background: rgba(203, 166, 247, 0.22);
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 8px rgba(203, 166, 247, 0.3);
+}
+
+.voice-toggle-btn.muted {
+  background: rgba(108, 112, 134, 0.15);
+  border-color: rgba(108, 112, 134, 0.3);
+  color: var(--text-muted);
+}
+
 .window-controls {
   display: flex;
   align-items: center;
@@ -573,6 +601,101 @@ img.ruka-avatar {
   color: var(--accent-purple);
 }
 
+/* Attachment Bar */
+.attachment-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(24, 24, 37, 0.95);
+  border: 1px solid rgba(203, 166, 247, 0.3);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  animation: attach-slide 0.2s ease-out;
+}
+
+@keyframes attach-slide {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.attachment-bar.hidden {
+  display: none !important;
+}
+
+.attachment-thumbnail-wrapper {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(203, 166, 247, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.attachment-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.attachment-thumb-img.hidden {
+  display: none !important;
+}
+
+.attachment-file-icon {
+  color: var(--accent-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-file-icon.hidden {
+  display: none !important;
+}
+
+.attachment-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.attachment-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-meta {
+  font-size: 9.5px;
+  color: var(--accent-lavender);
+}
+
+.attachment-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: var(--transition-fast);
+}
+
+.attachment-remove-btn:hover {
+  color: var(--accent-red);
+  background: rgba(243, 139, 168, 0.15);
+}
+
+/* Chat Composer */
 .chat-composer {
   display: flex;
   align-items: center;
@@ -587,6 +710,44 @@ img.ruka-avatar {
 .chat-composer:focus-within {
   border-color: var(--accent-purple);
   box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.composer-tools,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.tool-icon-btn:hover {
+  color: var(--accent-purple);
+  background: rgba(203, 166, 247, 0.15);
+}
+
+.mic-btn.recording {
+  color: #ffffff !important;
+  background: var(--accent-red) !important;
+  box-shadow: 0 0 10px rgba(243, 139, 168, 0.6) !important;
+  animation: mic-pulse 1s infinite alternate ease-in-out;
+}
+
+@keyframes mic-pulse {
+  from { transform: scale(1); box-shadow: 0 0 6px rgba(243, 139, 168, 0.4); }
+  to { transform: scale(1.1); box-shadow: 0 0 14px rgba(243, 139, 168, 0.8); }
 }
 
 #chatInput {
@@ -618,6 +779,74 @@ img.ruka-avatar {
 .send-btn:hover {
   background: var(--accent-lavender);
   transform: scale(1.05);
+}
+
+/* Message footer and speak button */
+.msg-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  gap: 8px;
+}
+
+.msg-speak-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 4px;
+  transition: var(--transition-fast);
+}
+
+.msg-speak-btn:hover {
+  color: var(--accent-purple);
+  background: rgba(203, 166, 247, 0.15);
+}
+
+.msg-speak-btn.speaking {
+  color: var(--accent-green) !important;
+  animation: speaker-bounce 0.8s infinite alternate;
+}
+
+@keyframes speaker-bounce {
+  from { transform: scale(1); }
+  to { transform: scale(1.2); }
+}
+
+/* Attached image/file inside message bubble */
+.msg-attachment-item {
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  max-width: 240px;
+}
+
+.msg-attachment-img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.msg-attachment-img:hover {
+  transform: scale(1.02);
+}
+
+.msg-attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 10px;
+  font-size: 11px;
 }
 
 /* ==========================================================================
@@ -849,3 +1078,206 @@ img.ruka-avatar {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(203, 166, 247, 0.4);
 }
+
+/* ==========================================================================
+   Camera Viewfinder HUD Modal
+   ========================================================================== */
+.camera-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-modal.hidden {
+  display: none !important;
+}
+
+.camera-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.camera-dialog {
+  position: relative;
+  z-index: 1001;
+  width: 90%;
+  max-width: 380px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(203, 166, 247, 0.35);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(203, 166, 247, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modal-zoom 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-zoom {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.camera-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(17, 17, 27, 0.9);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.camera-title-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-purple);
+}
+
+.camera-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  box-shadow: 0 0 8px var(--accent-red);
+  animation: rec-blink 1s infinite alternate;
+}
+
+@keyframes rec-blink {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.cam-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.cam-close-btn:hover {
+  color: var(--accent-red);
+}
+
+.camera-frame-container {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  background: #000;
+  overflow: hidden;
+}
+
+#cameraVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-hud-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--accent-purple);
+  border-style: solid;
+}
+
+.hud-corner.top-left { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+.hud-corner.top-right { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+.hud-corner.bottom-left { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+.hud-corner.bottom-right { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+
+.hud-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  border: 1px dashed rgba(203, 166, 247, 0.45);
+  border-radius: 50%;
+}
+
+.hud-telemetry {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--accent-lavender);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.hud-scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-purple), transparent);
+  box-shadow: 0 0 8px var(--accent-purple);
+  animation: scan-vertical 2.5s infinite linear;
+}
+
+@keyframes scan-vertical {
+  0% { top: 0; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.camera-dialog-footer {
+  padding: 10px 14px;
+  background: rgba(17, 17, 27, 0.95);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.camera-hint {
+  font-size: 10px;
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.snap-btn {
+  background: linear-gradient(135deg, var(--accent-purple), #7c4dff);
+  border: none;
+  color: #11111b;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.snap-btn:hover {
+  background: linear-gradient(135deg, var(--accent-lavender), #89b4fa);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(203, 166, 247, 0.35);
+}
+
