@@ -199,13 +199,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lower.includes('kamera') || lower.includes('mikrofon') || lower.includes('sensor')) {
           reply = '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363).\n🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n🛡️ Kebijakan: LOCAL-ONLY.';
         } else if (lower.includes('siapa') || lower.includes('identitas') || lower.includes('profil')) {
-          reply = '👤 Profil Aktif: Young Lord (Marquis Kekaisaran Trendamis).\n🔐 Kekuatan Autentikasi: STRONG (Biometrik Wajah + Suara terkonfirmasi).\n✨ Status: Terpercaya Penuh.';
+          reply = '👤 Profil Pengguna: Young Lord (Marquis Kekaisaran Trendamis).\n🦇 Entitas: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n🔐 Autentikasi: STRONG (Biometrik Wajah & Suara Terverifikasi).\n✨ Status: Tenang, Agak Tengil, dan Setia Mutlak.';
         } else if (lower.includes('memori') || lower.includes('ingatan') || lower.includes('preferensi')) {
-          reply = '🧠 Sensus Ingatan:\n• 12 ingatan episodik aktif.\n• 34 fakta semantik terindeks.\n• Preferensi: Kepatuhan mutlak buku & Zero-Trust Cloud.';
+          reply = '🧠 Arsip Memori Nokturnal:\n• Saraf Kognisi & RAG Vektor Hibrida Aktif.\n• Preferensi: Clean architecture, Zero-Trust Cloud, & Pelayanan Ksatria kepada Young Lord.';
         } else if (lower.includes('halo') || lower.includes('hai') || lower.includes('ruka')) {
-          reply = 'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem kognisi dan alat siap menerima titah Anda, Sir.';
+          reply = 'Hmm... salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini. Cakar dan nalar saya siap menerima titah Anda, Sir.';
         } else {
-          reply = `Instruksi Anda: "${cleanText}" telah diterima dan diproses dengan penuh takzim oleh Ruka, Young Lord.`;
+          reply = `Heh... instruksi Anda: "${cleanText}" telah saya tangkap dengan cermat, Young Lord. Segera saya eksekusi sebelum secangkir teh dingin.`;
         }
         onResponseReceived(reply);
       }, 50);

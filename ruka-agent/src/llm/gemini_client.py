@@ -17,12 +17,12 @@ class GeminiClient:
 
     def complete(
         self,
-        prompt: str,
+        prompt: str | list[types.Content],
         *,
         system_instruction: str = "",
         temperature: float | None = None,
     ) -> str:
-        """Generate teks satu putaran dengan latensi rendah real-time."""
+        """Generate teks (single-turn atau multi-turn) dengan latensi rendah real-time."""
         temp = temperature if temperature is not None else getattr(self.cfg, "temperature", 0.7)
         config = types.GenerateContentConfig(
             system_instruction=system_instruction or None,
@@ -50,13 +50,16 @@ class GeminiClient:
                 last_err = e
                 continue
 
-        # Jika API memicu fallback
-        try:
-            interaction = self.client.interactions.create(
-                model=self.cfg.model,
-                input=prompt,
-                system_instruction=system_instruction or None,
-            )
-            return interaction.output_text
-        except Exception:
-            raise last_err or RuntimeError("Semua kandidat model Gemini gagal merespons.")
+        # Jika API memicu fallback interaction
+        if isinstance(prompt, str):
+            try:
+                interaction = self.client.interactions.create(
+                    model=self.cfg.model,
+                    input=prompt,
+                    system_instruction=system_instruction or None,
+                )
+                return interaction.output_text
+            except Exception:
+                pass
+
+        raise last_err or RuntimeError("Semua kandidat model Gemini gagal merespons.")

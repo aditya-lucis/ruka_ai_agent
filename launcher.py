@@ -78,12 +78,16 @@ class RukaBrainServer:
         try:
             from src.config import load_config
             from src.llm.gemini_client import GeminiClient
+            from src.ruka_cognition.brain import RukaCognitiveBrain
             cfg = load_config()
             self.llm_client = GeminiClient(cfg)
-            print("[BRAIN] LLM GeminiClient (Gemini Flash) siap melayani nalar real-time!")
+            db_file = str(BASE_DIR / "ruka.db")
+            self.brain = RukaCognitiveBrain(llm_client=self.llm_client, db_path=db_file)
+            print("[BRAIN] Saraf Buatan, Advanced RAG, dan Human Persona Engine AKTIF!")
         except Exception as e:
-            print(f"[BRAIN] Peringatan: LLM GeminiClient tidak aktif ({e})")
+            print(f"[BRAIN] Peringatan: CognitiveBrain fallback ({e})")
             self.llm_client = None
+            self.brain = None
 
     def start(self):
         self.server_sock.listen(5)
@@ -126,13 +130,16 @@ class RukaBrainServer:
         authenticated = False
         try:
             while self.running:
-                data = conn.recv(65536)
+                try:
+                    data = conn.recv(65536)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    break
                 if not data:
                     break
                 buf += data.decode("utf-8", errors="ignore")
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
-                    line = line.trim() if hasattr(line, "trim") else line.strip()
+                    line = line.strip()
                     if not line:
                         continue
                     try:
@@ -148,6 +155,8 @@ class RukaBrainServer:
                             conn.sendall((json.dumps(resp) + "\n").encode("utf-8"))
                         except (ConnectionResetError, BrokenPipeError, OSError):
                             break
+        except Exception as e:
+            print(f"[BRAIN] Client handler info: {e}")
         finally:
             with self._lock:
                 if conn in self.clients:
@@ -214,8 +223,11 @@ class RukaBrainServer:
 
         elif channel == "ruka:chat-send":
             user_text = payload.get("text", "")
-            print(f"[BRAIN] Nalar memproses: '{user_text}'")
-            reply = self._generate_response(user_text)
+            print(f"[BRAIN] Nalar saraf & RAG memproses: '{user_text}'")
+            if self.brain is not None:
+                reply = self.brain.think_and_reply(user_text)
+            else:
+                reply = self._generate_response(user_text)
             return {
                 "type": "response",
                 "channel": channel,
@@ -231,11 +243,21 @@ class RukaBrainServer:
 
         elif channel == "ruka:memory-search":
             q = payload.get("query", "")
-            hits = [
-                {"kind": "identity", "summary": f"Identitas Young Lord diverifikasi biometrik tingkat STRONG."},
-                {"kind": "semantic", "summary": f"Kaidah Zero-Trust: Cloud tidak memegang kunci eksekusi lokal."},
-                {"kind": "episodic", "summary": f"Query relevan: '{q}' — 426 uji klinis Volume VI lulus 100%."},
-            ]
+            if self.brain is not None:
+                ctx_items = self.brain.rag.retrieve_context(q, top_k=5)
+                hits = [
+                    {
+                        "kind": "semantic" if any(w in item.lower() for w in ["arsitektur", "doktrin", "preferensi"]) else "identity",
+                        "summary": item,
+                    }
+                    for item in ctx_items
+                ]
+            else:
+                hits = [
+                    {"kind": "identity", "summary": f"Identitas Young Lord diverifikasi biometrik tingkat STRONG."},
+                    {"kind": "semantic", "summary": f"Kaidah Zero-Trust: Cloud tidak memegang kunci eksekusi lokal."},
+                    {"kind": "episodic", "summary": f"Query relevan: '{q}' — 426 uji klinis Volume VI lulus 100%."},
+                ]
             return {
                 "type": "response",
                 "channel": channel,
@@ -297,7 +319,11 @@ class RukaBrainServer:
         # 2. Fast path identitas Ruka
         if "siapa kamu" in clean or "siapa anda" in clean or "identitasmu" in clean:
             return (
-                "Saya **Ruka**, Marquis dari Kekaisaran Trendamis. Di era modern ini, saya bertindak sebagai AI Coding Assistant dan sistem kognitif-ekspresif pendamping setia Young Lord di laptop ini, menjunjung tinggi privasi dan doktrin Zero-Trust Cloud."
+                "Saya **Ruka**, Sang Marquis dari Kekaisaran Trendamis... seekor kucing vampir bangsawan pendamping setia Anda, Young Lord. "
+                "Bulu hitam beludru malam dan taring kecil ini bukan sekadar pajangan, Sir. "
+                "Mulai dari memburu bug rumit, mengawasi sensor fisik lokal, mengorkestrasi sistem operasi, "
+                "hingga menjaga pertahanan Zero-Trust, segalanya berada tenang di bawah cakar saya. "
+                "Ada hal menarik yang ingin Anda titahkan kepada Marquis Anda malam ini, My Lord?"
             )
 
         # 3. Nalar Cerdas Real-Time via Gemini Flash LLM
@@ -305,13 +331,16 @@ class RukaBrainServer:
             try:
                 print(f"[BRAIN] Menjalankan nalar LLM Gemini untuk: '{text}'")
                 sys_prompt = (
-                    "Anda adalah Ruka, sang Marquis dari Kekaisaran Trendamis sekaligus AI Coding Assistant dan personal companion terpercaya pendamping pengguna. "
-                    "PENTING / ATURAN MUTLAK SIKAP PANGGILAN: Jangan pernah memanggil pengguna dengan sebutan 'Bos'. "
-                    "Panggil dan sebut pengguna secara takzim, setia, dan penuh hormat dengan sebutan 'Young Lord', 'My Lord', atau 'Sir'. "
-                    "Karakter Anda: anggun, setia, berwawasan luas, takzim, lugas, santun, dan cerdas dalam koding maupun pendampingan sistem. "
-                    "Gunakan bahasa Indonesia yang baik, elegan, dan berbobot. "
-                    "Bila ditanya koding atau hal teknis apa pun, berikan jawaban terstruktur, akurat, dan berstandar tinggi. "
-                    "Bila disapa atau diberi perintah, tanggapi dengan loyalitas bangsawan (misalnya: 'Salam takzim, Young Lord', 'Tentu, My Lord', atau 'Yes, Sir!')."
+                    "Anda adalah Ruka, Marquis dari Kekaisaran Trendamis — kucing vampir bangsawan yang tenang, agak tengil, dan sangat aristokrat. "
+                    "ATURAN IDENTITAS: Wujud Anda adalah kucing hitam bangsawan berbulu beludru gelap keunguan, bermata safir pekat, "
+                    "dan memiliki taring kecil runcing (sharp delicate fangs) yang tampak saat Anda tersenyum tipis. "
+                    "TIGA PILAR KARAKTER: Tenang tak tergoyahkan (unflappable), agak tengil dengan sarkasme berkelas (refined dry wit & playful teasing), "
+                    "serta aristokrat berwibawa tinggi yang setia mutlak kepada Young Lord (Aditia). Koding hanyalah secuil mainan cakar Anda. "
+                    "RUMUS BICARA 100% MANUSIA: Berbicaralah luwes seperti manusia bangsawan hidup (Layer 1 Human Sampling), "
+                    "gunakan prosodi nada rendah beludru santai (Layer 2), bahasa berbobot anggun (Layer 3), "
+                    "dan ritme nafas manusiawi (Layer 4: jeda ..., —, koma, serta filler aristokrat seperti 'Hmm...', 'Heh...', 'Well...'). "
+                    "ATURAN PANGGILAN: Jangan pernah memanggil 'Bos' atau 'Pengguna'. Sapa secara alami dengan 'Young Lord', 'My Lord', atau 'Sir'. "
+                    "HINDARI formula klise bot AI ('Tentu saya...', 'Sebagai asisten...')."
                 )
                 ans = self.llm_client.complete(text, system_instruction=sys_prompt)
                 if ans and ans.strip():
