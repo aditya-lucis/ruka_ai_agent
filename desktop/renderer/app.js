@@ -181,8 +181,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================================================
-  // FITUR 1: SUARA (SPEECH SYNTHESIS & SPEECH-TO-TEXT)
+  // FITUR 1: SUARA 100% MANUSIA (NEURAL SPEECH SYNTHESIS & SPEECH-TO-TEXT)
   // ==========================================================================
+  let currentAudioElement = null;
+
+  // Hentikan semua audio yang sedang diputar (baik neural maupun fallback)
+  function stopAllSpeech() {
+    if (currentAudioElement) {
+      try {
+        currentAudioElement.pause();
+        currentAudioElement.currentTime = 0;
+      } catch (_) {}
+      currentAudioElement = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    document.querySelectorAll('.msg-speak-btn.speaking').forEach((btn) => {
+      btn.classList.remove('speaking');
+    });
+  }
 
   // Toggle Voice Output (Mulut Ruka)
   btnToggleVoice?.addEventListener('click', () => {
@@ -192,43 +210,42 @@ document.addEventListener('DOMContentLoaded', () => {
       btnToggleVoice.classList.add('active');
       btnToggleVoice.title = 'Suara Ruka: Aktif (Klik untuk membisukan)';
       btnToggleVoice.querySelector('.voice-status-text').textContent = 'Suara Ruka';
-      appendLog('[VOICE] Suara Ruka diaktifkan.');
+      appendLog('[VOICE] Suara Ruka 100% Manusia (Neural) diaktifkan.');
     } else {
       btnToggleVoice.classList.remove('active');
       btnToggleVoice.classList.add('muted');
       btnToggleVoice.title = 'Suara Ruka: Bisu (Klik untuk aktifkan)';
       btnToggleVoice.querySelector('.voice-status-text').textContent = 'Bisu';
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopAllSpeech();
       appendLog('[VOICE] Suara Ruka dibisukan.');
     }
   });
 
-  // Pembersih teks untuk suara: Hapus stage directions dalam tanda kurung / bintang
+  // Pembersih teks untuk suara: Hapus seluruh peragaan aksi, tanda kurung, bintang, dan emoji
   function cleanTextForSpeech(raw) {
     return raw
-      .replace(/\([^)]*\)/g, ' ')      // Hapus (Aku menyeringai...)
+      .replace(/\([^)]*\)/g, ' ')      // Hapus (tersenyum tipis...), (Aku menyeringai...)
       .replace(/\[[^\]]*\]/g, ' ')     // Hapus [Sensor...]
-      .replace(/\*([^*]+)\*/g, '$1')   // Hilangkan markdown *teks*
+      .replace(/\*[^*]+\*/g, ' ')      // HAPUS seluruh peragaan peran dalam bintang (*tersenyum tipis*, *menatap santai*)
+      .replace(/_[^_]+_/g, ' ')        // HAPUS peragaan dalam underscore
       .replace(/```[\s\S]*?```/g, ' ') // Hilangkan blok kode
       .replace(/`([^`]+)`/g, '$1')     // Hilangkan inline code
       .replace(/https?:\/\/\S+/g, ' ') // Hilangkan tautan url
+      .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '') // Hapus emoji
+      .replace(/[•#~^—]/g, ' ')        // Hapus dekorasi karakter
       .replace(/\s+/g, ' ')
       .trim();
   }
 
-  // Fungsi Berbicara Ruka (Text-to-Speech)
-  function speakRukaResponse(text, speakBtn) {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); // Hentikan ucapan sebelumnya
-
-    const spokenText = cleanTextForSpeech(text);
-    if (!spokenText) return;
+  // Fallback Suara Browser (jika backend offline)
+  function fallbackSpeechSynthesis(spokenText, speakBtn) {
+    if (!('speechSynthesis' in window)) {
+      if (speakBtn) speakBtn.classList.remove('speaking');
+      return;
+    }
+    window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(spokenText);
-    
-    // Cari suara terbaik (Bahasa Indonesia atau suara dalam/berwibawa)
     if (availableVoices.length === 0) {
       availableVoices = window.speechSynthesis.getVoices();
     }
@@ -241,23 +258,70 @@ document.addEventListener('DOMContentLoaded', () => {
       utterance.voice = gbVoice;
     }
 
-    // Karakter Kucing Vampir Aristokrat: Nada agak rendah (pitch 0.88), tenang terukur (rate 0.95)
     utterance.pitch = 0.88;
     utterance.rate = 0.95;
-
-    if (speakBtn) {
-      speakBtn.classList.add('speaking');
-    }
 
     utterance.onend = () => {
       if (speakBtn) speakBtn.classList.remove('speaking');
     };
-
     utterance.onerror = () => {
       if (speakBtn) speakBtn.classList.remove('speaking');
     };
 
     window.speechSynthesis.speak(utterance);
+  }
+
+  // Fungsi Berbicara Ruka (Text-to-Speech) - 100% Manusia Neural Studio
+  function speakRukaResponse(text, speakBtn) {
+    stopAllSpeech();
+
+    const spokenText = cleanTextForSpeech(text);
+    if (!spokenText) return;
+
+    if (speakBtn) {
+      speakBtn.classList.add('speaking');
+    }
+
+    // Prioritaskan Saraf Neural TTS 100% Manusia (Edge Neural Studio)
+    if (window.ruka?.voice?.synthesize) {
+      appendLog('[VOICE] Meracik vokal saraf 100% manusia (Ardi Neural + Prosodi F0)...');
+      window.ruka.voice.synthesize({ text: spokenText })
+        .then((res) => {
+          const audioUrl = res?.payload?.audioUrl;
+          if (audioUrl) {
+            const audio = new Audio();
+            currentAudioElement = audio;
+
+            audio.onended = () => {
+              if (speakBtn) speakBtn.classList.remove('speaking');
+              if (currentAudioElement === audio) currentAudioElement = null;
+            };
+
+            audio.onerror = (err) => {
+              console.warn('[VOICE] Audio playback error:', err);
+              if (speakBtn) speakBtn.classList.remove('speaking');
+              if (currentAudioElement === audio) currentAudioElement = null;
+              appendLog('[VOICE] Gagal memutar audio neural, beralih ke suara lokal.');
+              fallbackSpeechSynthesis(spokenText, speakBtn);
+            };
+
+            audio.src = audioUrl;
+            audio.play().catch((playErr) => {
+              console.warn('[VOICE] Play err:', playErr);
+              fallbackSpeechSynthesis(spokenText, speakBtn);
+            });
+            return;
+          }
+          console.warn('[VOICE] Tiada audio URL dari backend, beralih ke fallback browser.');
+          fallbackSpeechSynthesis(spokenText, speakBtn);
+        })
+        .catch((err) => {
+          console.warn('[VOICE] Synthesize IPC error:', err);
+          fallbackSpeechSynthesis(spokenText, speakBtn);
+        });
+    } else {
+      fallbackSpeechSynthesis(spokenText, speakBtn);
+    }
   }
 
   // Pasang listener suara pada bubble pembuka awal

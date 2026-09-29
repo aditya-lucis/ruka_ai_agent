@@ -103,6 +103,10 @@ const api = {
       }
       return ipcRenderer.invoke(IPC.VOICE_TRANSCRIBE, wavBase64);
     },
+    synthesize(params: string | { text: string; valence?: number; arousal?: number }): Promise<Envelope> {
+      const payload = typeof params === 'string' ? { text: params } : params;
+      return ipcRenderer.invoke(IPC.VOICE_SYNTHESIZE, payload);
+    },
   },
 };
 

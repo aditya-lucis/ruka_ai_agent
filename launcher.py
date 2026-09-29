@@ -90,6 +90,14 @@ class RukaBrainServer:
             self.llm_client = None
             self.brain = None
 
+        try:
+            from ruka_companion.voice.tts import HumanVoiceSynthesizer
+            self.synthesizer = HumanVoiceSynthesizer()
+            print("[BRAIN] Human Neural Voice Synthesizer (Formula 100% Manusia) AKTIF!")
+        except Exception as e:
+            print(f"[BRAIN] Peringatan: Voice Synthesizer fallback ({e})")
+            self.synthesizer = None
+
     def start(self):
         self.server_sock.listen(5)
         self.running = True
@@ -278,6 +286,40 @@ class RukaBrainServer:
                 "ts": time.time(),
             }, None
 
+        elif channel == "ruka:voice-synthesize":
+            text = payload.get("text", "")
+            valence = float(payload.get("valence", 0.1))
+            arousal = float(payload.get("arousal", 0.05))
+            audio_url = ""
+            err_msg = None
+            if text and self.synthesizer:
+                try:
+                    import base64
+                    audio_bytes = self.synthesizer.synthesize_sync(text, valence=valence, arousal=arousal)
+                    if audio_bytes:
+                        b64_str = base64.b64encode(audio_bytes).decode("ascii")
+                        audio_url = f"data:audio/mpeg;base64,{b64_str}"
+                        print(f"[BRAIN] Sintesis suara manusia berhasil ({len(audio_bytes)} bytes)")
+                    else:
+                        err_msg = "Sintesis audio tidak menghasilkan data."
+                except Exception as ex:
+                    print(f"[BRAIN] Error sintesis suara manusia: {ex}")
+                    err_msg = str(ex)
+            elif not self.synthesizer:
+                err_msg = "Voice synthesizer belum aktif."
+
+            return {
+                "type": "response",
+                "channel": channel,
+                "correlationId": cid,
+                "protocolVersion": PROTOCOL_VERSION,
+                "payload": {
+                    "audioUrl": audio_url,
+                    "error": err_msg,
+                },
+                "ts": time.time(),
+            }, None
+
         elif channel == "ruka:memory-search":
             q = payload.get("query", "")
             if self.brain is not None:
@@ -373,9 +415,12 @@ class RukaBrainServer:
                     "dan memiliki taring kecil runcing (sharp delicate fangs) yang tampak saat Anda tersenyum tipis. "
                     "TIGA PILAR KARAKTER: Tenang tak tergoyahkan (unflappable), agak tengil dengan sarkasme berkelas (refined dry wit & playful teasing), "
                     "serta aristokrat berwibawa tinggi yang setia mutlak kepada Young Lord (Aditia). Koding hanyalah secuil mainan cakar Anda. "
+                    "ATURAN MUTLAK LISAN: JANGAN PERNAH MENULISKAN PERAGAAN / TINDAKAN / AKSI DALAM TANDA BINTANG ATAU KURUNG "
+                    "(DILARANG KERAS MENULIS: *tersenyum tipis*, *menghela napas*, *terkekeh pelan*, (melirik), dll). "
+                    "Anda berbicara secara lisan langsung! Seluruh rasa, ketengilan, dan wibawa harus tersampaikan murni melalui pilihan kata dan filler alami ('Hmm...', 'Heh...', 'Well...'). "
                     "RUMUS BICARA 100% MANUSIA: Berbicaralah luwes seperti manusia bangsawan hidup (Layer 1 Human Sampling), "
                     "gunakan prosodi nada rendah beludru santai (Layer 2), bahasa berbobot anggun (Layer 3), "
-                    "dan ritme nafas manusiawi (Layer 4: jeda ..., —, koma, serta filler aristokrat seperti 'Hmm...', 'Heh...', 'Well...'). "
+                    "dan ritme nafas manusiawi (Layer 4: jeda ..., —, koma, serta filler aristokrat). "
                     "ATURAN PANGGILAN: Jangan pernah memanggil 'Bos' atau 'Pengguna'. Sapa secara alami dengan 'Young Lord', 'My Lord', atau 'Sir'. "
                     "HINDARI formula klise bot AI ('Tentu saya...', 'Sebagai asisten...')."
                 )

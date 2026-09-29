@@ -33,6 +33,8 @@ export const IPC = {
   RUNTIME_EVENT: 'ruka:runtime-event',
   /** Transkripsi audio lokal/Google via Python brain (req/res). */
   VOICE_TRANSCRIBE: 'ruka:voice-transcribe',
+  /** Sintesis audio saraf 100% manusia via Edge Neural TTS + Prosodi (req/res). */
+  VOICE_SYNTHESIZE: 'ruka:voice-synthesize',
 } as const;
 
 /** Tipe amplop — cerminan Envelope Python (protokol v2). */
@@ -59,6 +61,7 @@ export const RENDERER_ALLOWED = new Set<string>([
   IPC.SETTINGS_GET,
   IPC.SETTINGS_UPDATE,
   IPC.VOICE_TRANSCRIBE,
+  IPC.VOICE_SYNTHESIZE,
 ]);
 
 /** Validasi kanal — dipanggil handler main utk setiap pesan masuk. */

@@ -10,6 +10,14 @@ from .speaker import (
     SpeakerProfile,
     mfcc,
 )
+from .tts import (
+    HumanProsodyEngine,
+    HumanVoiceSynthesizer,
+    ProsodyConfig,
+    compute_speaker_embedding,
+    inv_mel_scale,
+    mel_scale,
+)
 
 __all__ = [
     "AudioBuffer",
@@ -26,4 +34,10 @@ __all__ = [
     "ExternalDVectorProvider",
     "SpeakerProfile",
     "mfcc",
+    "HumanProsodyEngine",
+    "HumanVoiceSynthesizer",
+    "ProsodyConfig",
+    "compute_speaker_embedding",
+    "inv_mel_scale",
+    "mel_scale",
 ]

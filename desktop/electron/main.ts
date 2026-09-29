@@ -41,6 +41,8 @@ let tray: TrayManager | null = null;
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Tentukan endpoint file di %LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json
 const localAppData =
   process.env.LOCALAPPDATA ||
@@ -312,6 +314,34 @@ function registerIpc(): void {
       correlationId: `err-${Date.now()}`,
       protocolVersion: PROTOCOL_VERSION,
       payload: { error: 'Otak Python belum tersambung' },
+      ts: Date.now() / 1000,
+    } as Envelope;
+  });
+
+  ipcMain.handle(IPC.VOICE_SYNTHESIZE, async (_e, payload: any) => {
+    if (!isRendererAllowed(IPC.VOICE_SYNTHESIZE)) {
+      throw new Error('Kanal dilarang');
+    }
+    if (connector.getState() === 'connected') {
+      try {
+        return await connector.request(IPC.VOICE_SYNTHESIZE, payload, 30000);
+      } catch (err: any) {
+        return {
+          type: 'error',
+          channel: IPC.VOICE_SYNTHESIZE,
+          correlationId: `err-${Date.now()}`,
+          protocolVersion: PROTOCOL_VERSION,
+          payload: { error: err.message, audioUrl: null },
+          ts: Date.now() / 1000,
+        } as Envelope;
+      }
+    }
+    return {
+      type: 'error',
+      channel: IPC.VOICE_SYNTHESIZE,
+      correlationId: `err-${Date.now()}`,
+      protocolVersion: PROTOCOL_VERSION,
+      payload: { error: 'Otak Python belum tersambung', audioUrl: null },
       ts: Date.now() / 1000,
     } as Envelope;
   });
