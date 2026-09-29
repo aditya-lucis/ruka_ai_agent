@@ -346,6 +346,34 @@ function registerIpc(): void {
     } as Envelope;
   });
 
+  ipcMain.handle(IPC.GOOGLE_SEARCH, async (_e, payload: any) => {
+    if (!isRendererAllowed(IPC.GOOGLE_SEARCH)) {
+      throw new Error('Kanal dilarang');
+    }
+    if (connector.getState() === 'connected') {
+      try {
+        return await connector.request(IPC.GOOGLE_SEARCH, payload, 25000);
+      } catch (err: any) {
+        return {
+          type: 'error',
+          channel: IPC.GOOGLE_SEARCH,
+          correlationId: `err-${Date.now()}`,
+          protocolVersion: PROTOCOL_VERSION,
+          payload: { query: payload?.query || '', results: [], error: err.message },
+          ts: Date.now() / 1000,
+        } as Envelope;
+      }
+    }
+    return {
+      type: 'error',
+      channel: IPC.GOOGLE_SEARCH,
+      correlationId: `err-${Date.now()}`,
+      protocolVersion: PROTOCOL_VERSION,
+      payload: { query: payload?.query || '', results: [], error: 'Otak Python belum tersambung' },
+      ts: Date.now() / 1000,
+    } as Envelope;
+  });
+
   ipcMain.handle(IPC.MEMORY_SEARCH, async (_e, q: string) => {
     try {
       return await connector.request(IPC.MEMORY_SEARCH, {

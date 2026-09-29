@@ -96,8 +96,10 @@ class HumanVoiceSynthesizer:
         """Menghapus stage directions dalam kurung dan merapikan tanda baca.
         P(nafas | klausa) = 0.7: menyisipkan jeda hembusan nafas yang wajar.
         """
-        # 1. Hapus narasi peragaan / aksi fisik dalam kurung dan kurung siku: (tersenyum...), [Sensor...]
-        cleaned = re.sub(r"\([^)]*\)", "", text)
+        # 1. Pertahankan judul tautan markdown [Judul](url) -> Judul sebelum pembersihan kurung
+        cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+        # 2. Hapus narasi peragaan / aksi fisik dalam kurung dan kurung siku: (tersenyum...), [Sensor...]
+        cleaned = re.sub(r"\([^)]*\)", "", cleaned)
         cleaned = re.sub(r"\[[^\]]*\]", "", cleaned)
         # 2. Hapus seluruh narasi peragaan / aksi peran dalam tanda bintang dan underscore (*tersenyum tipis*, _melirik santai_)
         cleaned = re.sub(r"\*[^*]+\*", "", cleaned)

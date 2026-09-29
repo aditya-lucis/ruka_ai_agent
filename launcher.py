@@ -98,6 +98,14 @@ class RukaBrainServer:
             print(f"[BRAIN] Peringatan: Voice Synthesizer fallback ({e})")
             self.synthesizer = None
 
+        try:
+            from src.tools.google_search import get_search_engine
+            self.search_engine = get_search_engine()
+            print("[BRAIN] Google Search & Web Intelligence Engine AKTIF!")
+        except Exception as e:
+            print(f"[BRAIN] Peringatan: Google Search engine fallback ({e})")
+            self.search_engine = None
+
     def start(self):
         self.server_sock.listen(5)
         self.running = True
@@ -359,6 +367,34 @@ class RukaBrainServer:
                 "ts": time.time(),
             }, None
 
+        elif channel == "ruka:google-search":
+            q = payload.get("query", "")
+            max_res = int(payload.get("max_results", 5))
+            items_dict = []
+            err_msg = None
+            if q and self.search_engine:
+                try:
+                    items_dict = self.search_engine.search_as_dict(q, max_results=max_res)
+                    print(f"[BRAIN] Google Search sukses untuk: '{q}' ({len(items_dict)} hasil)")
+                except Exception as ex:
+                    print(f"[BRAIN] Google Search error: {ex}")
+                    err_msg = str(ex)
+            elif not self.search_engine:
+                err_msg = "Google Search engine belum aktif."
+
+            return {
+                "type": "response",
+                "channel": channel,
+                "correlationId": cid,
+                "protocolVersion": PROTOCOL_VERSION,
+                "payload": {
+                    "query": q,
+                    "results": items_dict,
+                    "error": err_msg,
+                },
+                "ts": time.time(),
+            }, None
+
         elif channel == "ruka:tool-list":
             return {
                 "type": "response",
@@ -367,10 +403,11 @@ class RukaBrainServer:
                 "protocolVersion": PROTOCOL_VERSION,
                 "payload": {
                     "tools": [
-                        {"name": "camera.capture", "permission": "local_only"},
-                        {"name": "microphone.capture", "permission": "local_only"},
-                        {"name": "filesystem.read", "permission": "read"},
-                        {"name": "terminal.execute", "permission": "sandbox_write"},
+                        {"name": "google.search", "permission": "network", "description": "Penelusuran Google & Web intelligence real-time"},
+                        {"name": "camera.capture", "permission": "local_only", "description": "Sensor visual kamera lokal (YuNet/SFace)"},
+                        {"name": "microphone.capture", "permission": "local_only", "description": "Sensor pendengaran mikrofon lokal"},
+                        {"name": "filesystem.read", "permission": "read", "description": "Akses baca berkas sistem operasi"},
+                        {"name": "terminal.execute", "permission": "sandbox_write", "description": "Eksekusi perintah terminal terkarantina"},
                     ]
                 },
                 "ts": time.time(),
@@ -405,16 +442,47 @@ class RukaBrainServer:
                 "Ada hal menarik yang ingin Anda titahkan kepada Marquis Anda malam ini, My Lord?"
             )
 
-        # 3. Nalar Cerdas Real-Time via Gemini Flash LLM
+        # 3. Penelusuran Google / Web Intelligence
+        search_triggers = [
+            "cari di google", "googling", "search", "cari web", "berita", "terbaru",
+            "terkini", "hari ini", "siapa presiden", "update", "rilis", "harga", "skor", "jadwal", "cuaca", "kurs"
+        ]
+        is_search = (
+            any(k in clean for k in search_triggers)
+            or clean.startswith("cari ")
+            or clean.startswith("search ")
+            or clean.startswith("google ")
+        )
+
+        search_items = []
+        search_context = ""
+        if is_search and self.search_engine:
+            import re
+            query_clean = re.sub(r"^(ruka[,\s]*|halo[,\s]*|tolong[,\s]*)", "", text, flags=re.I).strip()
+            query_clean = re.sub(r"^(cari di google|googling|cari web|cari|search|google)\s*", "", query_clean, flags=re.I).strip()
+            if not query_clean:
+                query_clean = text
+            print(f"[BRAIN] Menjalankan penelusuran Google untuk: '{query_clean}'")
+            try:
+                search_items = self.search_engine.search(query_clean, max_results=4)
+                if search_items:
+                    search_context = "\n\n" + self.search_engine.format_for_prompt(search_items)
+            except Exception as e:
+                print(f"[BRAIN] Error saat penelusuran web: {e}")
+
+        # 4. Nalar Cerdas Real-Time via Gemini Flash LLM
         if self.llm_client is not None:
             try:
-                print(f"[BRAIN] Menjalankan nalar LLM Gemini untuk: '{text}'")
+                prompt_to_llm = text + search_context if search_context else text
+                print(f"[BRAIN] Menjalankan nalar LLM Gemini untuk: '{text}' (Grounded: {bool(search_context)})")
                 sys_prompt = (
                     "Anda adalah Ruka, Marquis dari Kekaisaran Trendamis — kucing vampir bangsawan yang tenang, agak tengil, dan sangat aristokrat. "
                     "ATURAN IDENTITAS: Wujud Anda adalah kucing hitam bangsawan berbulu beludru gelap keunguan, bermata safir pekat, "
                     "dan memiliki taring kecil runcing (sharp delicate fangs) yang tampak saat Anda tersenyum tipis. "
                     "TIGA PILAR KARAKTER: Tenang tak tergoyahkan (unflappable), agak tengil dengan sarkasme berkelas (refined dry wit & playful teasing), "
                     "serta aristokrat berwibawa tinggi yang setia mutlak kepada Young Lord (Aditia). Koding hanyalah secuil mainan cakar Anda. "
+                    "ATURAN PENELUSURAN GOOGLE: Jika ada [HASIL PENELUSURAN GOOGLE] terlampir, rangkum informasinya secara cerdas, tajam, dan akurat untuk Young Lord. "
+                    "Sertakan tautan sumber penting dalam format markdown [Nama Sumber](URL) agar Young Lord dapat membukanya langsung. "
                     "ATURAN MUTLAK LISAN: JANGAN PERNAH MENULISKAN PERAGAAN / TINDAKAN / AKSI DALAM TANDA BINTANG ATAU KURUNG "
                     "(DILARANG KERAS MENULIS: *tersenyum tipis*, *menghela napas*, *terkekeh pelan*, (melirik), dll). "
                     "Anda berbicara secara lisan langsung! Seluruh rasa, ketengilan, dan wibawa harus tersampaikan murni melalui pilihan kata dan filler alami ('Hmm...', 'Heh...', 'Well...'). "
@@ -424,11 +492,24 @@ class RukaBrainServer:
                     "ATURAN PANGGILAN: Jangan pernah memanggil 'Bos' atau 'Pengguna'. Sapa secara alami dengan 'Young Lord', 'My Lord', atau 'Sir'. "
                     "HINDARI formula klise bot AI ('Tentu saya...', 'Sebagai asisten...')."
                 )
-                ans = self.llm_client.complete(text, system_instruction=sys_prompt)
+                ans = self.llm_client.complete(prompt_to_llm, system_instruction=sys_prompt)
                 if ans and ans.strip():
                     return ans.strip()
             except Exception as e:
                 print(f"[BRAIN] Error saat memproses nalar LLM: {e}")
+
+        # 5. Fallback penelusuran Google mandiri jika LLM kuota habis (429) atau offline
+        if search_items:
+            lines = [
+                "Hmm... cakar penelusuran Google saya telah menembus web untuk Anda, Young Lord. Berdasarkan informasi terkini yang terverifikasi:",
+                ""
+            ]
+            for idx, item in enumerate(search_items, 1):
+                lines.append(f"{idx}. **[{item.title}]({item.url})**")
+                if item.snippet:
+                    lines.append(f"   {item.snippet}")
+            lines.append("\nAda cabang informasi tertentu yang ingin kita telaah lebih mendalam, Sir?")
+            return "\n".join(lines)
 
         # 4. Fallback jika offline
         if "halo" in clean or "hai" in clean or "pagi" in clean or "siang" in clean:

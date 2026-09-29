@@ -35,6 +35,8 @@ export const IPC = {
   VOICE_TRANSCRIBE: 'ruka:voice-transcribe',
   /** Sintesis audio saraf 100% manusia via Edge Neural TTS + Prosodi (req/res). */
   VOICE_SYNTHESIZE: 'ruka:voice-synthesize',
+  /** Penelusuran web & Google real-time dengan ground facts (req/res). */
+  GOOGLE_SEARCH: 'ruka:google-search',
 } as const;
 
 /** Tipe amplop — cerminan Envelope Python (protokol v2). */
@@ -62,6 +64,7 @@ export const RENDERER_ALLOWED = new Set<string>([
   IPC.SETTINGS_UPDATE,
   IPC.VOICE_TRANSCRIBE,
   IPC.VOICE_SYNTHESIZE,
+  IPC.GOOGLE_SEARCH,
 ]);
 
 /** Validasi kanal — dipanggil handler main utk setiap pesan masuk. */

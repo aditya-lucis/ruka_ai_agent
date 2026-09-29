@@ -1281,3 +1281,27 @@ img.ruka-avatar {
   box-shadow: 0 4px 12px rgba(203, 166, 247, 0.35);
 }
 
+/* Tautan Markdown Hasil Penelusuran Web / Google Search */
+.chat-markdown-link {
+  color: #89b4fa;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(137, 180, 250, 0.6);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(137, 180, 250, 0.1);
+  transition: all 0.2s ease;
+  display: inline-block;
+  margin: 2px 0;
+  font-weight: 500;
+  font-size: 12.5px;
+}
+
+.chat-markdown-link:hover {
+  color: #cba6f7;
+  background: rgba(203, 166, 247, 0.2);
+  border-bottom-color: #cba6f7;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(203, 166, 247, 0.25);
+}
+
+

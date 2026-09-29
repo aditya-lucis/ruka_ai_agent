@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Pembersih teks untuk suara: Hapus seluruh peragaan aksi, tanda kurung, bintang, dan emoji
   function cleanTextForSpeech(raw) {
     return raw
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Pertahankan teks judul tautan markdown, buang URL-nya
       .replace(/\([^)]*\)/g, ' ')      // Hapus (tersenyum tipis...), (Aku menyeringai...)
       .replace(/\[[^\]]*\]/g, ' ')     // Hapus [Sensor...]
       .replace(/\*[^*]+\*/g, ' ')      // HAPUS seluruh peragaan peran dalam bintang (*tersenyum tipis*, *menatap santai*)
@@ -703,6 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (textEl) {
         textEl.innerHTML = '';
         streamTextIntoElement(textEl, responseText, () => {
+          textEl.innerHTML = formatMarkdown(responseText);
           coreState.textContent = 'Harmoni Penuh';
           coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
           chatFeed.scrollTop = chatFeed.scrollHeight;
@@ -944,5 +946,31 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function formatMarkdown(text) {
+    if (!text) return '';
+    let escaped = escapeHtml(text);
+
+    // Code blocks ```...```
+    escaped = escaped.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
+      return `<pre class="chat-code-block"><code>${code}</code></pre>`;
+    });
+
+    // Inline code `...`
+    escaped = escaped.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
+
+    // Bold **text**
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Markdown links [Title](url)
+    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, title, url) => {
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-markdown-link" title="${url}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>${title}</a>`;
+    });
+
+    // Line breaks
+    escaped = escaped.replace(/\n/g, '<br>');
+
+    return escaped;
   }
 });

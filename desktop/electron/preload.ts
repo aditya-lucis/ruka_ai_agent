@@ -108,6 +108,14 @@ const api = {
       return ipcRenderer.invoke(IPC.VOICE_SYNTHESIZE, payload);
     },
   },
+  search: {
+    google(query: string, maxResults = 5): Promise<Envelope> {
+      if (typeof query !== 'string') {
+        throw new TypeError('search.google menerima parameter string query');
+      }
+      return ipcRenderer.invoke(IPC.GOOGLE_SEARCH, { query, max_results: maxResults });
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('ruka', api);
