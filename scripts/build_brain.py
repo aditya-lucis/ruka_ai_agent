@@ -87,13 +87,38 @@ def main():
         print(f"[*] Menyalin model offline whisper.cpp ({model_src.name}) ke {models_dest_dir}...")
         shutil.copy2(str(model_src), str(models_dest_dir / "ggml-tiny.bin"))
 
-    # 6. Verifikasi keberadaan ruka-brain.exe
+    # 5c. Kompilasi Ruka CLI Terminal Executable (ruka.exe)
+    cli_script = ROOT_DIR / "ruka_cli.py"
+    if cli_script.exists():
+        print("[*] Mengompilasi Ruka CLI Executable (ruka.exe)...")
+        cli_cmd = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--onefile",
+            "--console",
+            "--name=ruka",
+            f"--workpath={BUILD_DIR}",
+            f"--distpath={DIST_TMP}",
+            str(cli_script),
+        ]
+        res_cli = subprocess.run(cli_cmd, cwd=str(ROOT_DIR))
+        cli_exe_src = DIST_TMP / "ruka.exe"
+        if res_cli.returncode == 0 and cli_exe_src.exists():
+            cli_dest = TARGET_BRAIN_DIR / "ruka.exe"
+            print(f"[*] Menyalin ruka.exe ke {cli_dest}...")
+            shutil.copy2(str(cli_exe_src), str(cli_dest))
+
+    # 6. Verifikasi keberadaan ruka-brain.exe dan ruka.exe
     brain_exe = TARGET_BRAIN_DIR / "ruka-brain.exe"
+    cli_exe = TARGET_BRAIN_DIR / "ruka.exe"
     if brain_exe.exists():
         print("=" * 70)
         print(" [RUKA BUNDLER] BERHASIL!")
-        print(f" Binary Mandiri: {brain_exe}")
-        print(" Ruka kini membawa 100% otaknya sendiri, siap dipasang di semua PC!")
+        print(f" Binary Standalone Brain: {brain_exe}")
+        print(f" Binary Terminal CLI   : {cli_exe}")
+        print(" Ruka kini membawa 100% otaknya dan CLI 'ruka' ke semua PC!")
         print("=" * 70)
     else:
         print(f"[!] ruka-brain.exe tidak ditemukan di {TARGET_BRAIN_DIR}")

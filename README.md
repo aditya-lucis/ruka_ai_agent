@@ -56,6 +56,9 @@ Dibangun berdasarkan prinsip karya monumental kognisi kecerdasan buatan (*Buku R
 ### 5. 🛡️ Keamanan Zero-Trust Cloud & Path Jail
 - Seluruh eksekusi filesystem dan sensor desktop terkunci dalam *Path Jail*. Cloud tidak pernah memiliki izin langsung untuk mengeksekusi operasi kritis di komputer Anda tanpa konfirmasi eksplisit.
 
+### 6. 💻 Ruka CLI Global (Akses Terminal Kapan Saja & Dimana Saja)
+- **Akses Perintah Tanpa Batas**: Begitu Ruka Desktop dipasang, perintah `ruka` otomatis terintegrasi ke dalam Windows `PATH`. Anda dapat memanggil sang Marquis langsung dari PowerShell atau Command Prompt dari folder mana pun di PC Anda.
+
 ---
 
 ## 📥 Download & Instalasi
@@ -115,7 +118,27 @@ Ruka memanfaatkan kognisi *Gemini 3.5 Flash-Lite* untuk nalar secepat kilat:
   > *"Ruka, cari berita teknologi AI terbaru hari ini di Google."*
 - Ruka akan mengaktifkan alat pencarian web gratisnya, merangkum sumber terpercaya, dan melapor kepada Anda.
 
-### 6. Etiket Berinteraksi dengan Marquis
+### 6. Memanggil Ruka via Terminal Global (Ruka CLI)
+Saat Ruka Desktop terpasang, berkas perintah `ruka` otomatis terdaftar ke dalam **Windows PATH** Anda. Anda dapat memanggil Ruka kapan saja dan dari direktori mana saja di PowerShell atau Command Prompt:
+
+- **Buka Sesi REPL Interaktif Terminal**:
+  ```powershell
+  ruka
+  ```
+- **Kirim Instruksi Instan**:
+  ```powershell
+  ruka "Ruka, buatkan ringkasan tugas koding hari ini."
+  ```
+- **Pencarian Web Instan**:
+  ```powershell
+  ruka search "berita teknologi AI terbaru 2026"
+  ```
+- **Periksa Status Runtime Otak**:
+  ```powershell
+  ruka status
+  ```
+
+### 7. Etiket Berinteraksi dengan Marquis
 - **Panggilan Tuanku**: Ruka menghormati Anda sebagai **Young Lord**, **My Lord**, atau **Sir**.
 - **Karakter Khas**: Jangan heran jika sesekali ia bersikap agak sarkas nan berkelas ketika Anda menanyakan hal-hal sepele, namun ketahuilah kesetiaannya mutlak.
 - **Mode Background**: Anda dapat menutup jendela obrolan (`X`), dan Ruka akan tetap berjaga di **System Tray** (ikon di taskbar pojok kanan bawah). Klik ikon tray untuk memanggilnya kembali sewaktu-waktu.

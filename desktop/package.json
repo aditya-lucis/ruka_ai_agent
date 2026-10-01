@@ -28,6 +28,10 @@
         "from": "resources/brain",
         "to": "brain",
         "filter": ["**/*"]
+      },
+      {
+        "from": "resources/brain/ruka.exe",
+        "to": "../ruka.exe"
       }
     ],
     "win": {
@@ -40,6 +44,7 @@
       "icon": "assets/icon.png"
     },
     "nsis": {
+      "include": "../installer/installer.nsh",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

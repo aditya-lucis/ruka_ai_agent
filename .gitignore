@@ -17,4 +17,5 @@ ruka_std*.txt
 *.env
 desktop/resources/
 ruka.db
+ruka.spec
 
