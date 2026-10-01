@@ -11,10 +11,6 @@
 [![Engine](https://img.shields.io/badge/Offline%20ASR-whisper.cpp%20(C%2B%2B)-ff006e?style=for-the-badge)](https://github.com/ggerganov/whisper.cpp)
 [![License](https://img.shields.io/badge/License-MIT-f77f00?style=for-the-badge)](LICENSE)
 
-<br/>
-
-<img src="assets/ruka-hero.jpg" alt="Ruka - The Marquis of Trendamis" width="850" style="border-radius: 12px; box-shadow: 0px 8px 30px rgba(123, 44, 191, 0.4);" />
-
 <br/><br/>
 
 > *"Salam takzim, Young Lord. Saya adalah Ruka, Marquis dari Kekaisaran Trendamis. Koding, sensor, dan orkestrasi desktop ini hanyalah secuil mainan cakar hamba."*
