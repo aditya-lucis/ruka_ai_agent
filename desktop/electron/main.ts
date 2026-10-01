@@ -43,10 +43,18 @@ import { spawn } from 'node:child_process';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
-// Tentukan endpoint file di %LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json
-const localAppData =
-  process.env.LOCALAPPDATA ||
-  path.join(process.env.USERPROFILE || 'C:\\Users\\Default', 'AppData', 'Local');
+// Tentukan endpoint file di %LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json (100% portable)
+function getLocalAppData(): string {
+  if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA;
+  if (process.env.USERPROFILE) return path.join(process.env.USERPROFILE, 'AppData', 'Local');
+  try {
+    return app.getPath('appData');
+  } catch {
+    return path.join(process.cwd(), '.local');
+  }
+}
+
+const localAppData = getLocalAppData();
 const endpointPath = path.join(localAppData, 'ruka', 'runtime', 'ipc-endpoint.json');
 
 function isPidAlive(pid: number): boolean {
@@ -76,12 +84,46 @@ function ensurePythonBrainStarted(): void {
     }
   }
 
+  // 1. PRIORITAS UTAMA: Standalone Self-Contained Brain Executable
+  // Membawa seluruh komponen hingga Ruka hidup mandiri tanpa perlu install Python di desktop pengguna
+  const bundledBrainCandidates = [
+    // Saat terpasang via installer NSIS / release win-unpacked:
+    path.join(process.resourcesPath, 'brain', 'ruka-brain.exe'),
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'brain', 'ruka-brain.exe'),
+    path.join(app.getAppPath(), '..', 'brain', 'ruka-brain.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'resources', 'brain', 'ruka-brain.exe'),
+    // Saat mode pengembangan lokal (desktop/resources/brain):
+    path.resolve(__dirname, '..', '..', 'resources', 'brain', 'ruka-brain.exe'),
+    path.resolve(process.cwd(), 'resources', 'brain', 'ruka-brain.exe'),
+    path.resolve(process.cwd(), 'desktop', 'resources', 'brain', 'ruka-brain.exe'),
+  ];
+
+  for (const brainExe of bundledBrainCandidates) {
+    if (fs.existsSync(brainExe)) {
+      try {
+        const brainDir = path.dirname(brainExe);
+        const child = spawn(brainExe, [], {
+          cwd: brainDir,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        child.unref();
+        console.log(`[MAIN] Self-Contained Ruka Brain spawned successfully: ${brainExe}`);
+        return;
+      } catch (e) {
+        console.warn('[MAIN] Could not spawn bundled brain, falling back to python script:', e);
+      }
+    }
+  }
+
+  // 2. FALLBACK PENGEMBANGAN: Script launcher.py dengan virtualenv Python lokal
   const candidates = [
     path.resolve(__dirname, '..', '..', '..', 'launcher.py'), // dev: out/electron -> root
     path.resolve(__dirname, '..', '..', 'launcher.py'),
     path.resolve(process.cwd(), 'launcher.py'),
+    path.resolve(app.getAppPath(), '..', 'launcher.py'),
     path.resolve(app.getAppPath(), '..', '..', 'launcher.py'),
-    'C:\\Traine\\ruka\\launcher.py',
   ];
 
   let launcherPath: string | null = null;
@@ -97,9 +139,9 @@ function ensurePythonBrainStarted(): void {
     const pythonCandidates = [
       process.env.PYTHON_PATH,
       path.join(rootDir, '.venv', 'Scripts', 'python.exe'),
-      'C:\\Traine\\ruka\\.venv\\Scripts\\python.exe',
-      'C:\\laragon\\bin\\python\\python-3.10\\python.exe',
+      path.join(rootDir, '.venv', 'bin', 'python'),
       'python',
+      'python3',
     ];
     let pythonExe = 'python';
     for (const p of pythonCandidates) {

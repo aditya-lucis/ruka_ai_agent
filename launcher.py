@@ -16,31 +16,62 @@ import signal
 import threading
 from pathlib import Path
 
-# Tambahkan src ke sys.path
-BASE_DIR = Path(__file__).resolve().parent
+# Tentukan direktori runtime & penyimpanan lokal
+local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+RUNTIME_DIR = Path(local_appdata) / "ruka" / "runtime"
+ENDPOINT_FILE = RUNTIME_DIR / "ipc-endpoint.json"
+
+# Amankan stdout/stderr jika berjalan di mode beku noconsole
+if getattr(sys, "frozen", False):
+    try:
+        log_dir = Path(local_appdata) / "ruka" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_fp = open(log_dir / "ruka-brain.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = log_fp
+        if sys.stderr is None:
+            sys.stderr = log_fp
+    except Exception:
+        pass
+
+# Tentukan BASE_DIR dan EXE_DIR (Mendukung mode beku PyInstaller mandiri)
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys._MEIPASS)
+    EXE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    EXE_DIR = BASE_DIR
+
+# Tambahkan modul ke sys.path
 sys.path.insert(0, str(BASE_DIR / "ruka-companion" / "src"))
 sys.path.insert(0, str(BASE_DIR / "ruka-agent"))
 sys.path.insert(0, str(BASE_DIR / "ruka-persistence" / "src"))
 
-# Muat environment variable dari ruka-agent/.env jika belum ada
-env_path = BASE_DIR / "ruka-agent" / ".env"
-if env_path.exists():
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("=")
-            k, v = k.strip(), v.strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-                v = v[1:-1]
-            if k not in os.environ:
-                os.environ[k] = v
+# Muat environment variable dari kandidat berkas .env
+env_candidates = [
+    EXE_DIR / ".env",
+    EXE_DIR / "ruka-agent" / ".env",
+    BASE_DIR / ".env",
+    BASE_DIR / "ruka-agent" / ".env",
+    Path(local_appdata) / "ruka" / ".env",
+]
+for env_path in env_candidates:
+    if env_path.exists():
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, _, v = line.partition("=")
+                    k, v = k.strip(), v.strip()
+                    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                        v = v[1:-1]
+                    if k not in os.environ:
+                        os.environ[k] = v
+            break
+        except Exception:
+            pass
 
 PROTOCOL_VERSION = 2
-
-# Tentukan direktori endpoint runtime
-local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-RUNTIME_DIR = Path(local_appdata) / "ruka" / "runtime"
-ENDPOINT_FILE = RUNTIME_DIR / "ipc-endpoint.json"
 
 
 class RukaBrainServer:
@@ -81,8 +112,16 @@ class RukaBrainServer:
             from src.llm.gemini_client import GeminiClient
             from src.ruka_cognition.brain import RukaCognitiveBrain
             cfg = load_config()
-            self.llm_client = GeminiClient(cfg)
-            db_file = str(BASE_DIR / "ruka.db")
+            data_dir = Path(local_appdata) / "ruka"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            db_file = str(data_dir / "ruka.db")
+            initial_seed = BASE_DIR / "ruka.db"
+            if initial_seed.exists() and not Path(db_file).exists():
+                import shutil
+                try:
+                    shutil.copy2(str(initial_seed), db_file)
+                except Exception:
+                    pass
             self.brain = RukaCognitiveBrain(llm_client=self.llm_client, db_path=db_file)
             print("[BRAIN] Saraf Buatan, Advanced RAG, dan Human Persona Engine AKTIF!")
         except Exception as e:
@@ -97,6 +136,15 @@ class RukaBrainServer:
         except Exception as e:
             print(f"[BRAIN] Peringatan: Voice Synthesizer fallback ({e})")
             self.synthesizer = None
+
+        try:
+            from ruka_companion.voice.asr import WhisperASR
+            self.whisper_asr = WhisperASR(model_size="tiny")
+            threading.Thread(target=self.whisper_asr.load, daemon=True).start()
+            print("[BRAIN] Sensor Pendengaran Native whisper.cpp (C++ Engine) AKTIF!")
+        except Exception as e:
+            print(f"[BRAIN] Peringatan: whisper.cpp fallback ({e})")
+            self.whisper_asr = None
 
         try:
             from src.tools.google_search import get_search_engine
@@ -268,16 +316,18 @@ class RukaBrainServer:
             if audio_b64:
                 try:
                     import base64
-                    import io
-                    import speech_recognition as sr
                     raw_wav = base64.b64decode(audio_b64)
-                    recognizer = sr.Recognizer()
-                    with sr.AudioFile(io.BytesIO(raw_wav)) as source:
-                        audio_data = recognizer.record(source)
-                    text = recognizer.recognize_google(audio_data, language="id-ID")
-                    print(f"[BRAIN] Transkripsi suara sukses: '{text}'")
-                except sr.UnknownValueError:
-                    err_msg = "Suara tidak terdengar jelas atau hening."
+                    if getattr(self, "whisper_asr", None) is not None:
+                        text = self.whisper_asr.transcribe_wav_bytes(raw_wav, language="id")
+                        print(f"[BRAIN] Transkripsi native whisper.cpp (C++) sukses: '{text}'")
+                    else:
+                        import io
+                        import speech_recognition as sr
+                        recognizer = sr.Recognizer()
+                        with sr.AudioFile(io.BytesIO(raw_wav)) as source:
+                            audio_data = recognizer.record(source)
+                        text = recognizer.recognize_google(audio_data, language="id-ID")
+                        print(f"[BRAIN] Transkripsi suara fallback sukses: '{text}'")
                 except Exception as ex:
                     print(f"[BRAIN] Transkripsi error: {ex}")
                     err_msg = str(ex)
@@ -458,8 +508,7 @@ class RukaBrainServer:
         search_context = ""
         if is_search and self.search_engine:
             import re
-            query_clean = re.sub(r"^(ruka[,\s]*|halo[,\s]*|tolong[,\s]*)", "", text, flags=re.I).strip()
-            query_clean = re.sub(r"^(cari di google|googling|cari web|cari|search|google)\s*", "", query_clean, flags=re.I).strip()
+            query_clean = re.sub(r"^(cari di google|googling|cari web|cari|search|google)\s*", "", text, flags=re.I).strip()
             if not query_clean:
                 query_clean = text
             print(f"[BRAIN] Menjalankan penelusuran Google untuk: '{query_clean}'")

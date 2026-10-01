@@ -23,6 +23,13 @@
       "assets/**/*",
       "!**/*.map"
     ],
+    "extraResources": [
+      {
+        "from": "resources/brain",
+        "to": "brain",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
         {

@@ -293,20 +293,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const audio = new Audio();
             currentAudioElement = audio;
 
+            let playUrl = audioUrl;
+            if (audioUrl.startsWith('data:')) {
+              try {
+                const parts = audioUrl.split(',');
+                const mime = parts[0].match(/:(.*?);/)?.[1] || 'audio/mpeg';
+                const bin = atob(parts[1]);
+                const u8 = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) {
+                  u8[i] = bin.charCodeAt(i);
+                }
+                const blob = new Blob([u8], { type: mime });
+                playUrl = URL.createObjectURL(blob);
+              } catch (convErr) {
+                console.warn('[VOICE] Blob conversion warning:', convErr);
+              }
+            }
+
             audio.onended = () => {
               if (speakBtn) speakBtn.classList.remove('speaking');
               if (currentAudioElement === audio) currentAudioElement = null;
+              if (playUrl.startsWith('blob:')) URL.revokeObjectURL(playUrl);
             };
 
             audio.onerror = (err) => {
               console.warn('[VOICE] Audio playback error:', err);
               if (speakBtn) speakBtn.classList.remove('speaking');
               if (currentAudioElement === audio) currentAudioElement = null;
+              if (playUrl.startsWith('blob:')) URL.revokeObjectURL(playUrl);
               appendLog('[VOICE] Gagal memutar audio neural, beralih ke suara lokal.');
               fallbackSpeechSynthesis(spokenText, speakBtn);
             };
 
-            audio.src = audioUrl;
+            audio.src = playUrl;
             audio.play().catch((playErr) => {
               console.warn('[VOICE] Play err:', playErr);
               fallbackSpeechSynthesis(spokenText, speakBtn);

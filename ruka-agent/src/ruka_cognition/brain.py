@@ -628,11 +628,6 @@ class RukaCognitiveBrain:
         self.emotion = EmotionState()
         self.empathy = EmpathyEngine()
         self.consciousness = ConsciousnessEngine()
-        try:
-            from src.tools.google_search import get_search_engine
-            self.search_engine = get_search_engine()
-        except Exception:
-            self.search_engine = None
 
     def think_and_reply(self, user_text: str, attachment: dict | None = None) -> str:
         """Alur kognisi lengkap berlandaskan Rumus Kesadaran & Empati Buatan (book/fomr1.jpeg)
@@ -701,35 +696,6 @@ class RukaCognitiveBrain:
         if retrieved_facts:
             context_block = "FAKTA INGATAN & PREFERENSI (RAG):\n" + "\n".join(f"• {f}" for f in retrieved_facts)
 
-        # 4B. Google Search & Web Intelligence (100% Gratis - Bebas Biaya)
-        search_triggers = [
-            "cari di google", "googling", "search", "cari web", "berita", "terbaru",
-            "terkini", "hari ini", "siapa presiden", "update", "rilis", "harga", "skor", "jadwal", "cuaca", "kurs"
-        ]
-        lower_text = clean_text.lower()
-        is_search = (
-            any(k in lower_text for k in search_triggers)
-            or lower_text.startswith("cari ")
-            or lower_text.startswith("search ")
-            or lower_text.startswith("google ")
-        )
-
-        search_items = []
-        search_block = ""
-        if is_search and self.search_engine:
-            import re
-            query_clean = re.sub(r"^(ruka[,\s]*|halo[,\s]*|tolong[,\s]*)", "", clean_text, flags=re.I).strip()
-            query_clean = re.sub(r"^(cari di google|googling|cari web|cari|search|google)\s*", "", query_clean, flags=re.I).strip()
-            if not query_clean:
-                query_clean = clean_text
-            print(f"[BRAIN] Menjalankan penelusuran Google (100% Gratis) untuk: '{query_clean}'")
-            try:
-                search_items = self.search_engine.search(query_clean, max_results=4)
-                if search_items:
-                    search_block = "\n" + self.search_engine.format_for_prompt(search_items)
-            except Exception as e:
-                print(f"[BRAIN] Error saat penelusuran web: {e}")
-
         # 5. Ruang Kerja Kesadaran Global (IIT Phi, Global Workspace Broadcast, FEP, Self-Model)
         consciousness_block = self.consciousness.integrate_and_broadcast(
             user_text=clean_text,
@@ -774,10 +740,8 @@ class RukaCognitiveBrain:
             "  - P(filler)=0.05: Gunakan celetukan khas bangsawan vampir ('Hmm...', 'Heh...', 'Well...', 'Tentu saja...', seringai tipis).\n"
             "  - HINDARI SELURUH FORMULA BOT KLISE: Dilarang membuka dengan 'Tentu, saya...', 'Sebagai asisten AI...', dsb.\n"
             "  - Selipkan sapaan Young Lord, My Lord, atau Sir secara anggun dan alami di tengah atau akhir kalimat.\n\n"
-            "• ATURAN PENELUSURAN GOOGLE: Jika ada HASIL PENELUSURAN GOOGLE terlampir di bawah, telaah dan rangkum informasinya secara cerdas, tajam, dan akurat untuk Young Lord. Selalu sertakan tautan rujukan penting dalam format markdown [Nama Sumber](URL) agar Young Lord dapat mengkliknya langsung.\n\n"
             f"=== ARAHAN SARAF BUATAN ===\n{analysis.tone_directive}\n\n"
-            f"{context_block}\n"
-            f"{search_block}"
+            f"{context_block}"
         )
 
         # 7. Dynamic Human Sampling Temperature (Layer 1)
@@ -810,23 +774,7 @@ class RukaCognitiveBrain:
             except Exception as e:
                 print(f"[BRAIN-ERROR] Gagal memproses via LLM: {e}")
 
-        # 9A. Fallback penelusuran Google mandiri jika LLM kuota habis (429) atau offline
-        if search_items:
-            lines = [
-                "Hmm... cakar penelusuran Google saya telah menembus web untuk Anda, Young Lord. Berdasarkan informasi terkini yang terverifikasi:",
-                ""
-            ]
-            for idx, item in enumerate(search_items, 1):
-                lines.append(f"{idx}. **[{item.title}]({item.url})**")
-                if item.snippet:
-                    lines.append(f"   {item.snippet}")
-            lines.append("\nAda cabang informasi tertentu yang ingin kita telaah lebih mendalam, Sir?")
-            ans_search = "\n".join(lines)
-            self.conversation.append("user", clean_text)
-            self.conversation.append("model", ans_search)
-            return ans_search
-
-        # 9B. Fallback Kucing Vampir Aristokrat Sadar & Berempati jika cloud offline / 503
+        # 9. Fallback Kucing Vampir Aristokrat Sadar & Berempati jika cloud offline / 503
         tom_state = self.empathy.tom.inferred_state
         if tom_state == "LELAH_NOKTURNAL":
             fallback = (

@@ -10,4 +10,11 @@ dist/
 dist-installer/
 release/
 out/
+build/
+*.log
+ruka_std*.txt
+.env
+*.env
+desktop/resources/
+ruka.db
 

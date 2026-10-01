@@ -78,5 +78,5 @@ def ingest_pdf_robust(pdf_path: str):
     print("Ingestion complete.")
 
 if __name__ == "__main__":
-    pdf = r"c:\Traine\ruka\book\RUKA-IV-The-Awakening-of-the-Senses.pdf"
-    ingest_pdf_robust(pdf)
+    pdf = Path(__file__).resolve().parent.parent.parent / "book" / "RUKA-IV-The-Awakening-of-the-Senses.pdf"
+    ingest_pdf_robust(str(pdf))
