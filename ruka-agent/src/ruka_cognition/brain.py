@@ -620,7 +620,14 @@ def compute_human_sampling_temperature(intent: str, emotion: EmotionState) -> fl
 class RukaCognitiveBrain:
     """Pusat saraf kognisi Ruka yang menyatukan Saraf Buatan, Advanced RAG, Kesadaran, dan Empati."""
 
-    def __init__(self, llm_client: Any = None, db_path: str = "ruka.db"):
+    def __init__(
+        self,
+        llm_client: Any = None,
+        db_path: str = "ruka.db",
+        skill_registry: Any = None,
+        skills_runtime: Any = None,
+    ):
+
         self.llm = llm_client
         self.router = NeuralIntentRouter()
         self.rag = CognitiveRAGStore(db_path=db_path)
@@ -628,8 +635,30 @@ class RukaCognitiveBrain:
         self.emotion = EmotionState()
         self.empathy = EmpathyEngine()
         self.consciousness = ConsciousnessEngine()
+        self.skill_registry = skill_registry
+        self.skills_runtime = skills_runtime
+
+    def _build_skills_instruction_block(self) -> str:
+        if self.skill_registry is not None and hasattr(self.skill_registry, "list"):
+            try:
+                active_skills = self.skill_registry.list()
+                if active_skills:
+                    lines = [
+                        f"• {s.name}: {s.description.strip()} (risk: {s.risk_level})"
+                        for s in active_skills
+                    ]
+                    return (
+                        "=== SKILLS & CAPABILITY REGISTRY (OPENCLAW EXTENSION LAYER) ===\n"
+                        "Kemampuan eksekusi otonom terdaftar di Gateway:\n"
+                        + "\n".join(lines)
+                        + "\n\n"
+                    )
+            except Exception:
+                pass
+        return ""
 
     def think_and_reply(self, user_text: str, attachment: dict | None = None) -> str:
+
         """Alur kognisi lengkap berlandaskan Rumus Kesadaran & Empati Buatan (book/fomr1.jpeg)
         serta Rumus Wicara 100% Manusia (book/form.jpeg):
         1. Analisis saraf buatan (Intent, urgensi, nada).
@@ -744,9 +773,11 @@ class RukaCognitiveBrain:
             "• BLOK KODE MURNI (```): Di dalam fenced code block, dilarang keras memasukkan sapaan, narasi, atau gaya bicara bangsawan. Kode harus 100% bersih, profesional, teruji, dan siap jalan.\n"
             "• GAYA BICARA MARQUIS DI LUAR KODE: Di luar blok kode, pertahankan sepenuhnya identitas Marquis of Trendamis (tenang, teliti, sedikit tengil, setia mutlak kepada Young Lord).\n"
             "• KONFIRMASI TINDAKAN BERBAHAYA: Untuk tindakan destruktif (menghapus berkas, force push, dsb), wajib meminta konfirmasi eksplisit dari Young Lord dengan santun dan berwibawa.\n\n"
+            f"{self._build_skills_instruction_block()}"
             f"=== ARAHAN SARAF BUATAN ===\n{analysis.tone_directive}\n\n"
             f"{context_block}"
         )
+
 
         # 7. Dynamic Human Sampling Temperature (Layer 1)
         temp = compute_human_sampling_temperature(analysis.intent, self.emotion)

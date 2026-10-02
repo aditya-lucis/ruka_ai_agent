@@ -163,6 +163,15 @@ class RukaBrainServer:
             print(f"[BRAIN] Peringatan: Google Search engine fallback ({e})")
             self.search_engine = None
 
+        try:
+            from src.gateway import RukaGatewayServer
+            self.gateway = RukaGatewayServer(host=self.host, token=self.token, brain=self.brain)
+            print("[BRAIN] Ruka Gateway Control Plane (Sessions, Events, Permissions) AKTIF!")
+        except Exception as e:
+            print(f"[BRAIN] Peringatan: Gateway fallback ({e})")
+            self.gateway = None
+
+
     def start(self):
         self.server_sock.listen(5)
         self.running = True
@@ -281,6 +290,10 @@ class RukaBrainServer:
         # Rute Permintaan
         if channel == "ruka:runtime-status":
             uptime = time.time() - self.start_time
+            health_score = 1.0
+            if getattr(self, "gateway", None) is not None:
+                from src.math_foundations.control import loop_health
+                health_score = loop_health(0, 5, self.gateway.budget_ctrl.used_iterations, self.gateway.budget_ctrl.max_iterations)
             return {
                 "type": "response",
                 "channel": channel,
@@ -291,9 +304,12 @@ class RukaBrainServer:
                     "liveness": True,
                     "readiness": True,
                     "uptime_s": round(uptime, 1),
+                    "health_score": round(health_score, 3),
+                    "gateway_active": getattr(self, "gateway", None) is not None,
                 },
                 "ts": time.time(),
             }, None
+
 
         elif channel == "ruka:chat-send":
             user_text = payload.get("text", "")

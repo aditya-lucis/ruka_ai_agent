@@ -11,5 +11,6 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [tool.pytest.ini_options]
-pythonpath = [".", ".."]
+pythonpath = ["src", "ruka-agent/src", ".", ".."]
 markers = ["integration: panggilan API nyata (jalur manual)"]
+

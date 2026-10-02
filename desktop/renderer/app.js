@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Cek status maximized awal
   if (window.electronAPI?.isMaximized) {
-    window.electronAPI.isMaximized().then(updateMaximizeUI).catch(() => {});
+    window.electronAPI.isMaximized().then(updateMaximizeUI).catch(() => { });
   }
 
   // Pantau perubahan status maximize dari event jendela Electron
@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         currentAudioElement.pause();
         currentAudioElement.currentTime = 0;
-      } catch (_) {}
+      } catch (_) { }
       currentAudioElement = null;
     }
     if ('speechSynthesis' in window) {
@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const idVoice = availableVoices.find(v => v.lang.startsWith('id') || v.lang.startsWith('ms'));
     const gbVoice = availableVoices.find(v => v.lang.includes('en-GB') || v.name.includes('David') || v.name.includes('George'));
-    
+
     if (idVoice) {
       utterance.voice = idVoice;
     } else if (gbVoice) {
@@ -511,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
       audioStream = null;
     }
     if (audioContext && audioContext.state !== 'closed') {
-      audioContext.close().catch(() => {});
+      audioContext.close().catch(() => { });
       audioContext = null;
     }
 
@@ -846,7 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
           reply =
             'Siap, Young Lord. Berikut perintah CLI untuk memanggil Ruka secara global dari terminal mana pun:\n\n' +
             '```bash\n' +
-            'ruka chat --voice "Salam malam, Marquis Trendamis"\n' +
+            'ruka chat --voice "Salam, Marquis Trendamis"\n' +
             '```\n\n' +
             'Dan untuk memeriksa proses kognisi otak Ruka di PowerShell:\n\n' +
             '```powershell\n' +
@@ -881,7 +881,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (lower.includes('memori') || lower.includes('ingatan') || lower.includes('preferensi')) {
           reply = '🧠 **Arsip Memori Nokturnal**:\n• Saraf Kognisi & RAG Vektor Hibrida Aktif.\n• Preferensi: Clean architecture, Zero-Trust Cloud, & Pelayanan Ksatria kepada Young Lord.';
         } else if (lower.includes('halo') || lower.includes('hai') || lower.includes('ruka')) {
-          reply = 'Hmm... salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini. Cakar dan nalar saya siap menerima titah Anda, Sir.';
+          reply = 'Hmm... salam, Young Lord. Saya telah terjaga di balik bayangan beludru ini. Cakar dan nalar saya siap menerima titah Anda, Sir.';
         } else {
           reply = `Heh... instruksi Anda: "${cleanText}" telah saya tangkap dengan cermat, Young Lord. Segera saya eksekusi sebelum secangkir teh dingin.`;
         }
@@ -1075,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elEp) elEp.textContent = counts.episodic ?? 12;
         if (elSm) elSm.textContent = counts.semantic ?? 34;
         if (elId) elId.textContent = counts.identity ?? 1;
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 
@@ -1433,7 +1433,7 @@ document.addEventListener('DOMContentLoaded', () => {
             inlineCode.classList.remove('inline-copied');
             if (hint) hint.textContent = '📋';
           }, 1500);
-        } catch (err) {}
+        } catch (err) { }
       }
       return;
     }
@@ -1453,7 +1453,7 @@ document.addEventListener('DOMContentLoaded', () => {
             msgCopyBtn.classList.remove('copied');
             if (span) span.textContent = 'Salin';
           }, 2000);
-        } catch (err) {}
+        } catch (err) { }
       }
       return;
     }

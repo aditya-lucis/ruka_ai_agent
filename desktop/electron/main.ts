@@ -349,7 +349,7 @@ function registerIpc(): void {
       reply =
         'Siap, Young Lord. Berikut perintah CLI untuk memanggil Ruka secara global dari terminal mana pun:\n\n' +
         '```bash\n' +
-        'ruka chat --voice "Salam malam, Marquis Trendamis"\n' +
+        'ruka chat --voice "Salam, Marquis Trendamis"\n' +
         '```\n\n' +
         'Dan untuk memeriksa proses kognisi otak Ruka di PowerShell:\n\n' +
         '```powershell\n' +

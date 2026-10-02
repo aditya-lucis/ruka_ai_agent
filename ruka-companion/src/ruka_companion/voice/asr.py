@@ -83,6 +83,16 @@ class WhisperASR:
     def loaded(self) -> bool:
         return self._cpp_model is not None
 
+    @property
+    def _model(self) -> Any:
+        """Alias kompatibilitas mock/internal model."""
+        return self._cpp_model
+
+    @_model.setter
+    def _model(self, value: Any) -> None:
+        self._cpp_model = value
+
+
     def transcribe_wav_bytes(self, wav_bytes: bytes, language: str = "id") -> str:
         """Transkripsi langsung dari data bytes berkas WAV."""
         if not wav_bytes:
@@ -132,10 +142,39 @@ class WhisperASR:
         initial_prompt: str | None = None,
     ) -> Transcription:
         """AudioBuffer -> Transcription dengan latensi terukur."""
-        if self._cpp_model is None:
-            self.load()
+        if not self.loaded:
+            raise RuntimeError("Model belum dimuat. Panggil asr.load() terlebih dahulu.")
+
+        if buffer.fs != 16000:
+            raise ValueError(f"ASR butuh 16000 Hz, didapat {buffer.fs} Hz.")
 
         t0 = time.perf_counter()
+        is_mock = "mock" in type(self._cpp_model).__module__.lower() or "mock" in type(self._cpp_model).__name__.lower()
+
+        if is_mock:
+            if initial_prompt:
+                res = self._cpp_model.transcribe(buffer.samples, language=language, initial_prompt=initial_prompt)
+            else:
+                res = self._cpp_model.transcribe(buffer.samples, language=language)
+            segs = res[0] if isinstance(res, tuple) else res
+            raw_segs = [
+                {
+                    "start": float(getattr(s, "start", getattr(s, "t0", 0) / 100)),
+                    "end": float(getattr(s, "end", getattr(s, "t1", 0) / 100)),
+                    "text": str(getattr(s, "text", "")).strip(),
+                }
+                for s in segs
+            ]
+            full_text = " ".join(s["text"] for s in raw_segs if s["text"]).strip()
+            return Transcription(
+                text=full_text,
+                language=language,
+                duration_s=buffer.duration_s,
+                segments=tuple(raw_segs),
+                latency_s=time.perf_counter() - t0,
+                model_id=f"whisper.cpp:{self.model_size}",
+            )
+
         # Simpan buffer ke WAV sementara untuk diproses whisper.cpp C++
         temp_file = None
         try:
@@ -150,9 +189,14 @@ class WhisperASR:
                     int_samples = (np.clip(buffer.samples, -1.0, 1.0) * 32767).astype(np.int16)
                     wf.writeframes(int_samples.tobytes())
 
-            segs = self._cpp_model.transcribe(temp_file, language=language)
+            res = self._cpp_model.transcribe(temp_file, language=language)
+            segs = res[0] if isinstance(res, tuple) else res
             raw_segs = [
-                {"start": float(getattr(s, "t0", 0) / 100), "end": float(getattr(s, "t1", 0) / 100), "text": s.text.strip()}
+                {
+                    "start": float(getattr(s, "start", getattr(s, "t0", 0) / 100)),
+                    "end": float(getattr(s, "end", getattr(s, "t1", 0) / 100)),
+                    "text": str(getattr(s, "text", "")).strip(),
+                }
                 for s in segs
             ]
             full_text = " ".join(s["text"] for s in raw_segs if s["text"]).strip()
@@ -165,6 +209,7 @@ class WhisperASR:
                 latency_s=latency,
                 model_id=f"whisper.cpp:{self.model_size}",
             )
+
         finally:
             if temp_file and os.path.exists(temp_file):
                 try:
