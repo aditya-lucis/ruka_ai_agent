@@ -7,14 +7,14 @@
     "buildResources": "desktop/assets"
   },
   "files": [
-    "desktop/dist/**/*",
+    "desktop/out/**/*",
     "desktop/assets/**/*",
     "!**/*.map"
   ],
   "extraResources": [
     {
-      "from": "python-dist/ruka-core",
-      "to": "ruka-core",
+      "from": "desktop/resources/brain",
+      "to": "brain",
       "filter": ["**/*"]
     }
   ],

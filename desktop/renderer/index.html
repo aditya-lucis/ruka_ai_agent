@@ -1,19 +1,25 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'self';">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'self';">
   <title>RUKA — Sovereign Companion</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    media="print" onload="this.media='all'">
 </head>
+
 <body class="theme-dark">
   <div class="window-container">
     <!-- Custom Titlebar -->
     <header class="titlebar">
       <div class="brand">
-        <img class="brand-avatar-mini" id="miniAvatar" src="ruka-icon.png" width="22" height="22" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
+        <img class="brand-avatar-mini" id="miniAvatar" src="ruka-icon.png" width="22" height="22"
+          style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
         <span class="brand-name">RUKA</span>
         <span class="brand-title">Marquis Trendamis</span>
       </div>
@@ -22,19 +28,32 @@
         <span class="presence-text" id="presenceText">Lokal</span>
       </div>
       <button class="voice-toggle-btn active" id="btnToggleVoice" title="Suara Ruka: Aktif (Klik untuk membisukan)">
-        <svg class="icon-speaker" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        <svg class="icon-speaker" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
         <span class="voice-status-text">Suara Ruka</span>
       </button>
       <div class="window-controls">
         <button class="win-btn" id="btnMinimize" title="Kecilkan (Minimize)" aria-label="Minimize">
-          <svg width="12" height="12" viewBox="0 0 12 12"><path fill="currentColor" d="M2 6h8v1H2z"/></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path fill="currentColor" d="M2 6h8v1H2z" />
+          </svg>
         </button>
         <button class="win-btn" id="btnMaximize" title="Maksimalkan / Pulihkan Ukuran" aria-label="Maximize or Restore">
-          <svg class="icon-maximize" width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-          <svg class="icon-restore hidden" width="12" height="12" viewBox="0 0 12 12"><rect x="4" y="2" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M2 4.5V9a1 1 0 0 0 1 1h4.5" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+          <svg class="icon-maximize" width="12" height="12" viewBox="0 0 12 12">
+            <rect x="2" y="2" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.2" />
+          </svg>
+          <svg class="icon-restore hidden" width="12" height="12" viewBox="0 0 12 12">
+            <rect x="4" y="2" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
+            <path d="M2 4.5V9a1 1 0 0 0 1 1h4.5" fill="none" stroke="currentColor" stroke-width="1.1" />
+          </svg>
         </button>
         <button class="win-btn win-close" id="btnClose" title="Tutup ke Tray" aria-label="Close to tray">
-          <svg width="12" height="12" viewBox="0 0 12 12"><path fill="none" d="M2.5 2.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="1.2"/></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path fill="none" d="M2.5 2.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="1.2" />
+          </svg>
         </button>
       </div>
     </header>
@@ -56,7 +75,9 @@
             <div class="ring ring-outer"></div>
             <div class="ring ring-middle"></div>
             <div class="ring ring-inner" id="coreAura">
-              <img class="core-orb-img" id="coreOrb" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka Core">
+              <img class="core-orb-img" id="coreOrb" src="ruka-icon.png" width="28" height="28"
+                style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;"
+                alt="Ruka Core">
             </div>
           </div>
         </div>
@@ -74,19 +95,29 @@
     <nav class="nav-tabs">
       <div class="nav-tabs-inner">
         <button class="tab-btn active" data-tab="chat" id="tabChat">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
           <span>Percakapan</span>
         </button>
         <button class="tab-btn" data-tab="memory" id="tabMemory">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
           <span>Memori</span>
         </button>
         <button class="tab-btn" data-tab="tools" id="tabTools">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
           <span>Alat & Izin</span>
         </button>
         <button class="tab-btn" data-tab="diagnostic" id="tabDiag">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
           <span>Diagnostik</span>
         </button>
       </div>
@@ -101,7 +132,8 @@
             <div class="message message-system">
               <div class="msg-bubble system-bubble">
                 <span class="system-icon">✦</span>
-                <span>RUKA Sovereign Companion — Tubuh Desktop Siaga Penuh. Siap mengeksekusi kode, rumus, dan instruksi.</span>
+                <span>RUKA Sovereign Companion — Tubuh Desktop Siaga Penuh. Siap mengeksekusi kode, rumus, dan
+                  instruksi.</span>
               </div>
             </div>
             <div class="message message-ruka">
@@ -112,18 +144,28 @@
                   <span class="msg-sender-badge">Marquis Trendamis</span>
                 </div>
                 <div class="msg-text">
-Salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini... Seluruh kognisi otonom, sensor visual kamera, mikrofon wicara, kalkulator formula, dan perkakas CLI siap mengeksekusi titah Anda secara instan.
+                  Salam, Young Lord. Saya telah terjaga di balik bayangan beludru ini... Seluruh kognisi otonom, sensor
+                  visual kamera, mikrofon wicara, kalkulator formula, dan perkakas CLI siap mengeksekusi titah Anda
+                  secara instan.
 
-Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
+                  Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
                 </div>
                 <div class="msg-footer">
                   <div class="msg-actions-left">
                     <button class="msg-copy-btn" title="Salin seluruh teks jawaban">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
                       <span class="btn-label">Salin</span>
                     </button>
                     <button class="msg-speak-btn" title="Dengarkan Suara Ruka">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                      </svg>
                       <span class="btn-label">Suara Ruka</span>
                     </button>
                   </div>
@@ -134,10 +176,14 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
           </div>
 
           <div class="quick-chips">
-            <button class="chip" data-text="Buatkan rumus Excel XLOOKUP dan IF bersyarat untuk kalkulasi data">📊 Rumus Excel</button>
-            <button class="chip" data-text="Tampilkan contoh perintah CLI PowerShell untuk cek proses dan jaringan">💻 Perintah CLI</button>
-            <button class="chip" data-text="Tuliskan kode Python clean architecture untuk kalkulasi data analitik">🐍 Kode Python</button>
-            <button class="chip" data-text="Cari di Google perkembangan AI dan teknologi terkini hari ini">🌐 Cari Google</button>
+            <button class="chip" data-text="Buatkan rumus Excel XLOOKUP dan IF bersyarat untuk kalkulasi data">📊 Rumus
+              Excel</button>
+            <button class="chip" data-text="Tampilkan contoh perintah CLI PowerShell untuk cek proses dan jaringan">💻
+              Perintah CLI</button>
+            <button class="chip" data-text="Tuliskan kode Python clean architecture untuk kalkulasi data analitik">🐍
+              Kode Python</button>
+            <button class="chip" data-text="Cari di Google perkembangan AI dan teknologi terkini hari ini">🌐 Cari
+              Google</button>
             <button class="chip" data-text="Siapa profil aktif saat ini?">Identitas</button>
             <button class="chip" data-text="Periksa status kamera dan mikrofon">Sensor Fisik</button>
           </div>
@@ -147,7 +193,10 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
             <div class="attachment-thumbnail-wrapper" id="attachmentThumbnailWrapper">
               <img id="attachmentThumbnail" src="" alt="Lampiran" class="attachment-thumb-img hidden">
               <div id="attachmentFileIcon" class="attachment-file-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
               </div>
             </div>
             <div class="attachment-details">
@@ -160,21 +209,40 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
           <!-- Chat Composer -->
           <div class="chat-composer">
             <div class="composer-tools">
-              <input type="file" id="fileInput" style="display: none;" accept="image/*,.txt,.py,.js,.ts,.json,.md,.html,.css,.csv,.log,.pdf,.c,.cpp">
-              <button type="button" class="tool-icon-btn" id="btnAttachFile" title="Lampirkan Gambar atau Berkas (Scan Dokumen/Kode)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              <input type="file" id="fileInput" style="display: none;"
+                accept="image/*,.txt,.py,.js,.ts,.json,.md,.html,.css,.csv,.log,.pdf,.c,.cpp">
+              <button type="button" class="tool-icon-btn" id="btnAttachFile"
+                title="Lampirkan Gambar atau Berkas (Scan Dokumen/Kode)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path
+                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
               </button>
-              <button type="button" class="tool-icon-btn" id="btnOpenCamera" title="Akses Kamera (Sensor Optik YuNet & SFace)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <button type="button" class="tool-icon-btn" id="btnOpenCamera"
+                title="Akses Kamera (Sensor Optik YuNet & SFace)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
               </button>
             </div>
-            <textarea id="chatInput" placeholder="Tulis instruksi, kode, rumus, atau ajak Ruka bicara... (Enter kirim)" rows="1" maxlength="8000"></textarea>
+            <textarea id="chatInput" placeholder="Tulis instruksi, kode, rumus, atau ajak Ruka bicara... (Enter kirim)"
+              rows="1" maxlength="8000"></textarea>
             <div class="composer-actions">
-              <button type="button" class="tool-icon-btn mic-btn" id="btnMic" title="Bicara dengan Suara (Klik untuk bicara)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <button type="button" class="tool-icon-btn mic-btn" id="btnMic"
+                title="Bicara dengan Suara (Klik untuk bicara)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
               </button>
               <button id="btnSend" class="send-btn" title="Kirim Pesan" aria-label="Send">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
               </button>
             </div>
           </div>
@@ -189,7 +257,8 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
             <p>Membaca ingatan konsolidasi SQLite & FAISS tanpa merusak integritas state.</p>
           </div>
           <div class="memory-search-bar">
-            <input type="text" id="memorySearchInput" placeholder="Cari ingatan semantik atau episodik..." maxlength="2000">
+            <input type="text" id="memorySearchInput" placeholder="Cari ingatan semantik atau episodik..."
+              maxlength="2000">
             <button id="btnMemorySearch" class="action-btn">Cari</button>
           </div>
           <div class="stats-grid" id="memoryStatsGrid">
@@ -270,7 +339,8 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
             </div>
             <div class="diag-row">
               <span class="diag-key">Endpoint File</span>
-              <span class="diag-val font-mono" id="diagEndpointPath">%LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json</span>
+              <span class="diag-val font-mono"
+                id="diagEndpointPath">%LOCALAPPDATA%/ruka/runtime/ipc-endpoint.json</span>
             </div>
             <div class="diag-row">
               <span class="diag-key">Kehadiran (Presence)</span>
@@ -330,7 +400,11 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
         <div class="camera-dialog-footer">
           <span class="camera-hint">Arahkan ke wajah, objek, atau kode untuk diteliti Ruka</span>
           <button class="snap-btn" id="btnSnapPhoto">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 4h-3.17L14.6 2H9.4L8.17 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19 4h-3.17L14.6 2H9.4L8.17 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+            </svg>
             <span>Ambil Foto & Berikan ke Ruka</span>
           </button>
         </div>
@@ -340,4 +414,5 @@ Ada hal menarik yang ingin kita telusuri atau kerjakan bersama hari ini, Sir?
 
   <script src="app.js"></script>
 </body>
+
 </html>

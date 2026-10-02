@@ -3,7 +3,34 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['src.config', 'src.llm.gemini_client', 'src.ruka_cognition.brain', 'src.ruka_cognition.neural.features', 'src.ruka_cognition.context.relevance', 'src.tools.google_search', 'ruka_companion.voice.tts', 'ruka_companion.voice.asr', 'ruka_companion.identity.engine', 'ruka_companion.identity.types', 'ruka_companion.vision.camera', 'ruka_companion.presence.engine', 'ruka_persistence.store', 'sqlite3', 'pydantic', 'numpy']
+hiddenimports = [
+    'src.config',
+    'src.llm.gemini_client',
+    'src.ruka_cognition.brain',
+    'src.ruka_cognition.neural.features',
+    'src.ruka_cognition.context.relevance',
+    'src.tools.base',
+    'src.tools.registry',
+    'src.tools.builtin',
+    'src.tools.coding',
+    'src.tools.git',
+    'src.tools.google_search',
+    'src.agent.evaluator',
+    'src.agent.self_correction',
+    'src.agent.project_memory',
+    'src.agent.plan_transparency',
+    'src.neural.intent',
+    'ruka_companion.voice.tts',
+    'ruka_companion.voice.asr',
+    'ruka_companion.identity.engine',
+    'ruka_companion.identity.types',
+    'ruka_companion.vision.camera',
+    'ruka_companion.presence.engine',
+    'ruka_persistence.store',
+    'sqlite3',
+    'pydantic',
+    'numpy'
+]
 tmp_ret = collect_all('edge_tts')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('google.genai')

@@ -1,6 +1,7 @@
 .venv
 .pytest_cache
-book
+book/*
+!book/*.md
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,4 +19,3 @@ ruka_std*.txt
 desktop/resources/
 ruka.db
 ruka.spec
-

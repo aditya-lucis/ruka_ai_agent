@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-"""RUKA CLI — Marquis of Trendamis Terminal Companion.
+"""RUKA CLI — Marquis of Trendamis Terminal Companion & Coding Agent.
 Memungkinkan Young Lord memanggil Ruka kapan saja dan di mana saja
 langsung dari Command Prompt / PowerShell / Terminal desktop.
+Mendukung obrolan kognitif, evaluasi kode, review, git diff, dan eksekusi agentic.
 """
 from __future__ import annotations
 
-import os
-import sys
 import json
-import time
+import os
+import re
 import socket
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 # Pastikan output konsol Windows mendukung UTF-8 dan warna ANSI tanpa crash
@@ -28,6 +30,7 @@ BLUE = "\033[94m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RED = "\033[91m"
+WHITE = "\033[97m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
@@ -39,7 +42,7 @@ ENDPOINT_FILE = Path(LOCAL_APPDATA) / "ruka" / "runtime" / "ipc-endpoint.json"
 def print_banner():
     banner = f"""{MAGENTA}{BOLD}
   🐾 RUKA (ルカ) — Marquis of Trendamis
-  {DIM}The Persistent Mind & Aristocratic AI Companion CLI{RESET}
+  {DIM}The Persistent Mind & Aristocratic Coding Agent CLI{RESET}
 """
     print(banner)
 
@@ -123,6 +126,24 @@ def ensure_brain_running() -> tuple[socket.socket, dict] | None:
     return None
 
 
+def render_formatted_output(text: str):
+    """Menampilkan teks respons dengan blok kode terpisah rapi (Lore Lock rendering)."""
+    # Memisahkan markdown fenced code blocks
+    parts = re.split(r"(```[a-zA-Z0-9_-]*\n[\s\S]*?\n```)", text)
+    for part in parts:
+        if part.startswith("```"):
+            lines = part.splitlines()
+            lang = lines[0].replace("```", "").strip() or "code"
+            code_body = "\n".join(lines[1:-1])
+            print(f"\n{CYAN}┌── [{lang.upper()}] ───────────────────────────────────────┐{RESET}")
+            for cline in code_body.splitlines():
+                print(f"{WHITE}│  {cline}{RESET}")
+            print(f"{CYAN}└── 100% Pure Code Block ─────────────────────────────┘{RESET}\n")
+        else:
+            if part.strip():
+                print(part.strip())
+
+
 def handle_chat(sock: socket.socket, prompt: str):
     """Mengirim obrolan ke Ruka dan mengalirkan respons aristokrat secara live."""
     req_env = {
@@ -134,9 +155,9 @@ def handle_chat(sock: socket.socket, prompt: str):
     sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
 
     f = sock.makefile("r", encoding="utf-8")
-    print(f"{MAGENTA}{BOLD}Ruka (Marquis of Trendamis):{RESET} ", end="", flush=True)
+    print(f"\n{MAGENTA}{BOLD}Ruka (Marquis of Trendamis):{RESET}\n")
 
-    streamed_text = ""
+    full_text = ""
     while True:
         line = f.readline()
         if not line:
@@ -149,20 +170,19 @@ def handle_chat(sock: socket.socket, prompt: str):
             if ch == "ruka:chat-stream":
                 delta = payload.get("delta", "")
                 if delta:
-                    sys.stdout.write(delta)
-                    sys.stdout.flush()
-                    streamed_text += delta
+                    full_text += delta
             elif ch == "ruka:chat-send":
+                delta = payload.get("delta", "")
+                if delta and not full_text:
+                    full_text = delta
                 if payload.get("done"):
-                    # Jika tidak ada streaming sebelumnya tapi ada payload delta/reply
-                    delta = payload.get("delta", "")
-                    if delta and not streamed_text:
-                        sys.stdout.write(delta)
-                        sys.stdout.flush()
                     break
         except Exception:
             break
-    print("\n")
+
+    if full_text:
+        render_formatted_output(full_text)
+    print()
 
 
 def handle_status(sock: socket.socket):
@@ -179,14 +199,100 @@ def handle_status(sock: socket.socket):
     if line:
         try:
             res = json.loads(line).get("payload", {})
-            print(f"{GREEN}{BOLD}=== Status Runtime RUKA ==={RESET}")
-            print(f" • Status      : {CYAN}{res.get('status', 'online').upper()}{RESET}")
-            print(f" • Process PID : {res.get('pid')}")
-            print(f" • Uptime      : {res.get('uptime_s', 0):.1f} detik")
-            print(f" • Otak AI     : {res.get('llm_model', 'Gemini 3.5 Flash-Lite')}")
-            print(f" • Keamanan    : {GREEN}Zero-Trust Local-Only PathJail (100% Aman){RESET}")
+            print(f"\n{GREEN}{BOLD}=== Status Runtime RUKA Coding Agent ==={RESET}")
+            print(f" • Status        : {CYAN}{res.get('status', 'online').upper()}{RESET}")
+            print(f" • Process PID   : {res.get('pid')}")
+            print(f" • Uptime        : {res.get('uptime_s', 0):.1f} detik")
+            print(f" • Otak Kognisi  : {res.get('llm_model', 'Gemini 3.5 Flash-Lite')}")
+            print(f" • Coding Engine : {MAGENTA}Claude Code Parity v1.0 (Phase 1–3 Ready){RESET}")
+            print(f" • Sandbox       : {GREEN}Zero-Trust PathJail & CodeEvaluator Active{RESET}\n")
         except Exception as e:
             print(f"{RED}Gagal membaca status: {e}{RESET}")
+
+
+def handle_diff(target_file: str | None = None):
+    """Menampilkan git diff berwarna di terminal dengan format aristokrat."""
+    cmd = ["git", "diff"]
+    if target_file:
+        cmd.extend(["--", target_file])
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            print(f"{RED}Gagal membaca git diff: {proc.stderr.strip()}{RESET}")
+            return
+
+        diff_text = proc.stdout
+        if not diff_text.strip():
+            print(f"{GREEN}[✓] Working tree bersih, tidak ada perbedaan git.{RESET}")
+            return
+
+        print(f"\n{CYAN}{BOLD}=== Git Diff (Perubahan Terkini) ==={RESET}\n")
+        for line in diff_text.splitlines():
+            if line.startswith("+++") or line.startswith("---"):
+                print(f"{BOLD}{line}{RESET}")
+            elif line.startswith("+"):
+                print(f"{GREEN}{line}{RESET}")
+            elif line.startswith("-"):
+                print(f"{RED}{line}{RESET}")
+            elif line.startswith("@@"):
+                print(f"{CYAN}{line}{RESET}")
+            else:
+                print(f"{DIM}{line}{RESET}")
+        print()
+    except Exception as e:
+        print(f"{RED}Error saat menjalankan git diff: {e}{RESET}")
+
+
+def handle_git_status():
+    """Menampilkan git status secara ringkas dan rapi."""
+    try:
+        proc = subprocess.run(["git", "status", "--porcelain=v1", "-uall"], capture_output=True, text=True)
+        branch_proc = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        branch = branch_proc.stdout.strip() or "HEAD"
+
+        print(f"\n{CYAN}{BOLD}=== Git Status: Branch {branch} ==={RESET}")
+        lines = proc.stdout.splitlines()
+        if not lines:
+            print(f"{GREEN}  [✓] Working directory bersih (clean). Tidak ada perubahan.{RESET}\n")
+            return
+
+        for line in lines:
+            if len(line) < 3:
+                continue
+            x, y = line[0], line[1]
+            fname = line[3:].strip()
+            if x == "?" and y == "?":
+                print(f"  {MAGENTA}[Untracked]{RESET} {fname}")
+            elif x in ("M", "A", "D", "R", "C"):
+                print(f"  {GREEN}[Staged]   {RESET} {fname} ({x})")
+            elif y in ("M", "D"):
+                print(f"  {YELLOW}[Modified] {RESET} {fname} ({y})")
+        print()
+    except Exception as e:
+        print(f"{RED}Error git status: {e}{RESET}")
+
+
+def handle_review(sock: socket.socket, target_path: str):
+    """Menjalankan code review pada berkas/folder yang ditentukan."""
+    p = Path(target_path)
+    if not p.exists():
+        print(f"{RED}[!] Path target tidak ditemukan: {target_path}{RESET}")
+        return
+
+    content_preview = ""
+    if p.is_file():
+        try:
+            content_preview = p.read_text(encoding="utf-8", errors="replace")[:10000]
+        except Exception:
+            pass
+
+    prompt = (
+        f"Young Lord menugaskan untuk melakukan review mendalam pada berkas: '{target_path}'.\n"
+        f"Berikut isi berkas:\n```\n{content_preview}\n```\n"
+        "Analisis dengan saksama: potensi bug, arsitektur, efisiensi waktu dan memori, serta standar keamanan koding."
+    )
+    handle_chat(sock, prompt)
 
 
 def handle_search(sock: socket.socket, query: str):
@@ -217,19 +323,25 @@ def handle_search(sock: socket.socket, query: str):
 
 
 def interactive_repl(sock: socket.socket):
-    """Mode REPL Interaktif terminal."""
+    """Mode REPL Interaktif terminal dengan dukungan command koding."""
     print_banner()
-    print(f"{CYAN}Sesi interaktif dibuka. Ketik 'exit' atau 'quit' untuk keluar.{RESET}\n")
+    print(f"{CYAN}Sesi interaktif koding dibuka. Ketik 'help' untuk daftar perintah atau 'exit' untuk keluar.{RESET}\n")
     while True:
         try:
             prompt = input(f"{BOLD}{CYAN}Young Lord > {RESET}").strip()
             if not prompt:
                 continue
             if prompt.lower() in ("exit", "quit", "q"):
-                print(f"\n{MAGENTA}Ruka: Sampai jumpa, Young Lord. Hamba senantiasa siap di System Tray.{RESET}\n")
+                print(f"\n{MAGENTA}Ruka: Sampai jumpa, Young Lord. Hamba senantiasa siap sedia mendampingi Anda.{RESET}\n")
                 break
             if prompt.lower() == "status":
                 handle_status(sock)
+            elif prompt.lower() == "diff":
+                handle_diff()
+            elif prompt.lower() in ("git-status", "gs"):
+                handle_git_status()
+            elif prompt.lower().startswith("review "):
+                handle_review(sock, prompt[7:].strip())
             elif prompt.lower().startswith("search "):
                 handle_search(sock, prompt[7:].strip())
             else:
@@ -241,17 +353,21 @@ def interactive_repl(sock: socket.socket):
 
 def print_help():
     print_banner()
-    print(f"""{BOLD}PENGGUNAAN CLI:{RESET}
+    print(f"""{BOLD}PENGGUNAAN CLI RUKA CODING AGENT:{RESET}
   {CYAN}ruka{RESET}                        Buka sesi REPL interaktif terminal
-  {CYAN}ruka "pesan atau perintah"{RESET}    Kirim instruksi langsung ke Ruka dan dapatkan respons
-  {CYAN}ruka status{RESET}                 Cek status kesehatan Otak Ruka & PID
+  {CYAN}ruka "pesan / perintah"{RESET}    Kirim instruksi coding/tugas ke Ruka
+  {CYAN}ruka review <path>{RESET}          Review berkas/kode dengan analisis mendalam
+  {CYAN}ruka diff [path]{RESET}            Tampilkan perbedaan kode git diff berwarna
+  {CYAN}ruka git-status{RESET}             Periksa ringkasan status git repositori
+  {CYAN}ruka status{RESET}                 Cek kesehatan runtime Otak Ruka & PID
   {CYAN}ruka search "query"{RESET}         Cari berita/informasi terkini di Google
-  {CYAN}ruka help{RESET}                   Tampilkan menu bantuan ini
+  {CYAN}ruka help{RESET}                   Tampilkan bantuan ini
 
-{BOLD}CONTOH:{RESET}
-  ruka "Ruka, tolong buatkan ringkasan tugas hari ini."
-  ruka search "berita AI terbaru 2026"
-  ruka status
+{BOLD}CONTOH CODING:{RESET}
+  ruka "Perbaiki race condition di modul auth.py"
+  ruka review src/agent/orchestrator.py
+  ruka diff
+  ruka "Implementasikan fitur rate limiter dengan token bucket"
 """)
 
 
@@ -260,6 +376,14 @@ def main():
 
     if args and args[0] in ("-h", "--help", "help"):
         print_help()
+        return
+
+    if args and args[0] == "diff":
+        handle_diff(args[1] if len(args) > 1 else None)
+        return
+
+    if args and args[0] in ("git-status", "gs"):
+        handle_git_status()
         return
 
     res = ensure_brain_running()
@@ -272,6 +396,8 @@ def main():
             interactive_repl(sock)
         elif args[0] == "status":
             handle_status(sock)
+        elif args[0] == "review" and len(args) > 1:
+            handle_review(sock, args[1])
         elif args[0] == "search" and len(args) > 1:
             handle_search(sock, " ".join(args[1:]))
         else:
