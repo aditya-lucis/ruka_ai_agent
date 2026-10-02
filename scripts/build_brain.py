@@ -87,6 +87,13 @@ def main():
         print(f"[*] Menyalin model offline whisper.cpp ({model_src.name}) ke {models_dest_dir}...")
         shutil.copy2(str(model_src), str(models_dest_dir / "ggml-tiny.bin"))
 
+    # 5d. Sertakan folder skills/ mandiri
+    skills_src = ROOT_DIR / "skills"
+    if skills_src.exists():
+        skills_dest = TARGET_BRAIN_DIR / "skills"
+        print(f"[*] Menyalin folder skills/ ke {skills_dest}...")
+        shutil.copytree(str(skills_src), str(skills_dest), dirs_exist_ok=True)
+
     # 5c. Kompilasi Ruka CLI Terminal Executable (ruka.exe)
     cli_script = ROOT_DIR / "ruka_cli.py"
     if cli_script.exists():

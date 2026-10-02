@@ -20,6 +20,29 @@ hiddenimports = [
     'src.agent.project_memory',
     'src.agent.plan_transparency',
     'src.neural.intent',
+    'src.retrieval.store',
+    'src.retrieval.reranker',
+    'src.math_foundations.linear',
+    'src.math_foundations.probability',
+    'src.math_foundations.optimization',
+    'src.math_foundations.information',
+    'src.math_foundations.graph',
+    'src.math_foundations.control',
+    'src.math_foundations.statistical',
+    'src.math_foundations.types',
+    'src.gateway.server',
+    'src.gateway.session',
+    'src.gateway.events',
+    'src.gateway.permissions',
+    'src.gateway.protocol',
+    'src.gateway.channels.base',
+    'src.gateway.channels.desktop',
+    'src.gateway.channels.cli',
+    'src.gateway.skills.models',
+    'src.gateway.skills.loader',
+    'src.gateway.skills.registry',
+    'src.gateway.skills.runtime',
+    'src.gateway.skills.coding_bridge',
     'ruka_companion.voice.tts',
     'ruka_companion.voice.asr',
     'ruka_companion.identity.engine',
@@ -47,6 +70,9 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(SPECPATH).resolve() if "SPECPATH" in locals() else Path(".").resolve()
+skills_folder = BASE_DIR / 'skills'
+if skills_folder.exists():
+    datas.append((str(skills_folder), 'skills'))
 
 a = Analysis(
     [str(BASE_DIR / 'launcher.py')],

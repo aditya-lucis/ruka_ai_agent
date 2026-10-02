@@ -63,7 +63,13 @@ class RukaGatewayServer:
             event_bus=self.event_bus,
         )
         try:
-            skills_dir = Path(__file__).resolve().parent.parent.parent.parent / "skills"
+            candidates = [
+                Path(sys.executable).parent / "skills",
+                Path(getattr(sys, "_MEIPASS", "")) / "skills",
+                Path.cwd() / "skills",
+                Path(__file__).resolve().parent.parent.parent.parent / "skills",
+            ]
+            skills_dir = next((p for p in candidates if p.exists() and p.is_dir()), candidates[-1])
             register_builtin_coding_skills(self.skill_registry, skills_dir=skills_dir, workspace_root=workspace_root)
         except Exception as e_reg:
             log.warning("Peringatan saat mendaftarkan coding skills: %s", e_reg)
