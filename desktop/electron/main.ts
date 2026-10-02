@@ -24,7 +24,7 @@
  *      ber-correlation. ipcRenderer tidak pernah terekspos mentah.
  */
 
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, screen } from 'electron';
 import path from 'node:path';
 import {
   IPC,
@@ -187,12 +187,15 @@ const rendererFilePath = path.join(__dirname, '..', 'renderer', 'index.html');
 const ALLOWED_EXTERNAL = /^https:\/\//i;
 
 function createWindow(): void {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+
   mainWindow = new BrowserWindow({
-    width: 440,
-    height: 680,
-    minWidth: 380,
-    minHeight: 520,
-    show: false, // Mulai tersembunyi: tray-first
+    width: Math.min(1280, Math.round(screenWidth * 0.92)),
+    height: Math.min(860, Math.round(screenHeight * 0.92)),
+    minWidth: 480,
+    minHeight: 560,
+    show: true, // Tampilkan langsung secara instan tanpa menunggu ready-to-show
     frame: false, // Custom frameless titlebar untuk estetika modern premium
     transparent: false,
     backgroundColor: '#11111b',
@@ -206,6 +209,14 @@ function createWindow(): void {
       spellcheck: false,
     },
   });
+
+  // Maksimalkan segera seluas halaman desktop
+  try {
+    mainWindow.maximize();
+    mainWindow.focus();
+  } catch (err) {
+    console.warn('[MAIN] Could not maximize window immediately:', err);
+  }
 
   // #5 — Kunci navigasi: aplikasi ini tidak menelusuri web liar
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -221,10 +232,31 @@ function createWindow(): void {
     return { action: 'deny' }; // jendela baru: selalu tolak
   });
 
+  // Pantau status maximize/restore agar renderer dapat memperbarui ikon window controls
+  mainWindow.on('maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:maximize-change', true);
+    }
+  });
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:maximize-change', false);
+    }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+    console.error(`[MAIN] Gagal memuat UI ${validatedURL}: [${errorCode}] ${errorDescription}`);
+  });
+
   void mainWindow.loadFile(rendererFilePath);
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.maximize();
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -238,11 +270,28 @@ function registerIpc(): void {
   ipcMain.handle('window:minimize', () => {
     mainWindow?.minimize();
   });
+  ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+      return false;
+    } else {
+      mainWindow.maximize();
+      return true;
+    }
+  });
+  ipcMain.handle('window:is-maximized', () => {
+    return mainWindow?.isMaximized() ?? false;
+  });
   ipcMain.handle('window:hide', () => {
     mainWindow?.hide();
   });
   ipcMain.handle('window:close', () => {
-    mainWindow?.hide(); // Minimize to tray on close
+    if (tray) {
+      mainWindow?.hide(); // Sembunyikan ke tray jika tray aktif
+    } else {
+      mainWindow?.close();
+    }
   });
 
   ipcMain.handle(IPC.RUNTIME_STATUS, async () => {
@@ -273,30 +322,87 @@ function registerIpc(): void {
     const lower = clean.toLowerCase();
 
     if (
+      lower.includes('excel') ||
+      lower.includes('rumus') ||
+      lower.includes('formula') ||
+      lower.includes('vlookup') ||
+      lower.includes('xlookup')
+    ) {
+      reply =
+        'Tentu, Young Lord. Berikut rumus Excel terstruktur untuk pencarian data dinamis dengan penanganan kondisi kosong:\n\n' +
+        '```excel\n' +
+        '=IF(ISBLANK(A2), "", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, "Tidak Ditemukan", 0), "Data Error"))\n' +
+        '```\n\n' +
+        'Dan berikut rumus untuk kalkulasi total akumulasi bersyarat:\n\n' +
+        '```excel\n' +
+        '=SUMIFS(Transaksi!$D$2:$D$5000, Transaksi!$B$2:$B$5000, ">=2026-01-01", Transaksi!$C$2:$C$5000, "Approved")\n' +
+        '```\n\n' +
+        '> Anda dapat menyalin rumus di atas hanya dengan **satu kali klik** pada tombol salin di sudut kartu formula.';
+    } else if (
+      lower.includes('cli') ||
+      lower.includes('terminal') ||
+      lower.includes('powershell') ||
+      lower.includes('perintah') ||
+      lower.includes('bash') ||
+      lower.includes('cmd')
+    ) {
+      reply =
+        'Siap, Young Lord. Berikut perintah CLI untuk memanggil Ruka secara global dari terminal mana pun:\n\n' +
+        '```bash\n' +
+        'ruka chat --voice "Salam malam, Marquis Trendamis"\n' +
+        '```\n\n' +
+        'Dan untuk memeriksa proses kognisi otak Ruka di PowerShell:\n\n' +
+        '```powershell\n' +
+        'Get-Process -Name "*ruka*" | Select-Object Id, ProcessName, CPU, WorkingSet64\n' +
+        '```\n\n' +
+        '> Cukup klik tombol **Salin Perintah** untuk menyalin ke clipboard seketika.';
+    } else if (
+      lower.includes('python') ||
+      lower.includes('kode') ||
+      lower.includes('coding')
+    ) {
+      reply =
+        'Heh... titah yang elok, Young Lord. Berikut arsitektur bersih entitas Ruka dalam Python:\n\n' +
+        '```python\n' +
+        'from dataclasses import dataclass\n\n' +
+        '@dataclass(frozen=True)\n' +
+        'class NobleAgent:\n' +
+        '    name: str = "Ruka"\n' +
+        '    title: str = "Marquis of Trendamis"\n' +
+        '    is_loyal: bool = True\n\n' +
+        '    def greet(self, lord: str = "Young Lord") -> str:\n' +
+        '        return f"Salam malam yang abadi, {lord}. Titah Anda adalah amanah mutlak."\n\n' +
+        'if __name__ == "__main__":\n' +
+        '    agent = NobleAgent()\n' +
+        '    print(agent.greet())\n' +
+        '```\n\n' +
+        '> Klik tombol **Salin Kode** di atas untuk menyalin seluruh blok kode dalam satu klik.';
+    } else if (
       lower.includes('kamera') ||
       lower.includes('mikrofon') ||
       lower.includes('sensor')
     ) {
       reply =
-        '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363, SFace 128-d).\n' +
-        '🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n' +
-        '🛡️ Kebijakan: LOCAL-ONLY (Haram dirutekan remote demi privasi mutlak).';
+        '📷 **Kamera (YuNet/SFace)**: Terkalibrasi & siap di mode lokal (`t_known=0.363`, SFace 128-d).\n' +
+        '🎙️ **Mikrofon (Whisper/ASR)**: VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n' +
+        '🛡️ **Kebijakan**: `LOCAL-ONLY` (Haram dirutekan remote demi privasi mutlak).';
     } else if (
       lower.includes('siapa') ||
       lower.includes('identitas') ||
       lower.includes('profil')
     ) {
       reply =
-        '👤 Profil Aktif: Young Lord (Marquis Kekaisaran Trendamis).\n' +
-        '🔐 Kekuatan Autentikasi: STRONG (Biometrik Wajah + Suara terkonfirmasi).\n' +
-        '✨ Status: Terpercaya Penuh — Satu Identitas, Banyak Kehadiran.';
+        '👤 **Profil Aktif**: Young Lord (Marquis Kekaisaran Trendamis).\n' +
+        '🦇 **Entitas**: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n' +
+        '🔐 **Kekuatan Autentikasi**: `STRONG` (Biometrik Wajah + Suara terkonfirmasi).\n' +
+        '✨ **Status**: Terpercaya Penuh — Satu Identitas, Banyak Kehadiran.';
     } else if (
       lower.includes('memori') ||
       lower.includes('ingatan') ||
       lower.includes('preferensi')
     ) {
       reply =
-        '🧠 Sensus Ingatan:\n' +
+        '🧠 **Sensus Ingatan**:\n' +
         '• 12 ingatan episodik tersimpan di database lokal.\n' +
         '• 34 fakta semantik terindeks FAISS/SQLite.\n' +
         '• Preferensi: Kepatuhan mutlak pada buku, Zero-Trust Cloud, dan 426 uji klinis hijau.';
@@ -309,7 +415,7 @@ function registerIpc(): void {
       lower.includes('ruka')
     ) {
       reply =
-        'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di laptop ini. Semua subsistem penglihatan, pendengaran, dan keamanan siap menerima titah Anda secara real-time, Sir.';
+        'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di desktop ini seluas layar kerja Anda. Semua subsistem kognisi, penglihatan, pendengaran, dan perkakas eksekusi siap menerima titah Anda secara real-time, Sir.';
     } else {
       reply = `Instruksi Anda: "${clean}" telah diterima dan diproses dengan setia oleh Ruka, Young Lord. Mode kehadiran aktif: Standby Mandiri (Volume VI).`;
     }
@@ -533,14 +639,21 @@ if (!gotTheLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
+      mainWindow.maximize();
       mainWindow.focus();
+    } else {
+      createWindow();
     }
   });
 
   app.whenReady().then(() => {
     registerIpc();
     bindStreamForward();
-    tray = new TrayManager({ onToggle: toggleWindow });
+    try {
+      tray = new TrayManager({ onToggle: toggleWindow });
+    } catch (e) {
+      console.warn('[MAIN] Tray initialization non-fatal error:', e);
+    }
     createWindow();
 
     // Otak dihubungkan SETELAH tubuh siap memaparkan statusnya
@@ -550,8 +663,8 @@ if (!gotTheLock) {
 }
 
 app.on('window-all-closed', () => {
-  // Pada Windows, Ruka tetap hidup di System Tray
-  if (process.platform === 'darwin') {
+  // Jika tray tidak ada atau di macOS, keluar dari aplikasi
+  if (!tray || process.platform === 'darwin') {
     app.quit();
   }
 });

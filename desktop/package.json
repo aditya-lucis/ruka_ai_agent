@@ -28,10 +28,6 @@
         "from": "resources/brain",
         "to": "brain",
         "filter": ["**/*"]
-      },
-      {
-        "from": "resources/brain/ruka.exe",
-        "to": "../ruka.exe"
       }
     ],
     "win": {

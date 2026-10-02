@@ -7,7 +7,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // Elements: Window & Navigation
   const btnMinimize = document.getElementById('btnMinimize');
+  const btnMaximize = document.getElementById('btnMaximize');
   const btnClose = document.getElementById('btnClose');
+  const iconMaximize = btnMaximize?.querySelector('.icon-maximize');
+  const iconRestore = btnMaximize?.querySelector('.icon-restore');
   const statusPulse = document.getElementById('statusPulse');
   const statusLabel = document.getElementById('statusLabel');
   const coreState = document.getElementById('coreState');
@@ -74,16 +77,57 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 1. Window Controls
+  // 1. Window Controls (Minimize, Maximize/Restore, Close to tray)
+  function updateMaximizeUI(isMax) {
+    if (isMax) {
+      iconMaximize?.classList.add('hidden');
+      iconRestore?.classList.remove('hidden');
+      if (btnMaximize) btnMaximize.title = 'Pulihkan Ukuran Jendela';
+    } else {
+      iconMaximize?.classList.remove('hidden');
+      iconRestore?.classList.add('hidden');
+      if (btnMaximize) btnMaximize.title = 'Maksimalkan Jendela';
+    }
+  }
+
   btnMinimize?.addEventListener('click', () => {
     if (window.electronAPI?.minimize) {
       window.electronAPI.minimize();
     }
   });
 
+  btnMaximize?.addEventListener('click', async () => {
+    if (window.electronAPI?.maximize) {
+      const isMax = await window.electronAPI.maximize();
+      updateMaximizeUI(isMax);
+    }
+  });
+
   btnClose?.addEventListener('click', () => {
     if (window.electronAPI?.close) {
       window.electronAPI.close();
+    }
+  });
+
+  // Cek status maximized awal
+  if (window.electronAPI?.isMaximized) {
+    window.electronAPI.isMaximized().then(updateMaximizeUI).catch(() => {});
+  }
+
+  // Pantau perubahan status maximize dari event jendela Electron
+  if (window.electronAPI?.onMaximizeChange) {
+    window.electronAPI.onMaximizeChange((isMax) => {
+      updateMaximizeUI(isMax);
+    });
+  }
+
+  // Klik ganda titlebar untuk toggle maximize (standar desktop UX)
+  const titlebar = document.querySelector('.titlebar');
+  titlebar?.addEventListener('dblclick', async (e) => {
+    if (e.target.closest('button') || e.target.closest('.brand-avatar-mini')) return;
+    if (window.electronAPI?.maximize) {
+      const isMax = await window.electronAPI.maximize();
+      updateMaximizeUI(isMax);
     }
   });
 
@@ -344,13 +388,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Pasang listener suara pada bubble pembuka awal
-  const initialSpeakBtn = chatFeed.querySelector('.message-ruka .msg-speak-btn');
-  if (initialSpeakBtn) {
-    initialSpeakBtn.addEventListener('click', () => {
-      const text = chatFeed.querySelector('.message-ruka .msg-text')?.innerText || '';
-      speakRukaResponse(text, initialSpeakBtn);
-    });
+  // Format awal dan pasang listener pada bubble pembuka
+  const initialBubble = chatFeed.querySelector('.message-ruka');
+  if (initialBubble) {
+    const textEl = initialBubble.querySelector('.msg-text');
+    const speakBtn = initialBubble.querySelector('.msg-speak-btn');
+    const copyBtn = initialBubble.querySelector('.msg-copy-btn');
+    if (textEl) {
+      const rawGreeting = textEl.textContent.trim();
+      textEl.innerHTML = formatMarkdown(rawGreeting);
+      if (copyBtn) copyBtn.setAttribute('data-raw-text', rawGreeting);
+      if (speakBtn) {
+        speakBtn.addEventListener('click', () => {
+          speakRukaResponse(rawGreeting, speakBtn);
+        });
+      }
+    }
   }
 
   // ==========================================================================
@@ -715,31 +768,32 @@ document.addEventListener('DOMContentLoaded', () => {
     chatFeed.scrollTop = chatFeed.scrollHeight;
 
     const onResponseReceived = (responseText) => {
-      // Gantikan indikator mengetik dengan teks jawaban
-      const bubbleContainer = typingBubble.querySelector('.ruka-bubble');
+      // Gantikan indikator mengetik dengan respons terformat AI Bot
       const textEl = typingBubble.querySelector('.msg-text');
       const speakBtn = typingBubble.querySelector('.msg-speak-btn');
+      const copyBtn = typingBubble.querySelector('.msg-copy-btn');
 
       if (textEl) {
-        textEl.innerHTML = '';
-        streamTextIntoElement(textEl, responseText, () => {
-          textEl.innerHTML = formatMarkdown(responseText);
-          coreState.textContent = 'Harmoni Penuh';
-          coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
-          chatFeed.scrollTop = chatFeed.scrollHeight;
+        textEl.innerHTML = formatMarkdown(responseText);
+        coreState.textContent = 'Harmoni Penuh';
+        coreAura.style.filter = 'drop-shadow(0 0 12px #a6e3a1)';
+        chatFeed.scrollTop = chatFeed.scrollHeight;
 
-          // Pasang click listener pada tombol speak
-          if (speakBtn) {
-            speakBtn.onclick = () => {
-              speakRukaResponse(responseText, speakBtn);
-            };
-          }
+        if (copyBtn) {
+          copyBtn.setAttribute('data-raw-text', responseText);
+        }
 
-          // Otomatis bersuara jika mode suara aktif
-          if (voiceEnabled) {
+        // Pasang click listener pada tombol speak
+        if (speakBtn) {
+          speakBtn.onclick = () => {
             speakRukaResponse(responseText, speakBtn);
-          }
-        });
+          };
+        }
+
+        // Otomatis bersuara jika mode suara aktif
+        if (voiceEnabled) {
+          speakRukaResponse(responseText, speakBtn);
+        }
       }
     };
 
@@ -764,12 +818,68 @@ document.addEventListener('DOMContentLoaded', () => {
           reply = `Hmm... saya telah menatap citra "${attachmentToSend.name}" yang Anda perlihatkan, Young Lord. Berdasarkan sensor penglihatan saya, komposisi dan polanya terpindai jelas. Ada detail khusus yang ingin Anda telaah lebih mendalam, Sir?`;
         } else if (attachmentToSend) {
           reply = `Heh... berkas "${attachmentToSend.name}" telah masuk ke dalam analisis cakar saya, My Lord. Sintaks dan strukturnya tersusun rapi, namun mari kita optimalkan jika ada logika yang butuh disempurnakan, Sir.`;
+        } else if (
+          lower.includes('excel') ||
+          lower.includes('rumus') ||
+          lower.includes('formula') ||
+          lower.includes('vlookup') ||
+          lower.includes('xlookup')
+        ) {
+          reply =
+            'Tentu, Young Lord. Berikut rumus Excel terstruktur untuk pencarian data dinamis dengan penanganan kondisi kosong:\n\n' +
+            '```excel\n' +
+            '=IF(ISBLANK(A2), "", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, "Tidak Ditemukan", 0), "Data Error"))\n' +
+            '```\n\n' +
+            'Dan berikut rumus untuk kalkulasi total akumulasi bersyarat:\n\n' +
+            '```excel\n' +
+            '=SUMIFS(Transaksi!$D$2:$D$5000, Transaksi!$B$2:$B$5000, ">=2026-01-01", Transaksi!$C$2:$C$5000, "Approved")\n' +
+            '```\n\n' +
+            '> Anda dapat menyalin rumus di atas hanya dengan **satu kali klik** pada tombol salin di sudut kartu formula.';
+        } else if (
+          lower.includes('cli') ||
+          lower.includes('terminal') ||
+          lower.includes('powershell') ||
+          lower.includes('perintah') ||
+          lower.includes('bash') ||
+          lower.includes('cmd')
+        ) {
+          reply =
+            'Siap, Young Lord. Berikut perintah CLI untuk memanggil Ruka secara global dari terminal mana pun:\n\n' +
+            '```bash\n' +
+            'ruka chat --voice "Salam malam, Marquis Trendamis"\n' +
+            '```\n\n' +
+            'Dan untuk memeriksa proses kognisi otak Ruka di PowerShell:\n\n' +
+            '```powershell\n' +
+            'Get-Process -Name "*ruka*" | Select-Object Id, ProcessName, CPU, WorkingSet64\n' +
+            '```\n\n' +
+            '> Cukup klik tombol **Salin Perintah** untuk menyalin ke clipboard seketika.';
+        } else if (
+          lower.includes('python') ||
+          lower.includes('kode') ||
+          lower.includes('coding')
+        ) {
+          reply =
+            'Heh... titah yang elok, Young Lord. Berikut arsitektur bersih entitas Ruka dalam Python:\n\n' +
+            '```python\n' +
+            'from dataclasses import dataclass\n\n' +
+            '@dataclass(frozen=True)\n' +
+            'class NobleAgent:\n' +
+            '    name: str = "Ruka"\n' +
+            '    title: str = "Marquis of Trendamis"\n' +
+            '    is_loyal: bool = True\n\n' +
+            '    def greet(self, lord: str = "Young Lord") -> str:\n' +
+            '        return f"Salam malam yang abadi, {lord}. Titah Anda adalah amanah mutlak."\n\n' +
+            'if __name__ == "__main__":\n' +
+            '    agent = NobleAgent()\n' +
+            '    print(agent.greet())\n' +
+            '```\n\n' +
+            '> Klik tombol **Salin Kode** di atas untuk menyalin seluruh blok kode dalam satu klik.';
         } else if (lower.includes('kamera') || lower.includes('mikrofon') || lower.includes('sensor')) {
-          reply = '📷 Kamera (YuNet/SFace): Terkalibrasi & siap di mode lokal (t_known=0.363).\n🎙️ Mikrofon (Faster-Whisper): VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n🛡️ Kebijakan: LOCAL-ONLY.';
+          reply = '📷 **Kamera (YuNet/SFace)**: Terkalibrasi & siap di mode lokal (`t_known=0.363`).\n🎙️ **Mikrofon (Whisper/ASR)**: VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n🛡️ **Kebijakan**: `LOCAL-ONLY`.';
         } else if (lower.includes('siapa') || lower.includes('identitas') || lower.includes('profil')) {
-          reply = '👤 Profil Pengguna: Young Lord (Marquis Kekaisaran Trendamis).\n🦇 Entitas: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n🔐 Autentikasi: STRONG (Biometrik Wajah & Suara Terverifikasi).\n✨ Status: Tenang, Agak Tengil, dan Setia Mutlak.';
+          reply = '👤 **Profil Pengguna**: Young Lord (Marquis Kekaisaran Trendamis).\n🦇 **Entitas**: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n🔐 **Autentikasi**: `STRONG` (Biometrik Wajah & Suara Terverifikasi).\n✨ **Status**: Tenang, Agak Tengil, dan Setia Mutlak.';
         } else if (lower.includes('memori') || lower.includes('ingatan') || lower.includes('preferensi')) {
-          reply = '🧠 Arsip Memori Nokturnal:\n• Saraf Kognisi & RAG Vektor Hibrida Aktif.\n• Preferensi: Clean architecture, Zero-Trust Cloud, & Pelayanan Ksatria kepada Young Lord.';
+          reply = '🧠 **Arsip Memori Nokturnal**:\n• Saraf Kognisi & RAG Vektor Hibrida Aktif.\n• Preferensi: Clean architecture, Zero-Trust Cloud, & Pelayanan Ksatria kepada Young Lord.';
         } else if (lower.includes('halo') || lower.includes('hai') || lower.includes('ruka')) {
           reply = 'Hmm... salam malam, Young Lord. Saya telah terjaga di balik bayangan beludru ini. Cakar dan nalar saya siap menerima titah Anda, Sir.';
         } else {
@@ -786,9 +896,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     msg.innerHTML = `
-      <img class="msg-avatar ruka-avatar" src="ruka-icon.png" width="28" height="28" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
+      <img class="msg-avatar ruka-avatar" src="ruka-icon.png" width="34" height="34" alt="Ruka">
       <div class="msg-bubble ruka-bubble">
-        <div class="msg-sender">Ruka</div>
+        <div class="msg-sender-row">
+          <span class="msg-sender-name">Ruka</span>
+          <span class="msg-sender-badge">Marquis Trendamis</span>
+        </div>
         <div class="msg-text">
           <div class="typing-dots">
             <span class="typing-dot"></span>
@@ -797,9 +910,16 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
         <div class="msg-footer">
-          <button class="msg-speak-btn" title="Dengarkan Suara Ruka">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-          </button>
+          <div class="msg-actions-left">
+            <button class="msg-copy-btn" title="Salin seluruh teks jawaban">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span class="btn-label">Salin</span>
+            </button>
+            <button class="msg-speak-btn" title="Dengarkan Suara Ruka">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+              <span class="btn-label">Suara Ruka</span>
+            </button>
+          </div>
           <div class="msg-time">${time}</div>
         </div>
       </div>
@@ -964,32 +1084,378 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Tokenizer & Syntax Highlighter untuk Code Cards
+  function highlightSyntax(rawCode, lang) {
+    const l = (lang || '').toLowerCase().trim();
+    const escaped = escapeHtml(rawCode);
+
+    // 1. RUMUS EXCEL & SPREADSHEET FORMULAS
+    if (l === 'excel' || l === 'xlsx' || l === 'formula' || l === 'sheets' || l === 'calc' || rawCode.trim().startsWith('=')) {
+      return escaped
+        // Strings: "..."
+        .replace(/(&quot;.*?&quot;)/g, '<span class="token-string">$1</span>')
+        // Excel Functions: SUM, IF, VLOOKUP, XLOOKUP, INDEX, MATCH, COUNTIF, etc.
+        .replace(/\b([A-Z_]{2,})(?=\()/g, '<span class="token-function font-bold">$1</span>')
+        // Cell references: A1, $A$1, B2:C10, Sheet1!A1
+        .replace(/(\$?[A-Za-z]+\$?[0-9]+(?::\$?[A-Za-z]+\$?[0-9]+)?)/g, '<span class="token-cell font-semibold">$1</span>')
+        // Operators: +, -, *, /, =, <, >, &
+        .replace(/([=+\-*/&<>!])/g, '<span class="token-operator">$1</span>')
+        // Numbers
+        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="token-number">$1</span>');
+    }
+
+    // 2. CLI / BASH / POWERSHELL / TERMINAL COMMANDS
+    if (l === 'bash' || l === 'sh' || l === 'cli' || l === 'shell' || l === 'cmd' || l === 'powershell' || l === 'ps1' || l === 'zsh' || l === 'terminal') {
+      return escaped
+        // Comments
+        .replace(/(#[^\n]*)/g, '<span class="token-comment">$1</span>')
+        // Quoted strings
+        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;|`.+?`)/g, '<span class="token-string">$1</span>')
+        // Flags: -m, --version, -la, etc.
+        .replace(/(\s)(--?[a-zA-Z0-9_-]+)/g, '$1<span class="token-flag">$2</span>')
+        // Core tools / commands: git, npm, npx, python, ruka, etc.
+        .replace(/\b(ruka|git|npm|npx|node|python|py|pip|pnpm|yarn|docker|curl|wget|cd|ls|dir|cat|grep|echo|mkdir|rm|cp|mv|powershell|Get-Process|Select-Object|Start-Process|Stop-Process)\b/g, '<span class="token-command font-bold">$1</span>')
+        // Prompts: $, >
+        .replace(/^(\s*[$&gt;]\s+)/gm, '<span class="token-prompt">$1</span>');
+    }
+
+    // 3. PYTHON
+    if (l === 'python' || l === 'py') {
+      return escaped
+        // Comments
+        .replace(/(#[^\n]*)/g, '<span class="token-comment">$1</span>')
+        // Strings
+        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;|f&quot;.*?&quot;|f&#39;.*?&#39;)/g, '<span class="token-string">$1</span>')
+        // Keywords
+        .replace(/\b(def|class|import|from|return|if|elif|else|while|for|in|try|except|finally|with|as|raise|yield|async|await|pass|break|continue|lambda)\b/g, '<span class="token-keyword font-bold">$1</span>')
+        // Builtins & Booleans
+        .replace(/\b(True|False|None|self|print|len|range|int|str|float|list|dict|set|tuple|isinstance|type)\b/g, '<span class="token-builtin">$1</span>')
+        // Function definitions & calls
+        .replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\()/g, '<span class="token-function">$1</span>')
+        // Numbers
+        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="token-number">$1</span>');
+    }
+
+    // 4. JAVASCRIPT / TYPESCRIPT
+    if (l === 'javascript' || l === 'js' || l === 'typescript' || l === 'ts') {
+      return escaped
+        // Comments
+        .replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, '<span class="token-comment">$1</span>')
+        // Strings
+        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;|`.*?`)/g, '<span class="token-string">$1</span>')
+        // Keywords
+        .replace(/\b(const|let|var|function|return|if|else|for|while|import|export|from|default|class|extends|new|this|async|await|try|catch|throw|typeof|interface|type)\b/g, '<span class="token-keyword font-bold">$1</span>')
+        // Builtins & Booleans
+        .replace(/\b(true|false|null|undefined|NaN|console|document|window)\b/g, '<span class="token-builtin">$1</span>')
+        // Function calls
+        .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\()/g, '<span class="token-function">$1</span>')
+        // Numbers
+        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="token-number">$1</span>');
+    }
+
+    // 5. SQL
+    if (l === 'sql') {
+      return escaped
+        .replace(/(--[^\n]*)/g, '<span class="token-comment">$1</span>')
+        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;)/g, '<span class="token-string">$1</span>')
+        .replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|DELETE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|BY|ORDER|HAVING|LIMIT|CREATE|TABLE|DROP|ALTER|AND|OR|NOT|AS|COUNT|SUM|AVG|MAX|MIN)\b/gi, '<span class="token-keyword font-bold">$1</span>');
+    }
+
+    // 6. JSON
+    if (l === 'json') {
+      return escaped
+        .replace(/(&quot;.*?&quot;)(?=\s*:)/g, '<span class="token-keyword font-bold">$1</span>')
+        .replace(/(&quot;.*?&quot;)(?!\s*:)/g, '<span class="token-string">$1</span>')
+        .replace(/\b(true|false|null)\b/g, '<span class="token-builtin">$1</span>')
+        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="token-number">$1</span>');
+    }
+
+    // Fallback general highlight
+    return escaped
+      .replace(/(\/\/[^\n]*|#[^\n]*)/g, '<span class="token-comment">$1</span>')
+      .replace(/(&quot;.*?&quot;|&#39;.*?&#39;)/g, '<span class="token-string">$1</span>')
+      .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="token-number">$1</span>');
+  }
+
+  function getLanguageMeta(lang, rawCode) {
+    let l = (lang || '').toLowerCase().trim();
+    if (!l) {
+      if (rawCode.trim().startsWith('=')) l = 'excel';
+      else if (/^\s*[$>]\s+|^\s*(ruka|git|npm|npx|pip|python|docker|curl|Get-Process)\b/m.test(rawCode)) l = 'cli';
+      else if (/\b(def|import|class\s+\w+:)/.test(rawCode)) l = 'python';
+      else if (/\b(const|let|function|console\.log)/.test(rawCode)) l = 'javascript';
+      else l = 'code';
+    }
+
+    if (l === 'excel' || l === 'xlsx' || l === 'formula' || l === 'sheets' || l === 'calc') {
+      return {
+        key: 'excel',
+        label: 'Rumus Excel',
+        copyLabel: 'Salin Rumus',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
+      };
+    }
+    if (l === 'bash' || l === 'sh' || l === 'cli' || l === 'shell' || l === 'powershell' || l === 'ps1' || l === 'cmd' || l === 'zsh' || l === 'terminal') {
+      const name = (l === 'powershell' || l === 'ps1') ? 'PowerShell' : (l === 'bash' ? 'Bash' : 'Perintah CLI');
+      return {
+        key: 'cli',
+        label: name,
+        copyLabel: 'Salin Perintah',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>'
+      };
+    }
+    if (l === 'python' || l === 'py') {
+      return {
+        key: 'python',
+        label: 'Python',
+        copyLabel: 'Salin Kode',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-5l4.5 2.5-4.5 2.5z"/></svg>'
+      };
+    }
+    if (l === 'javascript' || l === 'js') {
+      return {
+        key: 'javascript',
+        label: 'JavaScript',
+        copyLabel: 'Salin Kode',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+      };
+    }
+    if (l === 'typescript' || l === 'ts') {
+      return {
+        key: 'typescript',
+        label: 'TypeScript',
+        copyLabel: 'Salin Kode',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+      };
+    }
+    if (l === 'sql') {
+      return {
+        key: 'sql',
+        label: 'SQL Query',
+        copyLabel: 'Salin Query',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>'
+      };
+    }
+    return {
+      key: l,
+      label: l ? l.toUpperCase() : 'Kode',
+      copyLabel: 'Salin Kode',
+      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+    };
+  }
+
+  function renderMarkdownTable(tableLines) {
+    if (!tableLines || tableLines.length < 2) return tableLines.join('<br>');
+    let html = '<div class="chat-table-wrapper"><table class="chat-table">';
+
+    const headerCols = tableLines[0].split('|').map(c => c.trim()).filter((c, i, a) => !(i === 0 && !c) && !(i === a.length - 1 && !c));
+    html += '<thead><tr>';
+    headerCols.forEach(col => {
+      html += `<th>${escapeHtml(col)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    const startRow = (tableLines.length > 1 && tableLines[1].includes('-')) ? 2 : 1;
+    for (let r = startRow; r < tableLines.length; r++) {
+      const cols = tableLines[r].split('|').map(c => c.trim()).filter((c, i, a) => !(i === 0 && !c) && !(i === a.length - 1 && !c));
+      if (cols.length === 0) continue;
+      html += '<tr>';
+      for (let c = 0; c < headerCols.length; c++) {
+        html += `<td>${escapeHtml(cols[c] || '')}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    return html;
   }
 
   function formatMarkdown(text) {
     if (!text) return '';
-    let escaped = escapeHtml(text);
 
-    // Code blocks ```...```
-    escaped = escaped.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
-      return `<pre class="chat-code-block"><code>${code}</code></pre>`;
+    // Koleksi token sementara untuk blok khusus agar tidak tertimpa format inline
+    const codeBlocks = [];
+    const tableBlocks = [];
+
+    // 1. Ekstrak Code Blocks ```lang ... ```
+    let processed = text.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_match, lang, code) => {
+      const idx = codeBlocks.length;
+      const rawCode = code.replace(/\r\n/g, '\n').replace(/\n$/, '');
+      const meta = getLanguageMeta(lang, rawCode);
+      const highlighted = highlightSyntax(rawCode, meta.key);
+
+      const html = `
+        <div class="code-card">
+          <div class="code-card-header">
+            <div class="code-card-title">
+              <span class="code-card-icon">${meta.icon}</span>
+              <span class="code-card-lang">${meta.label}</span>
+            </div>
+            <button class="code-copy-btn" data-raw-code="${escapeHtml(rawCode)}" title="${meta.copyLabel}">
+              <span class="copy-icon-slot">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </span>
+              <span class="copy-label">${meta.copyLabel}</span>
+            </button>
+          </div>
+          <pre class="code-pre"><code class="code-content">${highlighted}</code></pre>
+        </div>
+      `;
+      codeBlocks.push(html);
+      return `__CODE_BLOCK_${idx}__`;
     });
 
-    // Inline code `...`
-    escaped = escaped.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
+    // 2. Ekstrak Markdown Tables (| ... | ... |)
+    const lines = processed.split(/\r?\n/);
+    const newLines = [];
+    let inTable = false;
+    let tableLines = [];
 
-    // Bold **text**
-    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('|') && line.endsWith('|')) {
+        inTable = true;
+        tableLines.push(line);
+      } else {
+        if (inTable) {
+          const tIdx = tableBlocks.length;
+          tableBlocks.push(renderMarkdownTable(tableLines));
+          newLines.push(`__TABLE_BLOCK_${tIdx}__`);
+          inTable = false;
+          tableLines = [];
+        }
+        newLines.push(lines[i]);
+      }
+    }
+    if (inTable && tableLines.length > 0) {
+      const tIdx = tableBlocks.length;
+      tableBlocks.push(renderMarkdownTable(tableLines));
+      newLines.push(`__TABLE_BLOCK_${tIdx}__`);
+    }
 
-    // Markdown links [Title](url)
-    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, title, url) => {
+    processed = newLines.join('\n');
+
+    // 3. Escape HTML untuk teks umum
+    processed = escapeHtml(processed);
+
+    // 4. Headings
+    processed = processed.replace(/^### (.*$)/gim, '<h3 class="chat-h3">$1</h3>');
+    processed = processed.replace(/^## (.*$)/gim, '<h2 class="chat-h2">$1</h2>');
+    processed = processed.replace(/^# (.*$)/gim, '<h1 class="chat-h1">$1</h1>');
+
+    // 5. Blockquotes (> ...)
+    processed = processed.replace(/^(&gt;|>)\s?(.*$)/gim, '<blockquote class="chat-blockquote">$2</blockquote>');
+
+    // 6. Inline Code (`code`) dengan 1-klik salin
+    processed = processed.replace(/`([^`]+)`/g, (_m, code) => {
+      const unescaped = code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+      return `<code class="chat-inline-code" data-inline-code="${escapeHtml(unescaped)}" title="Klik untuk menyalin">${code}<span class="inline-copy-hint">📋</span></code>`;
+    });
+
+    // 7. Bold, Italic, Strikethrough
+    processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    processed = processed.replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
+    processed = processed.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+    // 8. Markdown Links [title](url)
+    processed = processed.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, title, url) => {
       return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-markdown-link" title="${url}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>${title}</a>`;
     });
 
-    // Line breaks
-    escaped = escaped.replace(/\n/g, '<br>');
+    // 9. Lists
+    processed = processed.replace(/^[\*\-\+]\s+(.*$)/gim, '<li class="chat-li">$1</li>');
+    processed = processed.replace(/(<li class="chat-li">[\s\S]*?<\/li>)/g, '<ul class="chat-ul">$1</ul>');
+    processed = processed.replace(/<\/ul>\s*<ul class="chat-ul">/g, '');
 
-    return escaped;
+    // 10. Line breaks (kecuali setelah elemen blok)
+    processed = processed.replace(/\n/g, '<br>');
+    processed = processed.replace(/<br>(<\/?(?:h1|h2|h3|blockquote|ul|li|div|pre|table))/gi, '$1');
+    processed = processed.replace(/(<\/(?:h1|h2|h3|blockquote|ul|li|div|pre|table)>)<br>/gi, '$1');
+
+    // 11. Kembalikan Table Blocks
+    tableBlocks.forEach((tbl, i) => {
+      processed = processed.replace(new RegExp(`__TABLE_BLOCK_${i}__`, 'g'), tbl);
+    });
+
+    // 12. Kembalikan Code Blocks
+    codeBlocks.forEach((cb, i) => {
+      processed = processed.replace(new RegExp(`__CODE_BLOCK_${i}__`, 'g'), cb);
+    });
+
+    return processed;
   }
+
+  // Delegated Click Listener untuk 1-Click Copy (Code Cards, Inline Code, & Full Message)
+  chatFeed.addEventListener('click', async (e) => {
+    // 1. Tombol Salin Kode / Rumus / Perintah (Code Card)
+    const copyBtn = e.target.closest('.code-copy-btn');
+    if (copyBtn) {
+      const code = copyBtn.getAttribute('data-raw-code');
+      if (code) {
+        try {
+          await navigator.clipboard.writeText(code);
+          copyBtn.classList.add('copied');
+          const label = copyBtn.querySelector('.copy-label');
+          const iconSlot = copyBtn.querySelector('.copy-icon-slot');
+          const oldLabel = label ? label.textContent : 'Salin';
+          if (label) label.textContent = 'Tersalin! ✓';
+          if (iconSlot) {
+            iconSlot.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          }
+          setTimeout(() => {
+            copyBtn.classList.remove('copied');
+            if (label) label.textContent = oldLabel;
+            if (iconSlot) {
+              iconSlot.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+            }
+          }, 2000);
+        } catch (err) {
+          console.warn('Copy to clipboard failed:', err);
+        }
+      }
+      return;
+    }
+
+    // 2. Klik pada Inline Code (`code`)
+    const inlineCode = e.target.closest('.chat-inline-code');
+    if (inlineCode) {
+      const raw = inlineCode.getAttribute('data-inline-code') || inlineCode.textContent.replace('📋', '').trim();
+      if (raw) {
+        try {
+          await navigator.clipboard.writeText(raw);
+          inlineCode.classList.add('inline-copied');
+          const hint = inlineCode.querySelector('.inline-copy-hint');
+          if (hint) hint.textContent = '✓';
+          setTimeout(() => {
+            inlineCode.classList.remove('inline-copied');
+            if (hint) hint.textContent = '📋';
+          }, 1500);
+        } catch (err) {}
+      }
+      return;
+    }
+
+    // 3. Tombol Salin Seluruh Jawaban Ruka (Footer Bubble)
+    const msgCopyBtn = e.target.closest('.msg-copy-btn');
+    if (msgCopyBtn) {
+      const bubble = msgCopyBtn.closest('.msg-bubble');
+      const textToCopy = msgCopyBtn.getAttribute('data-raw-text') || bubble?.querySelector('.msg-text')?.innerText || '';
+      if (textToCopy) {
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          msgCopyBtn.classList.add('copied');
+          const span = msgCopyBtn.querySelector('.btn-label');
+          if (span) span.textContent = 'Tersalin! ✓';
+          setTimeout(() => {
+            msgCopyBtn.classList.remove('copied');
+            if (span) span.textContent = 'Salin';
+          }, 2000);
+        } catch (err) {}
+      }
+      return;
+    }
+  });
 });

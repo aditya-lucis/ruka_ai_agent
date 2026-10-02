@@ -99,19 +99,27 @@ class RukaBrainServer:
             from ruka_companion.identity.engine import IdentityEngine, IdentityProfile
             from ruka_companion.identity.types import ModalitySignal, Modality
             from ruka_companion.vision.camera import SensorState
-            from ruka_companion.presence.engine import PresenceCalculator
+            from ruka_companion.presence.engine import PresenceEngine
             self.identity_engine = IdentityEngine()
-            self.presence_calc = PresenceCalculator()
+            self.presence_calc = PresenceEngine()
             print("[BRAIN] Subsistem Companion Volume VI siap.")
         except Exception as e:
             print(f"[BRAIN] Companion module fallback: {e}")
             self.identity_engine = None
+            self.presence_calc = None
 
         try:
             from src.config import load_config
             from src.llm.gemini_client import GeminiClient
             from src.ruka_cognition.brain import RukaCognitiveBrain
             cfg = load_config()
+            try:
+                self.llm_client = GeminiClient(cfg)
+                print(f"[BRAIN] GeminiClient aktif terhubung ke model: {getattr(cfg, 'model', 'default')}")
+            except Exception as e_llm:
+                print(f"[BRAIN] Peringatan: GeminiClient gagal diinisialisasi ({e_llm})")
+                self.llm_client = None
+
             data_dir = Path(local_appdata) / "ruka"
             data_dir.mkdir(parents=True, exist_ok=True)
             db_file = str(data_dir / "ruka.db")
@@ -126,7 +134,8 @@ class RukaBrainServer:
             print("[BRAIN] Saraf Buatan, Advanced RAG, dan Human Persona Engine AKTIF!")
         except Exception as e:
             print(f"[BRAIN] Peringatan: CognitiveBrain fallback ({e})")
-            self.llm_client = None
+            if not hasattr(self, "llm_client"):
+                self.llm_client = None
             self.brain = None
 
         try:
@@ -560,8 +569,48 @@ class RukaBrainServer:
             lines.append("\nAda cabang informasi tertentu yang ingin kita telaah lebih mendalam, Sir?")
             return "\n".join(lines)
 
-        # 4. Fallback jika offline
-        if "halo" in clean or "hai" in clean or "pagi" in clean or "siang" in clean:
+        # 4. Fallback teknis offline/fallback jika koneksi internet terputus
+        if any(w in clean for w in ["cli", "powershell", "perintah", "proses", "jaringan", "terminal", "cmd"]):
+            return (
+                "Tentu, Young Lord. Berikut perintah PowerShell esensial untuk memeriksa status proses berjalan dan koneksi jaringan:\n\n"
+                "```powershell\n"
+                "# 1. Pantau 10 proses yang mengonsumsi CPU/Memori tertinggi\n"
+                "Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Id, ProcessName, CPU, WorkingSet\n\n"
+                "# 2. Periksa status seluruh soket jaringan aktif dan port yang sedang listen\n"
+                "Get-NetTCPConnection -State Listen | Select-Object LocalAddress, LocalPort, OwningProcess | Sort-Object LocalPort\n\n"
+                "# 3. Uji latensi koneksi ke server target\n"
+                "Test-NetConnection -ComputerName 1.1.1.1 -Port 53\n"
+                "```\n\n"
+                "Silakan salin blok di atas dengan sekali klik tombol salin di kanan atas kartu kode, My Lord."
+            )
+        elif any(w in clean for w in ["excel", "rumus", "formula", "vlookup", "xlookup"]):
+            return (
+                "Titah Anda adalah perintah bagi saya, Young Lord. Berikut rumus Excel presisi tinggi dengan penanganan error dinamis:\n\n"
+                "```excel\n"
+                "=IF(ISBLANK(A2), \"\", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, \"Tidak Ditemukan\", 0), \"Data Error\"))\n"
+                "```\n\n"
+                "Dan rumus kalkulasi akumulasi bersyarat:\n\n"
+                "```excel\n"
+                "=SUMIFS(Transaksi!$D$2:$D$5000, Transaksi!$B$2:$B$5000, A2, Transaksi!$C$2:$C$5000, \">=01/01/2026\")\n"
+                "```\n\n"
+                "Gunakan tombol salin di atas untuk menempelkannya langsung ke spreadsheet Anda, Sir."
+            )
+        elif any(w in clean for w in ["python", "koding", "script", "kode"]):
+            return (
+                "Heh... koding hanyalah permainan cakar bagi saya, Young Lord. Berikut contoh implementasi bersih:\n\n"
+                "```python\n"
+                "import os\n"
+                "import psutil\n\n"
+                "def monitor_system():\n"
+                "    cpu = psutil.cpu_percent(interval=1)\n"
+                "    mem = psutil.virtual_memory().percent\n"
+                "    return f\"CPU: {cpu}% | RAM: {mem}%\"\n\n"
+                "if __name__ == '__main__':\n"
+                "    print(monitor_system())\n"
+                "```\n\n"
+                "Tinggal satu kali klik pada tombol salin, My Lord."
+            )
+        elif "halo" in clean or "hai" in clean or "pagi" in clean or "siang" in clean:
             return (
                 "Salam takzim, Young Lord! Otak Python dan tubuh Electron kini telah tersambung secara langsung via loopback IPC. Seluruh nalar kognisi Ruka siap melayani instruksi Anda, Sir."
             )
@@ -570,7 +619,10 @@ class RukaBrainServer:
                 "🧠 **Ingatan Tersimpan**: 12 catatan episodik, 34 fakta semantik, dan preferensi arsitektur buku tersimpan di basis data SQLite WAL lokal."
             )
         else:
-            return f"Instruksi Anda: \"{text}\" telah diterima dan diproses oleh sistem pendamping Ruka, Young Lord."
+            return (
+                f"Titah Anda: \"{text}\" telah terindeks ke dalam cakar nalar saya, Young Lord. "
+                "Seluruh sistem sadar dan empati Ruka siaga penuh mendampingi Anda, Sir."
+            )
 
     def stop(self):
         print("\n[BRAIN] Menghentikan otak Python secara sopan...")

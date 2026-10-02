@@ -13,6 +13,14 @@ import socket
 import subprocess
 from pathlib import Path
 
+# Pastikan output konsol Windows mendukung UTF-8 dan warna ANSI tanpa crash
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    os.system("")
+
 # Warna ANSI terminal
 CYAN = "\033[96m"
 MAGENTA = "\033[95m"
@@ -47,31 +55,38 @@ def get_ipc_connection(timeout: float = 4.0) -> tuple[socket.socket, dict] | Non
                 token = data.get("token")
                 if port and token:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(12.0)
-                    s.connect(("127.0.0.1", port))
-                    # Handshake
-                    hello_env = {
-                        "type": "request",
-                        "channel": "hello",
-                        "correlationId": "cli-hello",
-                        "payload": {"token": token},
-                    }
-                    s.sendall((json.dumps(hello_env) + "\n").encode("utf-8"))
-                    f = s.makefile("r", encoding="utf-8")
-                    resp_line = f.readline()
-                    if resp_line:
-                        resp = json.loads(resp_line)
-                        if resp.get("payload", {}).get("ok"):
-                            return s, data
+                    s.settimeout(60.0)
+                    try:
+                        s.connect(("127.0.0.1", port))
+                        # Handshake
+                        hello_env = {
+                            "type": "request",
+                            "channel": "hello",
+                            "correlationId": "cli-hello",
+                            "payload": {"token": token},
+                        }
+                        s.sendall((json.dumps(hello_env) + "\n").encode("utf-8"))
+                        f = s.makefile("r", encoding="utf-8")
+                        resp_line = f.readline()
+                        if resp_line:
+                            resp = json.loads(resp_line)
+                            if resp.get("payload", {}).get("ok"):
+                                return s, data
+                        s.close()
+                    except Exception:
+                        try:
+                            s.close()
+                        except Exception:
+                            pass
             except Exception:
                 pass
-        time.sleep(0.4)
+        time.sleep(0.5)
     return None
 
 
 def ensure_brain_running() -> tuple[socket.socket, dict] | None:
     """Memastikan Otak Ruka aktif, atau menyalakannya jika belum berjalan."""
-    conn = get_ipc_connection(timeout=1.0)
+    conn = get_ipc_connection(timeout=1.5)
     if conn:
         return conn
 
@@ -102,7 +117,7 @@ def ensure_brain_running() -> tuple[socket.socket, dict] | None:
                 pass
 
     if spawned:
-        return get_ipc_connection(timeout=8.0)
+        return get_ipc_connection(timeout=25.0)
 
     print(f"{RED}[!] Gagal membangunkan Otak Ruka. Pastikan Ruka terpasang dengan benar.{RESET}")
     return None

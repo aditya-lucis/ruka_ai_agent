@@ -41,12 +41,17 @@ export class TrayManager {
   private state: RuntimeState = 'disconnected';
 
   constructor(private opts: TrayOptions) {
-    this.tray = new Tray(this.getIcon('disconnected'));
-    this.tray.setToolTip('RUKA — The Persistent Mind');
-    this.rebuild();
+    try {
+      this.tray = new Tray(this.getIcon('disconnected'));
+      this.tray.setToolTip('RUKA — The Persistent Mind');
+      this.rebuild();
 
-    // Klik kiri = toggle jendela (Windows). Klik kanan = menu konteks
-    this.tray.on('click', () => this.opts.onToggle());
+      // Klik kiri = toggle jendela (Windows). Klik kanan = menu konteks
+      this.tray.on('click', () => this.opts.onToggle());
+    } catch (e) {
+      console.warn('[TRAY] Non-fatal: could not initialize system tray:', e);
+      this.tray = null;
+    }
   }
 
   private getIcon(s: RuntimeState): Electron.NativeImage {
@@ -65,9 +70,20 @@ export class TrayManager {
       version_mismatch: '#f38ba8',// Red
     };
 
-    const assetPath = path.join(__dirname, '..', 'assets', fileMap[s]);
-    if (fs.existsSync(assetPath)) {
-      return nativeImage.createFromPath(assetPath);
+    try {
+      const assetPath = path.join(__dirname, '..', 'assets', fileMap[s]);
+      if (fs.existsSync(assetPath)) {
+        const img = nativeImage.createFromPath(assetPath);
+        if (!img.isEmpty()) return img;
+      }
+      // Coba fallback icon.png utama jika ikon tray khusus tidak terbaca
+      const mainIconPath = path.join(__dirname, '..', 'assets', 'icon.png');
+      if (fs.existsSync(mainIconPath)) {
+        const img = nativeImage.createFromPath(mainIconPath);
+        if (!img.isEmpty()) return img.resize({ width: 16, height: 16 });
+      }
+    } catch {
+      // Abaikan bila ada issue filesystem
     }
     return generateSvgIcon(colorMap[s]);
   }
@@ -75,37 +91,49 @@ export class TrayManager {
   showState(s: RuntimeState): void {
     this.state = s;
     if (!this.tray) return;
-    this.tray.setImage(this.getIcon(s));
-    this.tray.setToolTip(`RUKA — ${STATE_LABEL[s]}`);
-    this.rebuild();
+    try {
+      this.tray.setImage(this.getIcon(s));
+      this.tray.setToolTip(`RUKA — ${STATE_LABEL[s]}`);
+      this.rebuild();
+    } catch {
+      // Abaikan jika pembaruan ikon tray gagal di Windows
+    }
   }
 
   private rebuild(): void {
     if (!this.tray) return;
-    const label = STATE_LABEL[this.state];
-    this.tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: `Status: ${label}`, enabled: false },
-        { type: 'separator' },
-        {
-          label: 'Tampilkan / Sembunyikan Jendela',
-          click: () => this.opts.onToggle(),
-        },
-        {
-          label: 'Diagnostik Runtime',
-          click: () => this.opts.onToggle(),
-        },
-        { type: 'separator' },
-        {
-          label: 'Keluar dari RUKA',
-          click: () => app.quit(),
-        },
-      ])
-    );
+    try {
+      const label = STATE_LABEL[this.state];
+      this.tray.setContextMenu(
+        Menu.buildFromTemplate([
+          { label: `Status: ${label}`, enabled: false },
+          { type: 'separator' },
+          {
+            label: 'Tampilkan / Sembunyikan Jendela',
+            click: () => this.opts.onToggle(),
+          },
+          {
+            label: 'Diagnostik Runtime',
+            click: () => this.opts.onToggle(),
+          },
+          { type: 'separator' },
+          {
+            label: 'Keluar dari RUKA',
+            click: () => app.quit(),
+          },
+        ])
+      );
+    } catch {
+      // Abaikan jika setContextMenu gagal
+    }
   }
 
   destroy(): void {
-    this.tray?.destroy();
+    try {
+      this.tray?.destroy();
+    } catch {
+      // Abaikan
+    }
     this.tray = null;
   }
 }

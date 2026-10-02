@@ -122,6 +122,13 @@ contextBridge.exposeInMainWorld('ruka', api);
 
 contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.invoke('window:minimize'),
+  maximize: () => ipcRenderer.invoke('window:maximize'),
+  isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
   close: () => ipcRenderer.invoke('window:close'),
+  onMaximizeChange: (cb: (isMax: boolean) => void) => {
+    const wrapped = (_e: unknown, isMax: boolean) => cb(isMax);
+    ipcRenderer.on('window:maximize-change', wrapped);
+    return () => ipcRenderer.removeListener('window:maximize-change', wrapped);
+  },
 });
 
