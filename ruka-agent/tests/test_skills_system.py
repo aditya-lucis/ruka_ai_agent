@@ -175,8 +175,16 @@ class TestCodingBridge:
         assert reg.get("code_read") is not None
         assert reg.get("code_edit") is not None
 
-        # Tulis berkas menggunakan skill code_write
-        res_write = runtime.execute("code_write", args={"path": "hello.txt", "content": "Line 1\nLine 2\nLine 3\n"})
+        # Tanpa persetujuan, penulisan harus ditolak dan tidak ada berkas dibuat
+        refused = runtime.execute("code_write", args={"path": "hello.txt", "content": "x"})
+        assert refused.success is False
+        assert not (tmp_path / "hello.txt").exists()
+
+        res_write = runtime.execute(
+            "code_write",
+            args={"path": "hello.txt", "content": "Line 1\nLine 2\nLine 3\n"},
+            confirm_granted=True,
+        )
         assert res_write.success is True
 
         # Baca berkas menggunakan skill code_read
@@ -185,7 +193,11 @@ class TestCodingBridge:
         assert "Line 2" in res_read.data["content"]
 
         # Edit berkas menggunakan skill code_edit
-        res_edit = runtime.execute("code_edit", args={"path": "hello.txt", "old_string": "Line 2", "new_string": "Line Modified"})
+        res_edit = runtime.execute(
+            "code_edit",
+            args={"path": "hello.txt", "old_string": "Line 2", "new_string": "Line Modified"},
+            confirm_granted=True,
+        )
         assert res_edit.success is True
 
         # Pastikan berkas berubah

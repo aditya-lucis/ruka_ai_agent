@@ -45,6 +45,17 @@ class SkillsRuntime:
         self.permission_mgr = permission_manager
         self.event_bus = event_bus or EventBus()
 
+    def needs_approval(self, skill: Skill | str) -> bool:
+        """True bila skill harus mendapat persetujuan Young Lord sebelum dijalankan."""
+        if isinstance(skill, str):
+            found = self.registry.get(skill)
+            if found is None:
+                return False
+            skill = found
+        return self.permission_mgr.requires_approval(
+            skill.risk_level, skill.requires_confirmation, skill.permissions
+        )
+
     def execute(
         self,
         skill_name: str,
@@ -79,10 +90,7 @@ class SkillsRuntime:
             )
 
         # 2. Pemeriksaan Konfirmasi Aksi Berisiko (Human-in-the-Loop)
-        if (
-            self.permission_mgr.requires_confirmation(skill.risk_level, skill.requires_confirmation)
-            and not confirm_granted
-        ):
+        if self.needs_approval(skill) and not confirm_granted:
             err = (
                 f"Aksi membutuhkan konfirmasi eksplisit dari Young Lord "
                 f"(Tingkat risiko: {skill.risk_level})."

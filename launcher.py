@@ -315,10 +315,26 @@ class RukaBrainServer:
             user_text = payload.get("text", "")
             attachment = payload.get("attachment")
             print(f"[BRAIN] Nalar saraf & RAG memproses: '{user_text}', attachment={bool(attachment)}")
+
+            workspace_note = ""
+            client_cwd = payload.get("cwd")
+            gw = getattr(self, "gateway", None)
+            if client_cwd and gw is not None:
+                try:
+                    applied = gw.permission_mgr.set_workspace(client_cwd)
+                    print(f"[BRAIN] Workspace PathJail aktif: {applied}")
+                except Exception as ws_err:
+                    print(f"[BRAIN] Workspace ditolak ({client_cwd}): {ws_err}")
+                    workspace_note = (
+                        f"\n\n_(Catatan: folder kerja `{client_cwd}` ditolak oleh PathJail — {ws_err} "
+                        f"Hamba tetap bekerja di `{gw.permission_mgr.jail.base}`.)_"
+                    )
+
             if self.brain is not None:
                 reply = self.brain.think_and_reply(user_text, attachment=attachment)
             else:
                 reply = self._generate_response(user_text)
+            reply = f"{reply}{workspace_note}"
             return {
                 "type": "response",
                 "channel": channel,

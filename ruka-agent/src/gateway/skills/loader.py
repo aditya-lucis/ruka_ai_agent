@@ -149,7 +149,7 @@ class SkillLoader:
         if not skill_file.exists():
             raise FileNotFoundError(f"Berkas SKILL.md tidak ditemukan di: {p}")
 
-        content = skill_file.read_text(encoding="utf-8", errors="replace")
+        content = skill_file.read_text(encoding="utf-8-sig", errors="replace")
         meta, body = parse_yaml_frontmatter(content)
 
         # Validasi field wajib

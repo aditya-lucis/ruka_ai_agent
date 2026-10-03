@@ -11,6 +11,7 @@ import logging
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 import uuid
@@ -26,6 +27,12 @@ from src.gateway.channels.desktop import DesktopChannelAdapter
 from src.gateway.channels.cli import CliChannelAdapter
 from src.gateway.skills.registry import SkillRegistry
 from src.gateway.skills.runtime import SkillsRuntime
+from src.gateway.confirmations import (
+    ConfirmationError,
+    ConfirmationManager,
+    describe_action,
+    render_ticket_card,
+)
 from src.gateway.skills.coding_bridge import register_builtin_coding_skills
 from src.math_foundations.control import BudgetController, loop_health
 
@@ -52,6 +59,7 @@ class RukaGatewayServer:
         self.session_mgr = SessionManager()
         self.event_bus = EventBus()
         self.permission_mgr = PermissionManager(workspace_root)
+        self.confirmations = ConfirmationManager(event_bus=self.event_bus)
         self.budget_ctrl = BudgetController()
         self.brain = brain
 
@@ -65,12 +73,20 @@ class RukaGatewayServer:
         try:
             candidates = [
                 Path(sys.executable).parent / "skills",
+                Path(sys.executable).parent / "_internal" / "skills",
+                Path(sys.executable).parent / "resources" / "brain" / "skills",
+                Path(sys.executable).parent / "resources" / "skills",
                 Path(getattr(sys, "_MEIPASS", "")) / "skills",
                 Path.cwd() / "skills",
                 Path(__file__).resolve().parent.parent.parent.parent / "skills",
             ]
             skills_dir = next((p for p in candidates if p.exists() and p.is_dir()), candidates[-1])
-            register_builtin_coding_skills(self.skill_registry, skills_dir=skills_dir, workspace_root=workspace_root)
+            register_builtin_coding_skills(
+                self.skill_registry,
+                skills_dir=skills_dir,
+                workspace_root=workspace_root,
+                jail=self.permission_mgr.jail,
+            )
         except Exception as e_reg:
             log.warning("Peringatan saat mendaftarkan coding skills: %s", e_reg)
 
@@ -100,6 +116,85 @@ class RukaGatewayServer:
         if self.brain is not None:
             self.brain.skill_registry = self.skill_registry
             self.brain.skills_runtime = self.skills_runtime
+            self.brain.confirmations = self.confirmations
+
+    def _handle_skill_execute(self, msg: InboundMessage, session_id: str) -> OutboundMessage:
+        """Run a skill. Gated skills require a server-issued, single-use confirmation ticket.
+
+        A client-supplied ``confirm_granted`` flag is never trusted.
+        """
+
+        def reply(ok: bool, content: dict[str, Any]) -> OutboundMessage:
+            return OutboundMessage(
+                type="response" if ok else "error",
+                channel=msg.channel,
+                session_id=session_id,
+                correlation_id=msg.correlation_id,
+                content=content,
+            )
+
+        if msg.content.get("confirm_granted"):
+            log.warning("confirm_granted dari klien diabaikan (sesi %s).", session_id)
+
+        ticket_id = msg.content.get("confirmation_id")
+        skill_name = msg.content.get("skill_name", "")
+        args = msg.content.get("args", {})
+        if not isinstance(args, dict):
+            return reply(False, {"success": False, "error": "args harus berupa objek"})
+        workspace = str(self.permission_mgr.jail.base)
+
+        if ticket_id:
+            if msg.content.get("deny"):
+                ticket = self.confirmations.get(str(ticket_id))
+                if ticket is None or ticket.session_id != session_id:
+                    return reply(False, {"success": False, "error": "titah tidak ditemukan"})
+                self.confirmations.deny(ticket.ticket_id)
+                return reply(True, {"success": True, "denied": True})
+            ticket = self.confirmations.get(str(ticket_id))
+            if ticket is not None and skill_name and skill_name != ticket.skill_name:
+                return reply(False, {"success": False, "error": "skill tidak sesuai dengan titah"})
+            if ticket is not None and ticket.session_id == session_id and ticket.workspace != workspace:
+                self.confirmations.deny(ticket.ticket_id)
+                return reply(False, {"success": False, "error": "ruang kerja berubah; titah dibatalkan"})
+            try:
+                ticket = self.confirmations.consume(str(ticket_id), session_id)
+            except ConfirmationError as exc:
+                return reply(False, {"success": False, "error": str(exc)})
+            res = self.skills_runtime.execute(
+                skill_name=ticket.skill_name,
+                args=ticket.args,
+                session_id=session_id,
+                confirm_granted=True,
+            )
+            return reply(res.success, res.to_dict())
+
+        if self.skills_runtime.needs_approval(skill_name):
+            skill = self.skill_registry.get(skill_name)
+            try:
+                ticket = self.confirmations.request(
+                    session_id,
+                    skill_name,
+                    args,
+                    risk_level=str(getattr(skill, "risk_level", "high")),
+                    workspace=workspace,
+                    summary=describe_action(skill_name, args, workspace),
+                )
+            except ConfirmationError as exc:
+                return reply(False, {"success": False, "error": str(exc)})
+            return reply(
+                False,
+                {
+                    "success": False,
+                    "error": "confirmation_required",
+                    "confirmation_id": ticket.ticket_id,
+                    "card": render_ticket_card(ticket),
+                },
+            )
+
+        res = self.skills_runtime.execute(
+            skill_name=skill_name, args=args, session_id=session_id, confirm_granted=False
+        )
+        return reply(res.success, res.to_dict())
 
     def dispatch_inbound(self, msg: InboundMessage) -> OutboundMessage:
         """Memproses pesan masuk dari sembarang saluran secara terpusat."""
@@ -142,22 +237,7 @@ class RukaGatewayServer:
 
         # Permintaan eksekusi skill langsung
         if ipc_channel == "ruka:skill-execute" or msg.type == "skill.execute":
-            skill_name = msg.content.get("skill_name", "")
-            args = msg.content.get("args", {})
-            confirmed = msg.content.get("confirm_granted", False)
-            res = self.skills_runtime.execute(
-                skill_name=skill_name,
-                args=args,
-                session_id=sess.session_id,
-                confirm_granted=confirmed,
-            )
-            return OutboundMessage(
-                type="response" if res.success else "error",
-                channel=msg.channel,
-                session_id=sess.session_id,
-                correlation_id=msg.correlation_id,
-                content=res.to_dict(),
-            )
+            return self._handle_skill_execute(msg, sess.session_id)
 
         # Status runtime / Health check
         if ipc_channel == "ruka:runtime-status" or msg.type == "status":

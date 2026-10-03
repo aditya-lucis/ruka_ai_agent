@@ -8,7 +8,7 @@ author: Ruka Core Team
 license: MIT
 tags: [coding, filesystem, edit, refactor]
 risk_level: medium
-requires_confirmation: false
+requires_confirmation: true
 permissions:
   - filesystem:read
   - filesystem:write

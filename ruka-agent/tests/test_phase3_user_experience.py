@@ -88,10 +88,10 @@ def test_register_git_tools(git_repo):
     _, jail = git_repo
     reg = ToolRegistry()
     tools = register_git_tools(reg, jail=jail)
-    assert len(tools) == 3
+    assert len(tools) == 4
 
     names = {d["name"] for d in reg.declarations()}
-    assert {"git_status", "git_diff", "git_log"}.issubset(names)
+    assert {"git_status", "git_diff", "git_log", "git_commit"}.issubset(names)
 
 
 # ============================================================

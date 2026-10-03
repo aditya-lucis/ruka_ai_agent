@@ -8,7 +8,7 @@ author: Ruka Core Team
 license: MIT
 tags: [coding, terminal, shell, execution]
 risk_level: high
-requires_confirmation: false
+requires_confirmation: true
 permissions:
   - shell:execute
 timeout_seconds: 60

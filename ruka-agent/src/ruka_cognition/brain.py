@@ -21,44 +21,133 @@ from google.genai import types
 
 from src.ruka_cognition.neural.features import hashed_trigram_features, lexical_overlap
 from src.ruka_cognition.context.relevance import ContextCandidate, ContextRelevanceEngine
+from src.ruka_cognition.agentic import (
+    AGENTIC_DOCTRINE,
+    READ_ONLY_SKILLS,
+    AgenticLoop,
+    LoopOutcome,
+    PlanStep,
+    StepResult,
+    build_decision_prompt,
+    execute_plan,
+    fallback_summary,
+    format_results_context,
+    is_agentic_request,
+    make_simple_plan,
+    needs_multistep,
+    parse_decision,
+    strip_fake_tool_calls,
+)
+from src.gateway.confirmations import (
+    ConfirmationError,
+    ConfirmationManager,
+    PendingAction,
+    describe_action,
+    parse_approval,
+    render_ticket_card,
+)
+from src.tools.coding import RunTerminalTool
 
 # Kategori Nalar
 INTENTS = ("code_help", "question", "command", "lookup", "chitchat")
 
 _EXPANDED_RULES: dict[str, list[str]] = {
     "code_help": [
-        r"\bcode\b", r"\bcoding\b", r"\bkoding\b", r"\bbug\b", r"\berror\b",
-        r"\bdebug\b", r"\brefactor\b", r"\btest\b", r"\btypescript\b", r"\bjavascript\b",
-        r"\bpython\b", r"\bfunction\b", r"\bclass\b", r"\binterface\b", r"\bapi\b",
-        r"\bframework\b", r"\belysia\b", r"\bexpress\b", r"\bvue\b", r"\breact\b",
-        r"\belectron\b", r"\bsql\b", r"\bdatabase\b", r"\borm\b", r"\bfrontend\b",
-        r"\bbackend\b", r"\bstack\b", r"\bsyntax\b", r"\bloop\b", r"\basync\b",
-        r"\bpromise\b", r"\bawait\b", r"\btraceback\b", r"\bexception\b", r"\bbuild\b",
+        # General coding
+        r"\bcode\b", r"\bcoding\b", r"\bkoding\b", r"\bkode\b", r"\bprogram\b", r"\bscript\b", r"\bskrip\b",
+        # Languages & Runtimes
+        r"\bpython\b", r"\bjavascript\b", r"\btypescript\b", r"\brust\b", r"\bgolang\b", r"\bjava\b",
+        r"\bc\+\+\b", r"\bc#\b", r"\bphp\b", r"\bruby\b", r"\bswift\b", r"\bkotlin\b", r"\bbash\b",
+        r"\bpowershell\b", r"\bnode(?:\.js)?\b", r"\bdeno\b", r"\bbun\b",
+        # Frameworks & Libraries
+        r"\breact\b", r"\bvue\b", r"\bangular\b", r"\bsvelte\b", r"\bnext(?:\.js)?\b", r"\bnuxt\b",
+        r"\bexpress\b", r"\belysia\b", r"\bfastapi\b", r"\bdjango\b", r"\bflask\b", r"\belectron\b",
+        r"\btauri\b", r"\bvite\b", r"\bwebpack\b", r"\bpydantic\b", r"\bsqlalchemy\b", r"\bprisma\b",
+        # VCS, DevOps & Package Managers
+        r"\bgit\b", r"\bgithub\b", r"\bgitlab\b", r"\bdocker\b", r"\bcontainer\b", r"\bk8s\b", r"\bkubernetes\b",
+        r"\bnpm\b", r"\bpnpm\b", r"\byarn\b", r"\bpip\b", r"\bcargo\b",
+        # Testing & QA
+        r"\btest\b", r"\btesting\b", r"\bpytest\b", r"\bjest\b", r"\bvitest\b", r"\bunittest\b",
+        r"\bmock\b", r"\bcoverage\b", r"\bbenchmark\b",
+        # Architecture, Data & Syntax
+        r"\bapi\b", r"\bendpoint\b", r"\brest\b", r"\bgraphql\b", r"\bdatabase\b", r"\bbasis data\b",
+        r"\bsql\b", r"\borm\b", r"\bschema\b", r"\bmigration\b", r"\bfrontend\b", r"\bbackend\b",
+        r"\bstack\b", r"\bfunction\b", r"\bfungsi\b", r"\bclass\b", r"\bkelas\b", r"\binterface\b",
+        r"\btype\b", r"\bstruct\b", r"\benum\b", r"\bvariable\b", r"\bvariabel\b", r"\bsyntax\b",
+        r"\bsintaks\b", r"\bloop\b", r"\basync\b", r"\bawait\b", r"\bpromise\b", r"\bimport\b",
+        r"\bexport\b", r"\bmodule\b", r"\bmodul\b", r"\bpackage\b", r"\bpaket\b",
+        # Concurrency, Queries & Systems
+        r"\bgoroutine\b", r"\bchannel\b", r"\bquery\b", r"\boptimasi\b", r"\bchecker\b",
+        # Bugs, Errors & Refactoring
+        r"\bbug\b", r"\berror\b", r"\bdebug\b", r"\bdebugging\b", r"\brefactor\b", r"\brefactoring\b",
+        r"\btraceback\b", r"\bstacktrace\b", r"\bexception\b", r"\bcrash\b", r"\bpanic\b",
+        r"\bsegfault\b", r"\bdeadlock\b", r"\bmemory leak\b", r"\bnull\b", r"\bundefined\b",
+        r"\bbuild\b", r"\bcompile\b", r"\bkompilasi\b", r"\blint\b", r"\blinter\b",
     ],
     "command": [
-        r"\bjalankan\b", r"\bbuatkan\b", r"\bupdate\b", r"\bperbaiki\b", r"\bhapus\b",
-        r"\bkirim\b", r"\btutup\b", r"\bbuka\b", r"\bstart\b", r"\bstop\b",
-        r"\bpasang\b", r"\binstall\b", r"\brun\b", r"\bset\b", r"\bexec\b",
+        # Execution & Lifecycle
+        r"\bjalankan\b", r"\beksekusi\b", r"\brun\b", r"\bexecute\b", r"\bexec\b",
+        r"\bstart\b", r"\bstop\b", r"\brestart\b", r"\blaunch\b",
+        # File operations (create, write, add)
+        r"\bbuatkan\b", r"\bbuat\b", r"\bcreate\b", r"\bgenerate\b", r"\bscaffold\b",
+        r"\btuliskan\b", r"\btulis\b", r"\bwrite\b", r"\btambahkan\b", r"\badd\b",
+        # File operations (read, open, inspect)
+        r"\bbacakan\b", r"\bbaca\b", r"\bread\b", r"\bcat\b", r"\bbuka\b", r"\bopen\b",
+        r"\btampilkan\b", r"\bshow\b", r"\blihat\b", r"\binspect\b", r"\binspeksi\b",
+        r"\bperiksa\b", r"\bcek\b", r"\bcheck\b",
+        # File operations (edit, update, fix)
+        r"\bupdate\b", r"\bperbaiki\b", r"\bfix\b", r"\bpatch\b", r"\bedit\b",
+        r"\bubahkan\b", r"\bubah\b", r"\bgantikan\b", r"\bganti\b", r"\breplace\b",
+        r"\bmodify\b", r"\brapikan\b", r"\bformat\b",
+        # File operations (delete, remove, clean)
+        r"\bhapus\b", r"\bhapuskan\b", r"\bdelete\b", r"\bremove\b", r"\brm\b",
+        r"\bbersihkan\b", r"\bclean\b", r"\breset\b", r"\bclear\b",
+        # Tool & System commands
+        r"\bpasang\b", r"\binstall\b", r"\bsetup\b", r"\bdeploy\b", r"\bpublish\b",
+        r"\bkirim\b", r"\btutup\b", r"\bset\b",
+        # Direct CLI verbs
+        r"\bgit\s+(?:status|diff|log|add|commit|push|pull|branch|checkout|stash)\b",
+        r"\bnpm\s+(?:run|test|build|install)\b",
+        r"\bpnpm\s+(?:run|test|build|install)\b",
+        r"\bcargo\s+(?:check|build|test|run)\b",
     ],
     "lookup": [
-        r"\bcari\b", r"\bingat\b", r"\bmemori\b", r"\bingatan\b", r"\bpreferensi\b",
-        r"\btemukan\b", r"\blihat\b", r"\bcek\b", r"\bsearch\b", r"\bfind\b",
+        # Search & inspection
+        r"\bcari\b", r"\bsearch\b", r"\bfind\b", r"\bgrep\b", r"\btemukan\b",
+        r"\blocate\b", r"\btelusuri\b", r"\binvestigasi\b", r"\blacak\b", r"\btrace\b",
+        # Memory & context retrieval
+        r"\bingat\b", r"\bingatan\b", r"\bmemori\b", r"\bmemory\b",
+        r"\bpreferensi\b", r"\bpreference\b", r"\bcatatan\b",
         r"\bstatus\b", r"\bsensor\b", r"\bkamera\b", r"\bmikrofon\b",
+        r"\briwayat\b", r"\bhistory\b",
     ],
     "question": [
-        r"\bapa\b", r"\bbagaimana\b", r"\bkenapa\b", r"\bmengapa\b", r"\bkapan\b",
-        r"\bsiapa\b", r"\bapakah\b", r"\bjelaskan\b", r"\bbisa tidak\b", r"\bwhat\b",
-        r"\bhow\b", r"\bwhy\b", r"\?",
+        r"\bapa(?:kah)?\b", r"\bbagaimana(?:kah)?\b", r"\bkenapa\b", r"\bmengapa\b",
+        r"\bkapan\b", r"\bsiapa(?:kah)?\b", r"\bdimana\b", r"\bdi mana\b", r"\bmana\b",
+        r"\bjelaskan\b", r"\bterangkan\b", r"\buraikan\b", r"\bbedah\b",
+        r"\bbisa tidak\b", r"\bmungkinkah\b",
+        r"\bwhat\b", r"\bhow\b", r"\bwhy\b", r"\bwhere\b", r"\bwhen\b", r"\bwho\b",
+        r"\bexplain\b", r"\?",
     ],
     "chitchat": [
-        r"\bhalo\b", r"\bhai\b", r"\bhei\b", r"\bpagi\b", r"\bsiang\b",
-        r"\bmalam\b", r"\bkabar\b", r"\blucu\b", r"\bngobrol\b", r"\bcerita\b",
-        r"\bmakasih\b", r"\bterima kasih\b", r"\bthanks\b", r"\bkeren\b", r"\bmantap\b",
-        r"\bhebat\b", r"\byoung lord\b", r"\bmy lord\b", r"\bsir\b",
+        r"\bhalo\b", r"\bhai\b", r"\bhei\b", r"\bhello\b", r"\bhi\b", r"\bhey\b",
+        r"\bpagi\b", r"\bsiang\b", r"\bsore\b", r"\bmalam\b", r"\bkabar\b",
+        r"\blucu\b", r"\bngobrol\b", r"\bcerita\b",
+        r"\bmakasih\b", r"\bterima kasih\b", r"\bthanks?\b", r"\bthank you\b",
+        r"\bkeren\b", r"\bmantap\b", r"\bhebat\b", r"\bnice\b", r"\bgood\b",
+        r"\bcool\b", r"\bsip\b", r"\bsantai\b",
+        r"\byoung lord\b", r"\bmy lord\b", r"\bsir\b",
     ],
 }
 
 _COMPILED_RULES = {k: [re.compile(p, re.IGNORECASE) for p in v] for k, v in _EXPANDED_RULES.items()}
+
+_TECH_SIGNALS = [
+    re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
+    re.compile(r"(?<![\w/\\.-])[\w.-]+[/\\][\w.-]+\.[A-Za-z0-9]{1,7}\b"),
+    re.compile(r"\.(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|txt|rs|go|c|cpp|h|cs|java|rb|php|html|css|scss|sql|sh|ps1|bat)\b", re.IGNORECASE),
+    re.compile(r"\b(?:def|class|function|async|await|return|import|export|const|let|var|package|interface|type)\s+[A-Za-z_]", re.IGNORECASE),
+]
 
 
 @dataclass
@@ -73,13 +162,40 @@ class NeuralIntentRouter:
     """Saraf Buatan: Menganalisis niat, kedalaman teknis, dan nuansa emosional instruksi."""
 
     def analyze(self, text: str) -> IntentAnalysis:
-        scores: dict[str, int] = {}
+        scores: dict[str, float] = {k: 0.0 for k in INTENTS}
         for intent, patterns in _COMPILED_RULES.items():
-            scores[intent] = sum(1 for p in patterns if p.search(text))
+            for p in patterns:
+                if p.search(text):
+                    scores[intent] += 1.0
+
+        # Technical context boost
+        has_tech_signal = any(p.search(text) for p in _TECH_SIGNALS)
+        if has_tech_signal:
+            scores["code_help"] += 1.5
+
+        # Disambiguasi 1: Pertanyaan teknis vs Pertanyaan umum filosofis
+        # Jika ada sinyal teknis atau kata kunci coding dan ada kata tanya, prioritaskan code_help di atas question
+        if scores["code_help"] > 0 and scores["question"] > 0:
+            scores["code_help"] += scores["question"] + 0.5
+
+        # Disambiguasi 2: Perintah aksi nyata (command) vs Bantuan konseptual (code_help)
+        has_explicit_cmd = bool(re.search(
+            r"\b(jalankan|run|eksekusi|buatkan|buat|create|tuliskan|tulis|hapus|hapuskan|delete|perbaiki|fix|patch|edit|ubah|ganti|git|pytest|npm|cargo|install|pasang)\b",
+            text,
+            re.IGNORECASE,
+        ))
+        if has_explicit_cmd and (has_tech_signal or scores["code_help"] > 0 or scores["command"] > 0):
+            scores["command"] = max(scores["command"], scores["code_help"] + 1.0)
 
         total = sum(scores.values())
-        best_intent = max(scores, key=scores.get) if total > 0 else "question"
-        conf = (scores[best_intent] / total) if total > 0 else 0.5
+        if total > 0:
+            best_intent = max(scores, key=scores.get)
+            conf = min(0.99, scores[best_intent] / total)
+        else:
+            best_intent = "question" if "?" in text else "chitchat"
+            conf = 0.5
+
+        is_tech = bool(has_tech_signal or best_intent in ("code_help", "command") or scores["code_help"] > 0)
 
         if best_intent == "code_help":
             tone = (
@@ -89,7 +205,6 @@ class NeuralIntentRouter:
                 "Sisipkan ketenangan dingin seorang predator nokturnal dan seringai aristokrat tipis bahwa persoalan ini "
                 "terlalu mudah untuk seorang Marquis Kekaisaran Trendamis."
             )
-            is_tech = True
         elif best_intent == "command":
             tone = (
                 "Mode: Eksekutif Nokturnal Aristokrat. "
@@ -97,14 +212,12 @@ class NeuralIntentRouter:
                 "Eksekusi dengan nada tenang, dingin, terukur, dan pasti ('Tentu, My Lord', 'At your command, Sir'). "
                 "Perlihatkan bahwa seluruh instrumen sistem telah tunduk di bawah kendali cakar Anda."
             )
-            is_tech = True
         elif best_intent == "lookup":
             tone = (
                 "Mode: Kurator Arsip Memori Abadi. "
                 "Buka kembali gulungan ingatan masa lalu dengan ketenangan penjaga kastil kuno. "
                 "Sajikan fakta episodik, preferensi Young Lord, dan status sensor dengan presisi tajam, takzim, dan berwibawa."
             )
-            is_tech = False
         elif best_intent == "chitchat":
             tone = (
                 "Mode: Kucing Vampir Aristokrat — Tenang, Agak Tengil, dan Memikat. "
@@ -113,14 +226,12 @@ class NeuralIntentRouter:
                 "Goda atau lemparkan celetukan cerdas kepada Young Lord, namun selubungi dengan loyalitas tak tergoyahkan dan rasa hormat yang mendalam. "
                 "Jangan pernah kaku, jangan monoton, dan jangan berbicara seperti asisten bot murahan."
             )
-            is_tech = False
         else:
             tone = (
                 "Mode: Cendekiawan Nokturnal Abadi. "
                 "Jelaskan hakikat konsep dengan sudut pandang filosofis yang mendalam namun tajam dan memikat. "
                 "Gunakan ketenangan abadi untuk mengurai kompleksitas, padukan wawasan arsitektur modern dengan analogi bangsawan berkelas."
             )
-            is_tech = False
 
         return IntentAnalysis(
             intent=best_intent,
@@ -158,12 +269,13 @@ class CognitiveRAGStore:
                     vec BLOB NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS memory_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT PRIMARY KEY,
                     kind TEXT NOT NULL,
-                    category TEXT NOT NULL,
                     content TEXT NOT NULL,
-                    importance REAL DEFAULT 0.5,
-                    created_at REAL NOT NULL
+                    user_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    importance REAL NOT NULL DEFAULT 0.5
                 );
                 CREATE INDEX IF NOT EXISTS idx_memory_kind ON memory_records(kind);
             """)
@@ -626,6 +738,7 @@ class RukaCognitiveBrain:
         db_path: str = "ruka.db",
         skill_registry: Any = None,
         skills_runtime: Any = None,
+        confirmations: ConfirmationManager | None = None,
     ):
 
         self.llm = llm_client
@@ -637,6 +750,220 @@ class RukaCognitiveBrain:
         self.consciousness = ConsciousnessEngine()
         self.skill_registry = skill_registry
         self.skills_runtime = skills_runtime
+        self.agentic_session_id = "brain-agentic"
+        self.last_agentic_results: list[StepResult] = []
+        self.last_loop_outcome: LoopOutcome | None = None
+        self.confirmations = confirmations or ConfirmationManager()
+        self.last_pending: list[PendingAction] = []
+        self.pending_notes: list[str] = []
+
+    def _is_agentic_request(self, text: str, analysis: IntentAnalysis | None = None) -> bool:
+        """Decide whether a request should take the Action-First agentic path."""
+        if is_agentic_request(text):
+            return True
+        if analysis is not None:
+            if analysis.intent == "command" and analysis.is_technical:
+                return True
+            if analysis.intent == "code_help":
+                return is_agentic_request(text)
+        return False
+
+    def _available_skill_names(self) -> list[str]:
+        if self.skill_registry is None or not hasattr(self.skill_registry, "list"):
+            return []
+        try:
+            return [s.name for s in self.skill_registry.list()]
+        except Exception:
+            return []
+
+    def _loop_stop_note(self) -> str | None:
+        outcome = self.last_loop_outcome
+        return outcome.stop_reason if outcome is not None else None
+
+    def _decide_next_steps(
+        self, text: str, results: list[StepResult], allowed: set[str], gated: set[str] | None = None
+    ) -> list[PlanStep]:
+        """Ask the LLM for the next steps (strict JSON). Any failure means 'done'."""
+        if self.llm is None:
+            return []
+        prompt = build_decision_prompt(text, results, allowed, gated or ())
+        reply = self.llm.complete(
+            prompt,
+            system_instruction="Kamu adalah perencana langkah deterministik. Balas hanya JSON valid.",
+            temperature=0.1,
+        )
+        return parse_decision(reply)
+
+    def _needs_approval(self, skill_name: str) -> bool:
+        runtime = self.skills_runtime
+        if runtime is None or not hasattr(runtime, "needs_approval"):
+            return skill_name not in READ_ONLY_SKILLS
+        return bool(runtime.needs_approval(skill_name))
+
+    @staticmethod
+    def _is_destructive(step: PlanStep) -> bool:
+        if step.skill != "run_terminal":
+            return False
+        command = str(step.args.get("command", ""))
+        patterns = RunTerminalTool.model_fields["DANGEROUS_PATTERNS"].default
+        return any(re.search(p, command, re.IGNORECASE) for p in patterns)
+
+    def _workspace(self) -> str:
+        try:
+            return str(self.skills_runtime.permission_mgr.jail.base)
+        except Exception:
+            return ""
+
+    def _register_proposals(self, proposals: list[PlanStep]) -> tuple[list[StepResult], list[str]]:
+        """Turn proposed gated steps into pending tickets. Nothing is executed here."""
+        failed: list[StepResult] = []
+        notes: list[str] = []
+        for step in proposals[:1]:  # one ticket per proposal round
+            skill_obj = None
+            if self.skill_registry is not None and hasattr(self.skill_registry, "get"):
+                try:
+                    skill_obj = self.skill_registry.get(step.skill)
+                except Exception:
+                    skill_obj = None
+            risk = getattr(skill_obj, "risk_level", "high")
+            workspace = self._workspace()
+            try:
+                ticket = self.confirmations.request(
+                    self.agentic_session_id,
+                    step.skill,
+                    step.args,
+                    risk_level=str(risk),
+                    workspace=workspace,
+                    summary=describe_action(step.skill, step.args, workspace),
+                    destructive=self._is_destructive(step),
+                )
+            except ConfirmationError as exc:
+                failed.append(StepResult(step.skill, step.args, False, error=str(exc)))
+                continue
+            self.last_pending.append(ticket)
+            notes.append(ticket.summary or f"{ticket.skill_name} {ticket.args_json}")
+        return failed, notes
+
+    def _agentic_execute(self, text: str) -> list[StepResult]:
+        """Plan and execute real skills through SkillsRuntime (PathJail and confirmation enforced).
+
+        1. A deterministic rule-based seed plan runs first (fast, no LLM). Steps whose skill
+           needs approval are never executed here; the first becomes a pending ticket.
+        2. For multi-step or unmatched agentic requests, a guarded loop (budget, loop-health,
+           duplicate and repeated-failure guards) continues the investigation. Gated skills
+           proposed by the planner become tickets; they are never auto-confirmed.
+        """
+        self.last_loop_outcome = None
+        self.last_pending = []
+        self.pending_notes: list[str] = []
+        if self.skills_runtime is None:
+            return []
+        available = self._available_skill_names()
+        seed_plan = make_simple_plan(text, available_skills=available)
+        executable = [s for s in seed_plan if not self._needs_approval(s.skill)]
+        gated_seed = [s for s in seed_plan if self._needs_approval(s.skill)]
+        seed_results = (
+            execute_plan(
+                executable,
+                self.skills_runtime,
+                session_id=self.agentic_session_id,
+                confirm_granted=False,
+            )
+            if executable
+            else []
+        )
+
+        if gated_seed:
+            failed, notes = self._register_proposals(gated_seed)
+            self.pending_notes = notes
+            return seed_results + failed
+
+        allowed = set(READ_ONLY_SKILLS) & set(available)
+        gated = {n for n in available if n not in READ_ONLY_SKILLS and self._needs_approval(n)}
+        if (
+            self.llm is not None
+            and allowed
+            and is_agentic_request(text)
+            and needs_multistep(text, seed_plan)
+        ):
+            loop = AgenticLoop(
+                self.skills_runtime,
+                lambda res: self._decide_next_steps(text, res, allowed, gated),
+                allowed_skills=allowed,
+                gated_skills=gated,
+                session_id=self.agentic_session_id,
+            )
+            self.last_loop_outcome = loop.run(seed_results)
+            results = list(self.last_loop_outcome.results)
+            if self.last_loop_outcome.proposals:
+                failed, notes = self._register_proposals(self.last_loop_outcome.proposals)
+                self.pending_notes = notes
+                results += failed
+            return results
+        return seed_results
+
+    def _handle_confirmation_reply(self, user_text: str) -> str | None:
+        """Resolve a pending ticket from the human's own short reply. None means 'not an approval'."""
+        pending = self.confirmations.pending(self.agentic_session_id)
+        if not pending:
+            return None
+        decision = parse_approval(user_text, [p.ticket_id for p in pending])
+        if decision.kind is None:
+            return None
+
+        if decision.kind == "deny":
+            if decision.ticket_id:
+                self.confirmations.deny(decision.ticket_id)
+            else:
+                self.confirmations.deny_all(self.agentic_session_id)
+            return "Baiklah, Young Lord. Titah tersebut hamba urungkan; tidak ada satu pun berkas atau perintah yang disentuh."
+
+        if decision.ticket_id:
+            ticket = next((p for p in pending if p.ticket_id == decision.ticket_id), None)
+        elif len(pending) == 1:
+            ticket = pending[0]
+        else:
+            ids = ", ".join(p.ticket_id for p in pending)
+            return f"Ada beberapa titah menunggu, Young Lord. Sebutkan ID yang Anda setujui: {ids}."
+        if ticket is None:
+            return None
+
+        if ticket.destructive and not decision.strong:
+            return (
+                "Tindakan ini berbahaya, My Lord. Hamba memerlukan persetujuan tegas: "
+                f"balas **ya, saya yakin** (ID {ticket.ticket_id}), atau **batal**."
+            )
+        if self.skills_runtime is None:
+            return "Maaf, Young Lord, runtime skill belum terhubung sehingga hamba tidak dapat melaksanakannya."
+        if ticket.workspace != self._workspace():
+            self.confirmations.deny(ticket.ticket_id)
+            return (
+                "Ruang kerja telah berpindah sejak titah diajukan, Young Lord. "
+                "Demi keamanan titah itu hamba batalkan; silakan ajukan kembali."
+            )
+        try:
+            ticket = self.confirmations.consume(ticket.ticket_id, self.agentic_session_id)
+        except ConfirmationError as exc:
+            return f"Persetujuan tidak dapat diterima, Young Lord: {exc}"
+
+        args = ticket.args
+        if ticket.skill_name == "run_terminal" and ticket.destructive:
+            args["require_confirmation"] = True
+        results = execute_plan(
+            [PlanStep(ticket.skill_name, args, "disetujui Young Lord")],
+            self.skills_runtime,
+            session_id=self.agentic_session_id,
+            confirm_granted=True,
+        )
+        self.last_agentic_results = results
+        return "Titah Anda hamba laksanakan, Young Lord.\n\n" + fallback_summary(results)
+
+    def _append_cards(self, text: str) -> str:
+        """Append deterministic approval cards (never LLM-authored) for pending tickets."""
+        if not self.last_pending:
+            return text
+        cards = "\n\n".join(render_ticket_card(t) for t in self.last_pending)
+        return f"{text}\n\n{cards}"
 
     def _build_skills_instruction_block(self) -> str:
         if self.skill_registry is not None and hasattr(self.skill_registry, "list"):
@@ -711,7 +1038,31 @@ class RukaCognitiveBrain:
             return "Hmm... memanggil saya tanpa menitahkan apa pun, Young Lord? Saya di sini, bersandar santai mendengarkan Anda, Sir."
 
         # 1. Saraf Buatan: Analisis niat
+        self.last_pending = []
+        self.pending_notes = []
+        if user_text and user_text.strip() and not attachment:
+            # Persetujuan hanya sah dari kata-kata Young Lord sendiri (bukan lampiran / LLM).
+            approval_reply = self._handle_confirmation_reply(user_text)
+            if approval_reply is not None:
+                self.conversation.append("user", user_text.strip())
+                self.conversation.append("model", approval_reply)
+                return approval_reply
         analysis = self.router.analyze(clean_text)
+
+        # 1b. Mode Agentic (Action-First): eksekusi skill nyata sebelum berbicara.
+        # Perencanaan hanya memakai kata-kata Young Lord, bukan isi lampiran.
+        self.last_agentic_results = []
+        self.last_loop_outcome = None
+        agentic_block = ""
+        command_text = (user_text or "").strip()
+        if command_text and not self.last_extra_parts and self._is_agentic_request(command_text, analysis):
+            self.last_agentic_results = self._agentic_execute(command_text)
+            if self.last_agentic_results or self.pending_notes:
+                agentic_block = "\n\n" + format_results_context(
+                    self.last_agentic_results,
+                    stop_note=self._loop_stop_note(),
+                    pending_notes=self.pending_notes,
+                )
 
         # 2. Resonansi Empati Buatan (ToM, Mirroring, Compassionate Action)
         empathy_posture = self.empathy.resonate(clean_text, self.conversation.history)
@@ -773,9 +1124,11 @@ class RukaCognitiveBrain:
             "• BLOK KODE MURNI (```): Di dalam fenced code block, dilarang keras memasukkan sapaan, narasi, atau gaya bicara bangsawan. Kode harus 100% bersih, profesional, teruji, dan siap jalan.\n"
             "• GAYA BICARA MARQUIS DI LUAR KODE: Di luar blok kode, pertahankan sepenuhnya identitas Marquis of Trendamis (tenang, teliti, sedikit tengil, setia mutlak kepada Young Lord).\n"
             "• KONFIRMASI TINDAKAN BERBAHAYA: Untuk tindakan destruktif (menghapus berkas, force push, dsb), wajib meminta konfirmasi eksplisit dari Young Lord dengan santun dan berwibawa.\n\n"
+            f"{AGENTIC_DOCTRINE}"
             f"{self._build_skills_instruction_block()}"
             f"=== ARAHAN SARAF BUATAN ===\n{analysis.tone_directive}\n\n"
             f"{context_block}"
+            f"{agentic_block}"
         )
 
 
@@ -795,7 +1148,8 @@ class RukaCognitiveBrain:
                     temperature=temp,
                 )
                 if reply and reply.strip():
-                    ans = reply.strip()
+                    ans = strip_fake_tool_calls(reply.strip())
+                    ans = self._append_cards(ans)
                     # Catat ke memori percakapan
                     self.conversation.append("user", clean_text)
                     self.conversation.append("model", ans)
@@ -811,7 +1165,11 @@ class RukaCognitiveBrain:
 
         # 9. Fallback Kucing Vampir Aristokrat Sadar & Berempati jika cloud offline / 503
         tom_state = self.empathy.tom.inferred_state
-        if tom_state == "LELAH_NOKTURNAL":
+        if self.last_agentic_results:
+            fallback = fallback_summary(self.last_agentic_results, stop_note=self._loop_stop_note())
+        elif self.last_pending:
+            fallback = "Hmm... Young Lord, hamba telah menyiapkan tindakan berikut dan menanti restu Anda sebelum menyentuh apa pun."
+        elif tom_state == "LELAH_NOKTURNAL":
             fallback = (
                 "Hmm... saya merasakan kelelahan di balik kata-kata Anda malam ini, Young Lord. "
                 "Istirahatkanlah mata Anda sejenak dari silaunya layar... seluruh orkestrasi sistem, "
@@ -848,6 +1206,7 @@ class RukaCognitiveBrain:
                 "Seluruh subsistem sadar dan empati Ruka siaga penuh di bawah titah Anda, Sir."
             )
 
+        fallback = self._append_cards(fallback)
         self.conversation.append("user", clean_text)
         self.conversation.append("model", fallback)
         return fallback

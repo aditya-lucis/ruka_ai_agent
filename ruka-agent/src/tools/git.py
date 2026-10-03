@@ -227,14 +227,100 @@ class GitLogTool(BaseTool):
 
 
 # ============================================================
+# 4. git_commit
+# ============================================================
+class GitCommitArgs(BaseModel):
+    message: str = Field(description="Pesan commit git (wajib jelas, tidak boleh kosong)")
+    add_all: bool = Field(default=True, description="Tambahkan semua perubahan (git add -A) jika bernilai True")
+    files: list[str] | None = Field(default=None, description="Daftar berkas spesifik untuk di-stage jika add_all=False")
+
+
+class GitCommitTool(BaseTool):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    name: str = "git_commit"
+    description: str = (
+        "Membuat git commit pada working tree. "
+        "Dapat men-stage semua berkas atau berkas tertentu, lalu membuat commit dengan pesan yang ditentukan."
+    )
+    args_model: type[BaseModel] = GitCommitArgs
+    timeout_s: float = 20.0
+    jail: PathJail | None = None
+
+    def _get_jail(self) -> PathJail:
+        return self.jail or get_default_jail()
+
+    def run(self, args: GitCommitArgs) -> dict[str, Any]:
+        jail = self._get_jail()
+        msg = (args.message or "").strip()
+        if not msg:
+            raise ToolError("Pesan commit tidak boleh kosong.")
+
+        # 1. Staging
+        if args.add_all:
+            stage_proc = subprocess.run(
+                ["git", "add", "-A"],
+                cwd=str(jail.base),
+                capture_output=True,
+                text=True,
+            )
+            if stage_proc.returncode != 0:
+                raise ToolError(f"Gagal melakukan git add: {stage_proc.stderr.strip()}")
+        elif args.files:
+            confined_files = [str(jail.confine(f)) for f in args.files]
+            stage_proc = subprocess.run(
+                ["git", "add", "--"] + confined_files,
+                cwd=str(jail.base),
+                capture_output=True,
+                text=True,
+            )
+            if stage_proc.returncode != 0:
+                raise ToolError(f"Gagal melakukan git add berkas: {stage_proc.stderr.strip()}")
+
+        # 2. Commit
+        proc = subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=str(jail.base),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or proc.stdout.strip()
+            if "nothing to commit" in err or "nothing to commit" in proc.stdout:
+                return {
+                    "committed": False,
+                    "summary": "Tidak ada perubahan untuk di-commit (working tree clean).",
+                    "commit_hash": None,
+                }
+            raise ToolError(f"Gagal melakukan git commit: {err}")
+
+        # Ambil hash commit yang baru dibuat
+        rev_proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(jail.base),
+            capture_output=True,
+            text=True,
+        )
+        commit_hash = rev_proc.stdout.strip() if rev_proc.returncode == 0 else ""
+
+        return {
+            "committed": True,
+            "commit_hash": commit_hash,
+            "message": msg,
+            "summary": f"Commit berhasil [{commit_hash}]: {msg}",
+            "raw_output": proc.stdout.strip(),
+        }
+
+
+# ============================================================
 # Registrasi Tool Git
 # ============================================================
 def register_git_tools(registry: ToolRegistry, jail: PathJail | None = None) -> list[BaseTool]:
-    """Mendaftarkan seluruh tool git Phase 3 ke dalam ToolRegistry."""
+    """Mendaftarkan seluruh tool git ke dalam ToolRegistry."""
     tools: list[BaseTool] = [
         GitStatusTool(jail=jail),
         GitDiffTool(jail=jail),
         GitLogTool(jail=jail),
+        GitCommitTool(jail=jail),
     ]
     for t in tools:
         registry.register(t)

@@ -8,7 +8,7 @@ author: Ruka Core Team
 license: MIT
 tags: [coding, filesystem, write, scaffold]
 risk_level: medium
-requires_confirmation: false
+requires_confirmation: true
 permissions:
   - filesystem:write
 timeout_seconds: 30

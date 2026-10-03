@@ -150,7 +150,7 @@ def handle_chat(sock: socket.socket, prompt: str):
         "type": "request",
         "channel": "ruka:chat-send",
         "correlationId": f"cli-{int(time.time())}",
-        "payload": {"text": prompt},
+        "payload": {"text": prompt, "cwd": os.getcwd()},
     }
     sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
 
