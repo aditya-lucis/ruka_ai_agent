@@ -7,6 +7,7 @@ sebelum pemanggilan operasi berisiko tinggi di tingkat Gateway.
 from __future__ import annotations
 
 import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence
@@ -78,7 +79,10 @@ class PermissionManager:
         """
         if not path or not str(path).strip():
             raise PermissionError("Workspace tidak boleh kosong.")
-        target = Path(str(path).strip()).expanduser().resolve()
+        p_str = str(path).strip().replace("\\", "/")
+        if os.name == "nt" and re.match(r"^/[a-zA-Z]/", p_str):
+            p_str = re.sub(r"^/([a-zA-Z])/", r"\1:/", p_str)
+        target = Path(p_str).expanduser().resolve()
         if not target.exists() or not target.is_dir():
             raise PermissionError(f"Workspace bukan direktori yang valid: {target}")
         if target.parent == target:

@@ -147,6 +147,7 @@ _TECH_SIGNALS = [
     re.compile(r"(?<![\w/\\.-])[\w.-]+[/\\][\w.-]+\.[A-Za-z0-9]{1,7}\b"),
     re.compile(r"\.(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|txt|rs|go|c|cpp|h|cs|java|rb|php|html|css|scss|sql|sh|ps1|bat)\b", re.IGNORECASE),
     re.compile(r"\b(?:def|class|function|async|await|return|import|export|const|let|var|package|interface|type)\s+[A-Za-z_]", re.IGNORECASE),
+    re.compile(r"\b(?:folder|direktori|directory|dir|repo|repository|workspace|codebase|terminal|git|branch|commit|diff|staged|berkas|file)\b", re.IGNORECASE),
 ]
 
 

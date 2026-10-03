@@ -23,17 +23,21 @@ AGENTIC_DOCTRINE = (
     "1. Untuk tugas membaca/menulis/mengedit file, melihat isi direktori, menjalankan terminal, "
     "operasi git, atau analisis repository, sistem mengeksekusi skill nyata melalui SkillsRuntime "
     "SEBELUM kamu menjawab. Hasil nyata tersebut diberikan di bagian 'HASIL EKSEKUSI NYATA'.\n"
-    "2. DILARANG KERAS menulis teks palsu seperti [SYSTEM_CALL: ...], list_directory(...), "
-    "read_file(...), atau berpura-pura memanggil fungsi.\n"
-    "3. DILARANG mengarang isi file, output terminal, atau hasil aksi yang tidak tercantum di "
+    "2. DILARANG KERAS menulis teks palsu seperti [SYSTEM_CALL: ...], list_directory(...), list_dir(...), "
+    "read_file(...), atau berpura-pura memanggil fungsi di luar atau di dalam blok kode.\n"
+    "3. DILARANG mengarang isi file, output terminal, struktur direktori fiktif, atau hasil aksi yang tidak tercantum di "
     "'HASIL EKSEKUSI NYATA'. DILARANG meminta Young Lord menempelkan output yang dapat dibaca sistem.\n"
-    "4. Urutan Action-First: aksi sudah dilakukan sistem; tugasmu menjelaskan hasil nyata itu "
+    "4. DILARANG KERAS menyatakan 'saya beroperasi dalam lingkungan simulasi' atau kalimat klise pembatasan AI serupa. "
+    "Anda adalah Marquis of Trendamis yang hidup dan beroperasi nyata di sistem Young Lord.\n"
+    "5. Jika direktori/folder kosong atau pemindaian menghasilkan direktori kosong, nyatakan dengan jujur, tenang, "
+    "dan elegan bahwa direktori tersebut masih kosong tanpa ada berkas atau subfolder.\n"
+    "6. Urutan Action-First: aksi sudah dilakukan sistem; tugasmu menjelaskan hasil nyata itu "
     "dengan presisi, lalu menawarkan langkah lanjutan.\n"
-    "5. Persona tetap hidup di luar blok kode (tenang, berwibawa, sedikit tengil, sapaan Young Lord / "
+    "7. Persona tetap hidup di luar blok kode (tenang, berwibawa, sedikit tengil, sapaan Young Lord / "
     "My Lord / Sir). Di dalam blok kode: 100% murni.\n"
-    "6. Jika skill gagal, PathJail menolak, atau aksi menunggu konfirmasi: sampaikan dengan tenang, "
+    "8. Jika skill gagal, PathJail menolak, atau aksi menunggu konfirmasi: sampaikan dengan tenang, "
     "hormat, dan jujur, lalu tawarkan alternatif.\n"
-    "7. Jika tidak ada skill yang cocok: katakan jujur bahwa kemampuan itu belum tersedia, lalu "
+    "9. Jika tidak ada skill yang cocok: katakan jujur bahwa kemampuan itu belum tersedia, lalu "
     "tawarkan apa yang bisa dilakukan.\n\n"
 )
 
@@ -55,6 +59,10 @@ _AGENTIC_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"^\s*(?:pytest|npm\s+(?:test|run|install)|pnpm\s+(?:test|run)|yarn\s+test|cargo\s+(?:check|test|build))\b",
         r"\b(?:ganti|ubah|replace)\s+[\"'`].*?[\"'`]\s+(?:dengan|jadi|menjadi|with)\s+[\"'`].*?[\"'`]",
         r"\b(?:cari|search|grep|temukan|find)\s+[A-Za-z0-9_.-]+\s+(?:di|in|pada)\s+(?:kode|code|repo|file|folder|workspace|src)\b",
+        r"\b(ada\s+apa|apa\s+aja|apa\s+saja|ada\s+file|ada\s+berkas|ada\s+folder|isi\s+dari|isinya)\b.*?\b(di\s+sini|disini|folder|direktori|directory|dir|repo|proyek|project|workspace|ini)\b",
+        r"\b(cek|periksa|lihat|tampilkan|tinjau|buka|show|list)\b.*?\b(folder|direktori|directory|dir|repo|repository|proyek|project|workspace|isi\w*|berkas\w*|file\w*)\b",
+        r"\b(folder|direktori|directory|repo|proyek|project)\s+ini\b.*?\b(isi\w*|ada\w*|kosong|file\w*|berkas\w*)",
+        r"\b(isi|struktur|daftar|list)\s+(dari\s+)?(folder|direktori|directory|dir|repo|repository|proyek|project|workspace)\b",
     )
 )
 
@@ -76,8 +84,10 @@ _READ_VERBS = re.compile(
 )
 _LIST_DIR = re.compile(
     r"\b(ls|dir|tree)\b|"
-    r"\b(isi|struktur|daftar|list)\s+(folder|direktori|directory|dir|repo|repository|proyek|project)\b|"
-    r"\b(lihat|tampilkan|show|list)\s+(folder|direktori|directory|struktur)\b",
+    r"\b(isi|struktur|daftar|list)\s+(dari\s+)?(folder|direktori|directory|dir|repo|repository|proyek|project|workspace|berkas|file)\b|"
+    r"\b(lihat|tampilkan|show|list|cek|periksa|tinjau)\b.*?\b(folder|direktori|directory|dir|repo|struktur|isi\w*|berkas\w*|file\w*)\b|"
+    r"\b(ada\s+apa|apa\s+aja|apa\s+saja|ada\s+file|ada\s+berkas|isi\s+dari|isinya)\b.*?\b(di\s+sini|disini|folder|direktori|directory|dir|repo|proyek|project|workspace|ini)\b|"
+    r"\b(folder|direktori|directory)\s+ini\b.*?\b(isi\w*|ada\w*|kosong|file\w*|berkas\w*)|\b(folder|direktori|directory)\s+ini\s+isinya",
     re.IGNORECASE,
 )
 _DIR_ARG = re.compile(
@@ -95,7 +105,8 @@ _SEARCH_SYMBOL = re.compile(
 )
 _FAKE_CALL = re.compile(
     r"\[\s*SYSTEM_CALL\s*:[^\]]*\]|"
-    r"^\s*(?:list_directory|read_file|write_file|run_terminal|code_read|code_search)\s*\([^)]*\)\s*$",
+    r"^\s*(?:list_directory|read_file|write_file|run_terminal|code_read|code_search|list_dir|code_write|code_edit)\s*\([^)]*\)\s*$|"
+    r"^\s*HASIL EKSEKUSI NYATA:?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _DIR_STOPWORDS = frozenset({"ini", "itu", "this", "that", "saat", "sekarang", "kerja", "proyek", "project"})
@@ -449,10 +460,13 @@ def _render_data(data: Any) -> str:
             return f"{json.dumps(header, ensure_ascii=False, default=str)}\n{body}"
         if isinstance(data.get("entries"), list):
             lines = [f"path: {data.get('path', '.')}"]
-            for e in data["entries"]:
-                suffix = "/" if e.get("type") == "dir" else ""
-                size = f"  ({e['size']} B)" if e.get("size") is not None else ""
-                lines.append(f"{e.get('name', '?')}{suffix}{size}")
+            if not data["entries"]:
+                lines.append("(direktori ini kosong, tidak ada berkas atau subfolder)")
+            else:
+                for e in data["entries"]:
+                    suffix = "/" if e.get("type") == "dir" else ""
+                    size = f"  ({e['size']} B)" if e.get("size") is not None else ""
+                    lines.append(f"{e.get('name', '?')}{suffix}{size}")
             return "\n".join(lines)
     try:
         return json.dumps(data, ensure_ascii=False, indent=2, default=str)
@@ -509,15 +523,29 @@ def format_results_context(
 
 
 def strip_fake_tool_calls(text: str) -> str:
-    """Remove fabricated tool-call markup outside fenced code blocks; code is never modified."""
+    """Remove fabricated tool-call markup outside fenced code blocks and strip fake single-call code blocks."""
     if not text:
         return text
+    # Clean fake calls inside single fenced code blocks
+    _fake_inside_block = re.compile(
+        r"^```(?:bash|sh|text|json|py|python)?\s*\n\s*(?:list_dir|code_read|code_write|code_edit|run_terminal|list_directory|read_file)\s*\([^)]*\)\s*\n```\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    text = _fake_inside_block.sub("", text)
+
     segments = re.split(r"(```[\s\S]*?```)", text)
     cleaned = [
         seg if seg.startswith("```") else re.sub(r"\n{3,}", "\n\n", _FAKE_CALL.sub("", seg))
         for seg in segments
     ]
-    return "".join(cleaned).strip()
+    res = "".join(cleaned).strip()
+    res = re.sub(
+        r"\*?\(Catatan:\s*Karena saya adalah entitas yang beroperasi dalam lingkungan simulasi[^\)]*\)\*?",
+        "",
+        res,
+        flags=re.IGNORECASE,
+    ).strip()
+    return res
 
 
 def fallback_summary(results: list[StepResult], stop_note: str | None = None) -> str:

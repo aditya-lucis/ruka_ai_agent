@@ -73,6 +73,10 @@ class TestDetection:
             "jalankan pytest",
             "git status dong",
             "cari 'handle_request' di kode",
+            "coba cek ada apa aja di folder ini",
+            "folder ini isinya apa",
+            "ada apa di sini",
+            "apa isi direktori ini",
         ],
     )
     def test_agentic_requests_detected(self, text: str) -> None:
@@ -150,6 +154,25 @@ class TestExecution:
         results = execute_plan([PlanStep("list_dir", {"path": "."})], runtime)
         names = {e["name"] for e in results[0].data["entries"]}
         assert {"package.json", "src"} <= names
+
+    def test_list_dir_empty_directory(self, tmp_path: Path) -> None:
+        empty_ws = tmp_path / "empty_dir"
+        empty_ws.mkdir()
+        registry = SkillRegistry()
+        register_builtin_coding_skills(registry, skills_dir=REPO_SKILLS_DIR, workspace_root=empty_ws)
+        rt = SkillsRuntime(
+            registry=registry,
+            permission_manager=PermissionManager(empty_ws),
+            event_bus=EventBus(),
+        )
+        plan = make_simple_plan("coba cek ada apa aja di folder ini", ALL_SKILLS)
+        assert len(plan) == 1
+        assert plan[0].skill == "list_dir"
+        results = execute_plan(plan, rt)
+        assert results[0].success
+        assert results[0].data["entries"] == []
+        ctx = format_results_context(results)
+        assert "direktori ini kosong" in ctx
 
     def test_path_jail_blocks_escape(self, runtime: SkillsRuntime) -> None:
         results = execute_plan([PlanStep("code_read", {"path": "../secret.txt"})], runtime)

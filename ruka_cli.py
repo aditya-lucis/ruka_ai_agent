@@ -146,11 +146,14 @@ def render_formatted_output(text: str):
 
 def handle_chat(sock: socket.socket, prompt: str):
     """Mengirim obrolan ke Ruka dan mengalirkan respons aristokrat secara live."""
+    raw_cwd = os.environ.get("PWD") or os.getcwd()
+    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
+        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
     req_env = {
         "type": "request",
         "channel": "ruka:chat-send",
         "correlationId": f"cli-{int(time.time())}",
-        "payload": {"text": prompt, "cwd": os.getcwd()},
+        "payload": {"text": prompt, "cwd": raw_cwd},
     }
     sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
 

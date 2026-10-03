@@ -31,7 +31,10 @@ class PathJail:
         if base is None:
             env_base = os.environ.get("RUKA_WORKSPACE") or os.environ.get("RUKA_PROJECT_ROOT")
             base = env_base if env_base else Path.cwd()
-        self.base = Path(base).resolve()
+        base_str = str(base).strip().replace("\\", "/")
+        if os.name == "nt" and re.match(r"^/[a-zA-Z]/", base_str):
+            base_str = re.sub(r"^/([a-zA-Z])/", r"\1:/", base_str)
+        self.base = Path(base_str).resolve()
         if not self.base.exists():
             raise ToolError(f"Base path jail tidak ditemukan: {self.base}")
 
@@ -40,14 +43,15 @@ class PathJail:
         if not rel_or_abs:
             raise ToolError("Jalur path tidak boleh kosong")
 
-        raw_str = str(rel_or_abs).strip()
-        normalized = raw_str.replace("\\", "/")
-        p = Path(normalized)
+        raw_str = str(rel_or_abs).strip().replace("\\", "/")
+        if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_str):
+            raw_str = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_str)
+        p = Path(raw_str)
 
         if p.is_absolute():
             candidate = p.resolve()
         else:
-            candidate = (self.base / normalized).resolve()
+            candidate = (self.base / raw_str).resolve()
 
         try:
             candidate.relative_to(self.base)
