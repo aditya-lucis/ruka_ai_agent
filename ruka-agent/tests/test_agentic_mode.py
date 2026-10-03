@@ -438,6 +438,11 @@ class TestAgenticLoop:
             "git_diff",
             "git_log",
             "repo_map",
+            "web_search",
+            "current_time",
+            "geolocation",
+            "weather_info",
+            "currency_rate",
         }
         for mutating in ("code_write", "code_edit", "run_terminal", "git_commit"):
             assert mutating not in READ_ONLY_SKILLS

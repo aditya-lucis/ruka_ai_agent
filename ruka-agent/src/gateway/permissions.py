@@ -48,8 +48,11 @@ class PermissionError(RuntimeError):
 class PermissionManager:
     """Manajer hak akses dan kurung keamanan (Path Jail) di Gateway."""
 
-    def __init__(self, workspace_root: str | Path | None = None) -> None:
-        self.jail = PathJail(workspace_root)
+    def __init__(self, workspace_root: str | Path | PathJail | None = None) -> None:
+        if isinstance(workspace_root, PathJail):
+            self.jail = workspace_root
+        else:
+            self.jail = PathJail(workspace_root)
         self._granted_permissions: set[str] = {
             Permission.FS_READ.value,
             Permission.FS_WRITE.value,

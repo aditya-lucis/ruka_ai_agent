@@ -79,8 +79,61 @@ class GoogleSearchEngine:
 
         return items
 
+    def search_bing(self, query: str, max_results: int = 5) -> list[SearchResultItem]:
+        """Menelusuri web via Bing Search (bebas blokir DNS/ISP di Indonesia)."""
+        import base64
+        encoded_q = urllib.parse.quote(query)
+        url = f"https://www.bing.com/search?q={encoded_q}"
+        req = urllib.request.Request(url, headers=DEFAULT_HEADERS)
+        items: list[SearchResultItem] = []
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                content = resp.read().decode("utf-8", errors="ignore")
+
+            tree = html.fromstring(content)
+            for li in tree.xpath('//li[contains(@class, "b_algo")]'):
+                h2 = li.xpath(".//h2/a")
+                snip = li.xpath('.//div[contains(@class, "b_caption")]/p') or li.xpath(".//p")
+                if not h2:
+                    continue
+
+                title = h2[0].text_content().strip()
+                link = h2[0].get("href", "").strip()
+
+                # Decode Bing tracking link (u=a1<base64>...) jika ada
+                if "bing.com/ck/a?" in link and "u=a1" in link:
+                    try:
+                        import re
+                        m = re.search(r"[?&]u=a1([A-Za-z0-9_-]+)", link)
+                        if m:
+                            raw_b64 = m.group(1)
+                            raw_b64 += "=" * ((4 - len(raw_b64) % 4) % 4)
+                            decoded_url = base64.urlsafe_b64decode(raw_b64).decode("utf-8", errors="ignore")
+                            if decoded_url.startswith("http"):
+                                link = decoded_url
+                    except Exception:
+                        pass
+
+                snippet = snip[0].text_content().strip() if snip else ""
+                if title and link and not link.startswith("https://www.bing.com/search"):
+                    items.append(
+                        SearchResultItem(
+                            title=title,
+                            url=link,
+                            snippet=snippet[:350],
+                            source="Bing Search",
+                        )
+                    )
+                if len(items) >= max_results:
+                    break
+        except Exception as e:
+            logger.warning(f"Bing search error ({e})")
+
+        return items
+
     def search_duckduckgo(self, query: str, max_results: int = 5) -> list[SearchResultItem]:
-        """Menelusuri web via DuckDuckGo HTML (bebas blokir JS, format bersih)."""
+        """Menelusuri web via DuckDuckGo HTML (fallback jika ISP mengizinkan)."""
         encoded_q = urllib.parse.quote(query)
         url = f"https://html.duckduckgo.com/html/?q={encoded_q}"
         req = urllib.request.Request(url, headers=DEFAULT_HEADERS)
@@ -100,7 +153,6 @@ class GoogleSearchEngine:
                 title = title_el[0].text_content().strip()
                 link = title_el[0].get("href", "")
                 if link.startswith("//duckduckgo.com/l/?uddg="):
-                    # decode actual redirect URL
                     try:
                         parsed = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
                         link = parsed.get("uddg", [link])[0]
@@ -114,7 +166,7 @@ class GoogleSearchEngine:
                             title=title,
                             url=link,
                             snippet=snippet[:350],
-                            source="Web Search",
+                            source="DuckDuckGo",
                         )
                     )
                 if len(items) >= max_results:
@@ -158,10 +210,11 @@ class GoogleSearchEngine:
         return items
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResultItem]:
-        """Pencarian cerdas berjenjang:
+        """Pencarian cerdas berjenjang bebas blokir:
         1. Google News RSS jika query bertema berita/terkini/hari ini
-        2. DuckDuckGo Web Search untuk hasil web universal
-        3. Wikipedia untuk pengetahuan ensiklopedis
+        2. Bing Web Search (andal & bebas blokir ISP)
+        3. DuckDuckGo Web Search (fallback kedua)
+        4. Wikipedia untuk pengetahuan ensiklopedis
         """
         clean_q = query.strip()
         is_news_query = any(
@@ -175,12 +228,20 @@ class GoogleSearchEngine:
             items.extend(news_items)
 
         if len(items) < max_results:
-            web_items = self.search_duckduckgo(clean_q, max_results=max_results - len(items))
+            bing_items = self.search_bing(clean_q, max_results=max_results - len(items))
             existing_urls = {i.url for i in items}
-            for w in web_items:
-                if w.url not in existing_urls:
-                    items.append(w)
-                    existing_urls.add(w.url)
+            for b in bing_items:
+                if b.url not in existing_urls:
+                    items.append(b)
+                    existing_urls.add(b.url)
+
+        if len(items) < max_results:
+            ddg_items = self.search_duckduckgo(clean_q, max_results=max_results - len(items))
+            existing_urls = {i.url for i in items}
+            for d in ddg_items:
+                if d.url not in existing_urls:
+                    items.append(d)
+                    existing_urls.add(d.url)
 
         if len(items) < max_results:
             wiki_items = self.search_wikipedia(clean_q, max_results=2)

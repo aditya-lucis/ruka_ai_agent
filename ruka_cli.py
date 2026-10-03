@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -39,10 +40,80 @@ LOCAL_APPDATA = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / 
 ENDPOINT_FILE = Path(LOCAL_APPDATA) / "ruka" / "runtime" / "ipc-endpoint.json"
 
 
+class TerminalSpinner:
+    """Animasi spinner nokturnal aristokrat yang elegan saat Ruka sedang berpikir/bekerja."""
+
+    def __init__(self, message: str = "Marquis sedang menelaah ruang kerja & merajut nalar..."):
+        self.message = message
+        self.running = False
+        self._thread: threading.Thread | None = None
+
+    def _spin(self):
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        idx = 0
+        while self.running:
+            frame = frames[idx % len(frames)]
+            sys.stdout.write(f"\r  {MAGENTA}{frame}{RESET} {DIM}{self.message}{RESET} ")
+            sys.stdout.flush()
+            time.sleep(0.08)
+            idx += 1
+        # Bersihkan baris spinner
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+    def start(self):
+        self.running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self.running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.3)
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+
+def get_git_info() -> str:
+    """Mendeteksi branch git aktif dan kebersihan status repositori."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "branch", "--show-current"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if not branch:
+            branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain=v1"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        clean = f"{GREEN}clean{RESET}" if not status else f"{YELLOW}modified{RESET}"
+        return f"{CYAN}{branch}{RESET} [{clean}]"
+    except Exception:
+        return f"{DIM}non-git workspace{RESET}"
+
+
 def print_banner():
-    banner = f"""{MAGENTA}{BOLD}
-  🐾 RUKA (ルカ) — Marquis of Trendamis
-  {DIM}The Persistent Mind & Aristocratic Coding Agent CLI{RESET}
+    raw_cwd = os.environ.get("PWD") or os.getcwd()
+    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
+        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
+    git_info = get_git_info()
+
+    banner = f"""
+{MAGENTA}{BOLD}╭─────────────────────────────────────────────────────────────────────────────╮
+│ 🐾 RUKA (ルカ) — Marquis of Trendamis · Aristocratic Coding Agent v0.3.1    │
+├─────────────────────────────────────────────────────────────────────────────┤{RESET}
+  {BOLD}📂 Workspace{RESET} : {CYAN}{raw_cwd}{RESET}
+  {BOLD}🌿 Git State{RESET} : {git_info}
+  {BOLD}🧠 Mind Core{RESET} : {MAGENTA}Gemini 3.5 Flash-Lite & Multi-Turn Cognitive Brain{RESET}
+  {BOLD}🛡️  Security{RESET}  : {GREEN}Zero-Trust PathJail & CodeEvaluator Active{RESET}
+{MAGENTA}{BOLD}╰─────────────────────────────────────────────────────────────────────────────╯{RESET}
 """
     print(banner)
 
@@ -58,7 +129,7 @@ def get_ipc_connection(timeout: float = 4.0) -> tuple[socket.socket, dict] | Non
                 token = data.get("token")
                 if port and token:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(60.0)
+                    s.settimeout(300.0)
                     try:
                         s.connect(("127.0.0.1", port))
                         # Handshake
@@ -144,70 +215,118 @@ def render_formatted_output(text: str):
                 print(part.strip())
 
 
-def handle_chat(sock: socket.socket, prompt: str):
-    """Mengirim obrolan ke Ruka dan mengalirkan respons aristokrat secara live."""
+def handle_chat(sock: socket.socket, prompt: str, inline_confirm: bool = True, attachment: dict | None = None) -> bool:
+    """Mengirim obrolan ke Ruka dan mengalirkan respons aristokrat secara live dengan spinner & inline approval."""
     raw_cwd = os.environ.get("PWD") or os.getcwd()
     if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
         raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
+    payload_data = {"text": prompt, "cwd": raw_cwd}
+    if attachment:
+        payload_data["attachment"] = attachment
+
     req_env = {
         "type": "request",
         "channel": "ruka:chat-send",
         "correlationId": f"cli-{int(time.time())}",
-        "payload": {"text": prompt, "cwd": raw_cwd},
+        "payload": payload_data,
     }
-    sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
 
+    spinner = TerminalSpinner("Marquis sedang menelaah ruang kerja & merajut nalar...")
+    spinner.start()
     f = sock.makefile("r", encoding="utf-8")
-    print(f"\n{MAGENTA}{BOLD}Ruka (Marquis of Trendamis):{RESET}\n")
 
     full_text = ""
-    while True:
-        line = f.readline()
-        if not line:
-            break
-        try:
-            data = json.loads(line)
-            ch = data.get("channel")
-            payload = data.get("payload", {})
+    try:
+        sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
+        first_line = True
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            try:
+                data = json.loads(line)
+                ch = data.get("channel")
+                payload = data.get("payload", {})
 
-            if ch == "ruka:chat-stream":
-                delta = payload.get("delta", "")
-                if delta:
-                    full_text += delta
-            elif ch == "ruka:chat-send":
-                delta = payload.get("delta", "")
-                if delta and not full_text:
-                    full_text = delta
-                if payload.get("done"):
-                    break
-        except Exception:
-            break
+                if ch == "ruka:chat-stream":
+                    delta = payload.get("delta", "")
+                    if delta:
+                        if first_line:
+                            spinner.stop()
+                            print(f"\n{MAGENTA}{BOLD}Ruka (Marquis of Trendamis):{RESET}\n")
+                            first_line = False
+                        full_text += delta
+                elif ch == "ruka:chat-send":
+                    delta = payload.get("delta", "")
+                    if delta and not full_text:
+                        full_text = delta
+                    if payload.get("done"):
+                        break
+            except Exception:
+                break
+    except (socket.timeout, TimeoutError):
+        spinner.stop()
+        print(f"\n{YELLOW}⚠️  Waktu tunggu nalar terlampaui (Timeout), Young Lord.{RESET}")
+        print(f"{DIM}Nalar Marquis atau perancangan berkas kode yang masif memerlukan waktu lebih dari 300 detik.{RESET}")
+        print(f"{DIM}Koneksi IPC akan disegarkan secara otomatis agar Anda dapat melanjutkan sesi.{RESET}\n")
+        return False
+    except (ConnectionError, OSError) as conn_err:
+        spinner.stop()
+        print(f"\n{RED}⚠️  Koneksi ke Otak Ruka terputus: {conn_err}{RESET}\n")
+        return False
+    finally:
+        spinner.stop()
 
     if full_text:
         render_formatted_output(full_text)
     print()
 
+    # Inline Interactive Confirmation Gate (Claude Code caliber)
+    needs_approval = (
+        "Titah menunggu restu Young Lord" in full_text
+        or "Aksi Menunggu Persetujuan" in full_text
+        or bool(re.search(r"ID `[a-f0-9]+`\s*·\s*risiko", full_text, re.IGNORECASE))
+    )
+    if inline_confirm and needs_approval:
+        try:
+            confirm = input(f"{BOLD}{YELLOW}  [?] Restui eksekusi tindakan di atas sekarang? [Y/n]: {RESET}").strip().lower()
+            if confirm in ("", "y", "ya", "yes"):
+                print(f"{GREEN}  [✓] Titah direstui oleh Young Lord. Mengeksekusi...{RESET}\n")
+                return handle_chat(sock, "ya", inline_confirm=False)
+            else:
+                print(f"{RED}  [✕] Titah dibatalkan oleh Young Lord.{RESET}\n")
+                return handle_chat(sock, "batal", inline_confirm=False)
+        except (KeyboardInterrupt, EOFError):
+            pass
+    return True
+
 
 def handle_status(sock: socket.socket):
     """Menampilkan status runtime dan kesehatan kognisi Ruka."""
-    req_env = {
-        "type": "request",
-        "channel": "ruka:runtime-status",
-        "correlationId": "cli-status",
-        "payload": {},
-    }
-    sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
-    f = sock.makefile("r", encoding="utf-8")
-    line = f.readline()
+    spinner = TerminalSpinner("Mengambil status kesehatan runtime Ruka...")
+    spinner.start()
+    try:
+        req_env = {
+            "type": "request",
+            "channel": "ruka:runtime-status",
+            "correlationId": "cli-status",
+            "payload": {},
+        }
+        sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
+        f = sock.makefile("r", encoding="utf-8")
+        line = f.readline()
+    finally:
+        spinner.stop()
+
     if line:
         try:
             res = json.loads(line).get("payload", {})
             print(f"\n{GREEN}{BOLD}=== Status Runtime RUKA Coding Agent ==={RESET}")
-            print(f" • Status        : {CYAN}{res.get('status', 'online').upper()}{RESET}")
-            print(f" • Process PID   : {res.get('pid')}")
+            print(f" • Status        : {CYAN}{res.get('state', 'ready').upper()}{RESET}")
+            print(f" • Health Score : {GREEN}{res.get('health_score', 1.0) * 100:.1f}%{RESET}")
             print(f" • Uptime        : {res.get('uptime_s', 0):.1f} detik")
-            print(f" • Otak Kognisi  : {res.get('llm_model', 'Gemini 3.5 Flash-Lite')}")
-            print(f" • Coding Engine : {MAGENTA}Claude Code Parity v1.0 (Phase 1–3 Ready){RESET}")
+            print(f" • Gateway       : {CYAN}{'Active (Zero-Trust)' if res.get('gateway_active') else 'Inactive'}{RESET}")
+            print(f" • Coding Engine : {MAGENTA}Claude Code Parity v2.0 (LLM ReAct Loop Active){RESET}")
             print(f" • Sandbox       : {GREEN}Zero-Trust PathJail & CodeEvaluator Active{RESET}\n")
         except Exception as e:
             print(f"{RED}Gagal membaca status: {e}{RESET}")
@@ -298,18 +417,47 @@ def handle_review(sock: socket.socket, target_path: str):
     handle_chat(sock, prompt)
 
 
+def build_image_attachment(img_path: str) -> dict | None:
+    """Membaca berkas citra visual dan mengonversinya menjadi payload multimodal."""
+    p = Path(img_path)
+    if not p.exists() or not p.is_file():
+        print(f"{RED}[!] Berkas gambar tidak ditemukan: {img_path}{RESET}")
+        return None
+    try:
+        import base64
+        import mimetypes
+        mime, _ = mimetypes.guess_type(str(p))
+        mime = mime or "image/png"
+        raw_b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+        return {
+            "isImage": True,
+            "type": "image",
+            "name": p.name,
+            "mime_type": mime,
+            "data": raw_b64,
+        }
+    except Exception as e:
+        print(f"{RED}[!] Gagal membaca berkas gambar: {e}{RESET}")
+        return None
+
+
 def handle_search(sock: socket.socket, query: str):
     """Pencarian Google Search gratis via Ruka."""
-    print(f"{CYAN}[*] Ruka sedang menelusuri web untuk: '{query}'...{RESET}")
-    req_env = {
-        "type": "request",
-        "channel": "ruka:google-search",
-        "correlationId": "cli-search",
-        "payload": {"query": query},
-    }
-    sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
-    f = sock.makefile("r", encoding="utf-8")
-    line = f.readline()
+    spinner = TerminalSpinner(f"Ruka sedang menelusuri web untuk: '{query}'...")
+    spinner.start()
+    try:
+        req_env = {
+            "type": "request",
+            "channel": "ruka:google-search",
+            "correlationId": "cli-search",
+            "payload": {"query": query},
+        }
+        sock.sendall((json.dumps(req_env) + "\n").encode("utf-8"))
+        f = sock.makefile("r", encoding="utf-8")
+        line = f.readline()
+    finally:
+        spinner.stop()
+
     if line:
         try:
             results = json.loads(line).get("payload", {}).get("results", [])
@@ -326,32 +474,69 @@ def handle_search(sock: socket.socket, query: str):
 
 
 def interactive_repl(sock: socket.socket):
-    """Mode REPL Interaktif terminal dengan dukungan command koding."""
+    """Mode REPL Interaktif terminal dengan estetika dan responsivitas setara Claude Code."""
     print_banner()
-    print(f"{CYAN}Sesi interaktif koding dibuka. Ketik 'help' untuk daftar perintah atau 'exit' untuk keluar.{RESET}\n")
+    print(f"{DIM}Ketik perintah coding, '/help' untuk bantuan, atau '/clear' untuk menyegarkan layar.{RESET}\n")
     while True:
         try:
-            prompt = input(f"{BOLD}{CYAN}Young Lord > {RESET}").strip()
+            prompt = input(f"{BOLD}{CYAN}Young Lord{RESET} {DIM}›{RESET} ").strip()
             if not prompt:
                 continue
-            if prompt.lower() in ("exit", "quit", "q"):
+            if prompt.lower() in ("exit", "quit", "q", "/exit", "/quit", "/q"):
                 print(f"\n{MAGENTA}Ruka: Sampai jumpa, Young Lord. Hamba senantiasa siap sedia mendampingi Anda.{RESET}\n")
                 break
-            if prompt.lower() == "status":
+            if prompt.lower() in ("/clear", "clear", "cls"):
+                os.system("cls" if os.name == "nt" else "clear")
+                print_banner()
+                continue
+            if prompt.lower() in ("/help", "help"):
+                print_help()
+                continue
+            if prompt.lower() in ("/status", "status"):
                 handle_status(sock)
-            elif prompt.lower() == "diff":
+            elif prompt.lower() in ("/diff", "diff"):
                 handle_diff()
-            elif prompt.lower() in ("git-status", "gs"):
+            elif prompt.lower() in ("/git-status", "/gs", "git-status", "gs"):
                 handle_git_status()
-            elif prompt.lower().startswith("review "):
-                handle_review(sock, prompt[7:].strip())
-            elif prompt.lower().startswith("search "):
-                handle_search(sock, prompt[7:].strip())
+            elif prompt.lower().startswith("/review ") or prompt.lower().startswith("review "):
+                path = prompt.split(None, 1)[1].strip()
+                handle_review(sock, path)
+            elif prompt.lower().startswith("/search ") or prompt.lower().startswith("search "):
+                q = prompt.split(None, 1)[1].strip()
+                handle_search(sock, q)
+            elif prompt.lower().startswith("/image ") or prompt.lower().startswith("/img "):
+                parts = prompt.split(None, 2)
+                if len(parts) >= 2:
+                    img_p = parts[1].strip()
+                    user_q = parts[2].strip() if len(parts) > 2 else "Ruka, periksa dan analisis citra visual ini secara saksama."
+                    att = build_image_attachment(img_p)
+                    if att:
+                        handle_chat(sock, user_q, attachment=att)
+                else:
+                    print(f"{YELLOW}Gunakan: /image <path-ke-gambar> [instruksi]{RESET}")
             else:
-                handle_chat(sock, prompt)
+                ok = handle_chat(sock, prompt)
+                if not ok:
+                    reconnected = get_ipc_connection(timeout=3.0)
+                    if reconnected:
+                        try:
+                            sock.close()
+                        except Exception:
+                            pass
+                        sock, _ = reconnected
+                        print(f"{DIM}[✓] Saluran komunikasi dengan Otak Ruka disegarkan kembali.{RESET}\n")
         except (KeyboardInterrupt, EOFError):
             print(f"\n{MAGENTA}Ruka: Pamit mengundurkan diri, Young Lord.{RESET}\n")
             break
+        except Exception as repl_err:
+            print(f"\n{RED}Terjadi kendala pada terminal: {repl_err}{RESET}")
+            reconnected = get_ipc_connection(timeout=3.0)
+            if reconnected:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                sock, _ = reconnected
 
 
 def print_help():
@@ -363,14 +548,24 @@ def print_help():
   {CYAN}ruka diff [path]{RESET}            Tampilkan perbedaan kode git diff berwarna
   {CYAN}ruka git-status{RESET}             Periksa ringkasan status git repositori
   {CYAN}ruka status{RESET}                 Cek kesehatan runtime Otak Ruka & PID
-  {CYAN}ruka search "query"{RESET}         Cari berita/informasi terkini di Google
+  {CYAN}ruka search "query"{RESET}         Cari berita/informasi terkini di Google & Web
+  {CYAN}ruka --image <file> "tanya"{RESET} Analisis citra visual/mockup arsitektur (Vision)
   {CYAN}ruka help{RESET}                   Tampilkan bantuan ini
+
+{BOLD}PERINTAH SLASH DI DALAM REPL:{RESET}
+  {CYAN}/search <query>{RESET}             Telusuri web/berita real-time
+  {CYAN}/image <path> [instruksi]{RESET}  Analisis gambar/desain mockup langsung
+  {CYAN}/diff [file]{RESET}                Tampilkan git diff
+  {CYAN}/status{RESET}                     Status runtime & sandbox
+  {CYAN}/clear{RESET}                      Bersihkan layar terminal
+  {CYAN}/exit{RESET}                       Keluar dari sesi terminal
 
 {BOLD}CONTOH CODING:{RESET}
   ruka "Perbaiki race condition di modul auth.py"
+  ruka --image screenshot.png "Implementasikan tampilan ini dengan Bootstrap 5"
+  ruka search "Dokumentasi Go Fiber terbaru"
   ruka review src/agent/orchestrator.py
   ruka diff
-  ruka "Implementasikan fitur rate limiter dengan token bucket"
 """)
 
 
@@ -389,6 +584,16 @@ def main():
         handle_git_status()
         return
 
+    # Ekstraksi opsi gambar multimodal jika ada
+    img_attachment = None
+    if "--image" in args or "-i" in args:
+        flag = "--image" if "--image" in args else "-i"
+        idx = args.index(flag)
+        if idx + 1 < len(args):
+            img_path = args[idx + 1]
+            img_attachment = build_image_attachment(img_path)
+            args = args[:idx] + args[idx + 2:]
+
     res = ensure_brain_running()
     if not res:
         sys.exit(1)
@@ -405,7 +610,9 @@ def main():
             handle_search(sock, " ".join(args[1:]))
         else:
             prompt = " ".join(args)
-            handle_chat(sock, prompt)
+            if not prompt and img_attachment:
+                prompt = "Ruka, periksa dan analisis citra visual ini secara saksama."
+            handle_chat(sock, prompt, attachment=img_attachment)
     finally:
         try:
             sock.close()

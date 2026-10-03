@@ -64,6 +64,43 @@ def register_builtin_coding_skills(
             return tool.run(validated_args)
         return _handler
 
+    def _web_search_handler(**kwargs: Any) -> Any:
+        from src.tools.google_search import get_search_engine
+        engine = get_search_engine()
+        query = str(kwargs.get("query", ""))
+        max_res = int(kwargs.get("max_results", 5))
+        return engine.search_as_dict(query, max_results=max_res)
+
+    def _test_fix_verify_handler(**kwargs: Any) -> Any:
+        from src.agent.test_fix_verify import TestFixVerifyLoop
+        loop = TestFixVerifyLoop(jail=jail, max_retries=int(kwargs.get("max_retries", 3)))
+        cmd = str(kwargs.get("command", "pytest"))
+        res = loop.run(test_command=cmd, confirm_granted=True)
+        return {
+            "status": res.status,
+            "summary": res.summary,
+            "attempts": len(res.attempts),
+            "final_passed": res.final_result.passed if res.final_result else False,
+        }
+
+    def _current_time_handler(**kwargs: Any) -> Any:
+        from src.tools.ambient_sensors import get_current_time
+        return get_current_time()
+
+    def _geolocation_handler(**kwargs: Any) -> Any:
+        from src.tools.ambient_sensors import get_geolocation
+        return get_geolocation()
+
+    def _weather_info_handler(**kwargs: Any) -> Any:
+        from src.tools.ambient_sensors import get_weather
+        loc = kwargs.get("location") or None
+        return get_weather(location=loc)
+
+    def _currency_rate_handler(**kwargs: Any) -> Any:
+        from src.tools.ambient_sensors import get_currency_rates
+        base = str(kwargs.get("base", "USD") or "USD")
+        return get_currency_rates(base=base)
+
     tool_handlers = {
         "code_read": _make_handler(read_tool),
         "code_write": _make_handler(write_tool),
@@ -76,6 +113,12 @@ def register_builtin_coding_skills(
         "git_log": _make_handler(git_log_tool),
         "git_commit": _make_handler(git_commit_tool),
         "repo_map": _make_handler(repo_map_tool),
+        "web_search": _web_search_handler,
+        "test_fix_verify": _test_fix_verify_handler,
+        "current_time": _current_time_handler,
+        "geolocation": _geolocation_handler,
+        "weather_info": _weather_info_handler,
+        "currency_rate": _currency_rate_handler,
     }
 
     # Coba muat metadata dari SKILL.md jika folder skills tersedia
@@ -93,10 +136,14 @@ def register_builtin_coding_skills(
         if loaded_skill is None:
             # Fallback pembuatan skill deklaratif jika folder SKILL.md tidak terbaca
             req_confirm = False
-            if skill_name == "run_terminal":
-                risk, perms, req_confirm = "high", ["shell:execute"], True
-            elif skill_name == "git_commit":
-                risk, perms, req_confirm = "high", ["filesystem:write", "shell:execute"], True
+            if skill_name in ("run_terminal", "git_commit"):
+                risk, perms, req_confirm = "high", ["shell:execute", "filesystem:write"], True
+            elif skill_name == "test_fix_verify":
+                risk, perms, req_confirm = "high", ["shell:execute", "filesystem:write"], True
+            elif skill_name in ("web_search", "geolocation", "weather_info", "currency_rate"):
+                risk, perms, req_confirm = "low", ["network:fetch"], False
+            elif skill_name == "current_time":
+                risk, perms, req_confirm = "low", [], False
             elif skill_name in ("code_read", "code_search", "list_dir", "git_status", "git_diff", "git_log", "repo_map"):
                 risk, perms = "low", ["filesystem:read"]
             else:
@@ -104,7 +151,7 @@ def register_builtin_coding_skills(
             loaded_skill = Skill(
                 name=skill_name,
                 version="1.0.0",
-                description=f"Built-in coding skill: {skill_name}",
+                description=f"Built-in skill: {skill_name}",
                 risk_level=risk,
                 requires_confirmation=req_confirm,
                 permissions=perms,

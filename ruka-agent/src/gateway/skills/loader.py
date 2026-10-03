@@ -155,7 +155,9 @@ class SkillLoader:
         # Validasi field wajib
         missing_fields = []
         for req in ("name", "version", "description", "risk_level", "permissions"):
-            if req not in meta or not meta[req]:
+            if req not in meta or meta[req] is None:
+                missing_fields.append(req)
+            elif isinstance(meta[req], str) and not meta[req].strip():
                 missing_fields.append(req)
 
         if missing_fields:

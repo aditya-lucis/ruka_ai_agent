@@ -18,6 +18,7 @@ hiddenimports = [
     'src.tools.git',
     'src.tools.project_map',
     'src.tools.google_search',
+    'src.tools.ambient_sensors',
     'src.agent.evaluator',
     'src.agent.self_correction',
     'src.agent.test_fix_verify',

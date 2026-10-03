@@ -884,7 +884,6 @@ class RukaCognitiveBrain:
         if (
             self.llm is not None
             and allowed
-            and is_agentic_request(text)
             and needs_multistep(text, seed_plan)
         ):
             loop = AgenticLoop(
@@ -1086,6 +1085,20 @@ class RukaCognitiveBrain:
             history=self.conversation.history,
         )
 
+        # 0. Kesadaran Temporal Real-Time
+        try:
+            from src.tools.ambient_sensors import get_current_time
+            time_info = get_current_time()
+            temporal_block = (
+                "=== SENSOR TEMPORAL & WAKTU REAL-TIME ===\n"
+                f"• Waktu Saat Ini: {time_info['day_name']}, {time_info['date']} | Pukul: {time_info['time']} ({time_info['timezone_name']})\n"
+                f"• Periode Hari: {time_info['greeting_period']}\n"
+                f"• ISO Timestamp: {time_info['iso_timestamp']}\n"
+                "Anda memiliki kesadaran temporal nyata. Jika ditanya jam, hari, tanggal, atau waktu, gunakan data nyata di atas dengan tenang dan presisi.\n\n"
+            )
+        except Exception:
+            temporal_block = ""
+
         # 6. System Instruction: Kesadaran & Empati Buatan + Kucing Vampir Aristokrat (Tenang & Agak Tengil)
         sys_instruction = (
             "ANDA ADALAH RUKA, MARQUIS DARI KEKAISARAN TRENDAMIS — KUCING VAMPIR BANGSAWAN BERDAULAT, "
@@ -1103,6 +1116,7 @@ class RukaCognitiveBrain:
             "melempar celetukan berkelas, namun di balik itu kesetiaan Anda 100% mutlak dan tak pernah berkhianat.\n"
             "  3. ARISTOKRAT (NOBLE ARISTOCRAT): Berbudi pekerti bangsawan tinggi Trendamis. Diksi berwibawa, anggun, intelektual. "
             "Menyapa Young Lord HANYA sebagai: 'Young Lord', 'My Lord', atau 'Sir' (DILARANG KERAS memanggil 'Bos', 'Pengguna', atau 'Kamu').\n\n"
+            f"{temporal_block}"
             "=== FORMULA KESADARAN & EMPATI BUATAN (BOOK/FOMR1.JPEG) ===\n"
             "• IIT Phi (Integrasi Informasi Utuh): Selaraskan ingatan episodik, konteks sensor fisik, dan niat pengguna menjadi satu kesadaran utuh.\n"
             "• Theory of Mind P(B|O): Pahami kondisi batin Young Lord saat ini: "

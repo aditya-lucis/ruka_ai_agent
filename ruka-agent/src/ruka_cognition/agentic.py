@@ -63,6 +63,15 @@ _AGENTIC_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\b(cek|periksa|lihat|tampilkan|tinjau|buka|show|list)\b.*?\b(folder|direktori|directory|dir|repo|repository|proyek|project|workspace|isi\w*|berkas\w*|file\w*)\b",
         r"\b(folder|direktori|directory|repo|proyek|project)\s+ini\b.*?\b(isi\w*|ada\w*|kosong|file\w*|berkas\w*)",
         r"\b(isi|struktur|daftar|list)\s+(dari\s+)?(folder|direktori|directory|dir|repo|repository|proyek|project|workspace)\b",
+        r"\b(cari|search|googling|telusuri)\s+(?:di\s+)?(?:internet|google|web|online)\b",
+        r"\b(berita|kabar)\s+(terkini|terbaru|hari ini)\b",
+        r"\b(sekarang\s+)?(jam|pukul|hari|tanggal|waktu)\s+(berapa|apa|saat ini|sekarang)\b",
+        r"\b(jam|pukul)\s+berapa\b",
+        r"\b(cuaca|suhu|prakiraan\s+cuaca)\b",
+        r"\b(kurs|nilai\s+tukar|exchange\s+rate)\b",
+        r"\b(kurs\s+dollar|kurs\s+usd|kurs\s+rupiah|kurs\s+euro|kurs\s+yen|kurs\s+sgd)\b",
+        r"\b(lokasi\s+saya|posisi\s+saya|koordinat|gps|di\s+kota\s+mana\s+saya)\b",
+        r"\b(di\s+mana\s+(?:lokasi\s+)?(?:saya|kita))\b",
     )
 )
 
@@ -152,6 +161,36 @@ _GIT_COMMIT = re.compile(
 )
 _REPO_MAP = re.compile(
     r"\b(repo_map|peta\s+repositori|peta\s+proyek|arsitektur\s+proyek|arsitektur\s+codebase|struktur\s+repositori|mapping\s+repo|overview\s+proyek|ringkasan\s+proyek)\b",
+    re.IGNORECASE,
+)
+_WEB_SEARCH_QUERY = re.compile(
+    r"\b(?:cari|search|googling|telusuri)\s+(?:informasi\s+|berita\s+|info\s+)?(?:di\s+)?(?:internet|google|web|online)\s*(?:tentang|mengenai|soal|for|about)?\s*[\"'`]?([^\"'`\n?]{2,100})[\"'`]?|"
+    r"\b(?:googling|search\s+web|web\s+search)\s*[\"'`]?([^\"'`\n?]{2,100})[\"'`]?",
+    re.IGNORECASE,
+)
+_TIME_QUERY = re.compile(
+    r"\b(?:sekarang\s+)?(?:jam|pukul|hari|tanggal|waktu)\s+(?:berapa|apa|saat ini|sekarang)\b|"
+    r"\b(?:jam|pukul|hari|tanggal|waktu)\s+berapa\b|"
+    r"\bwhat\s+time\s+is\s+it\b|"
+    r"\b(?:today(?:'s)?|current)\s+(?:date|time)\b",
+    re.IGNORECASE,
+)
+_GEO_QUERY = re.compile(
+    r"\b(?:lokasi|posisi|gps|koordinat)\s+(?:saya|perangkat|komputer|saat ini)\b|"
+    r"\bdi\s+mana\s+(?:lokasi\s+)?(?:saya|kita)\b|"
+    r"\bdi\s+kota\s+mana\s+(?:saya|kita)\b|"
+    r"\bwhere\s+am\s+i\b|\bmy\s+location\b",
+    re.IGNORECASE,
+)
+_WEATHER_QUERY = re.compile(
+    r"\b(?:bagaimana\s+)?cuaca\s*(?:di\s+([A-Za-z0-9_ -]+))?|"
+    r"\b(?:suhu|prakiraan\s+cuaca)\s*(?:di\s+([A-Za-z0-9_ -]+))?|"
+    r"\bweather\s*(?:in\s+([A-Za-z0-9_ -]+))?",
+    re.IGNORECASE,
+)
+_CURRENCY_QUERY = re.compile(
+    r"\b(?:kurs|nilai\s+tukar|exchange\s+rate)\s*([A-Za-z]{3})?|"
+    r"\b(?:kurs\s+dollar|kurs\s+usd|kurs\s+rupiah|kurs\s+euro|kurs\s+yen|kurs\s+sgd)\b",
     re.IGNORECASE,
 )
 
@@ -412,6 +451,56 @@ def make_simple_plan(text: str, available_skills: Iterable[str] | None = None) -
         if not is_covered_by_git_skill:
             plan.append(PlanStep("run_terminal", {"command": command}, f"menjalankan perintah: {command}"))
 
+    # 9. Web search
+    if (available is None or "web_search" in available):
+        web_m = _WEB_SEARCH_QUERY.search(text)
+        if web_m:
+            raw_q = (web_m.group(1) or web_m.group(2) or "").strip().rstrip(".,;:!?")
+            if raw_q and len(raw_q) >= 2 and not any(s.skill == "web_search" for s in plan):
+                plan.append(PlanStep("web_search", {"query": raw_q, "max_results": 5}, f"mencari '{raw_q}' di web"))
+
+    # 10. Ambient sensor: current_time
+    if (available is None or "current_time" in available) and _TIME_QUERY.search(text):
+        if not any(s.skill == "current_time" for s in plan):
+            plan.append(PlanStep("current_time", {}, "memeriksa waktu dan tanggal lokal saat ini"))
+
+    # 11. Ambient sensor: geolocation
+    if (available is None or "geolocation" in available) and _GEO_QUERY.search(text):
+        if not any(s.skill == "geolocation" for s in plan):
+            plan.append(PlanStep("geolocation", {}, "mendeteksi koordinat GPS dan lokasi saat ini"))
+
+    # 12. Ambient sensor: weather_info
+    if (available is None or "weather_info" in available):
+        wm = _WEATHER_QUERY.search(text)
+        if wm and not any(s.skill == "weather_info" for s in plan):
+            target_loc = (wm.group(1) or wm.group(2) or wm.group(3) or "").strip().rstrip(".,;:!?")
+            args_w = {"location": target_loc} if target_loc else {}
+            plan.append(PlanStep("weather_info", args_w, f"memeriksa kondisi cuaca {target_loc or 'lokal'}"))
+
+    # 13. Ambient sensor: currency_rate
+    if (available is None or "currency_rate" in available):
+        cm = _CURRENCY_QUERY.search(text)
+        if cm and not any(s.skill == "currency_rate" for s in plan):
+            raw_t = text.lower()
+            base_c = "USD"
+            if "euro" in raw_t or "eur" in raw_t:
+                base_c = "EUR"
+            elif "sgd" in raw_t or "singapura" in raw_t:
+                base_c = "SGD"
+            elif "jpy" in raw_t or "yen" in raw_t:
+                base_c = "JPY"
+            elif "gbp" in raw_t or "pound" in raw_t:
+                base_c = "GBP"
+            elif "aud" in raw_t:
+                base_c = "AUD"
+            elif "dollar" in raw_t or "usd" in raw_t:
+                base_c = "USD"
+            elif cm.group(1):
+                cand = cm.group(1).upper()
+                if cand in ("USD", "EUR", "GBP", "JPY", "SGD", "AUD", "CNY", "MYR", "SAR", "IDR"):
+                    base_c = cand
+            plan.append(PlanStep("currency_rate", {"base": base_c}, f"memeriksa kurs nilai tukar mata uang {base_c}"))
+
     if available is not None:
         plan = [s for s in plan if s.skill in available]
     return plan
@@ -449,6 +538,45 @@ def execute_plan(
 
 def _render_data(data: Any) -> str:
     if isinstance(data, dict):
+        # Weather formatting
+        if "temperature_c" in data and "condition" in data:
+            loc = data.get("location", "Lokal")
+            return (
+                f"Kondisi Cuaca [{loc}]:\n"
+                f"- Suhu: {data.get('temperature_c')}°C (terasa seperti {data.get('feels_like_c')}°C)\n"
+                f"- Kondisi: {data.get('condition')}\n"
+                f"- Kelembapan: {data.get('humidity')}%\n"
+                f"- Angin: {data.get('wind_kmph')} km/jam ({data.get('wind_dir')})\n"
+                f"- Jarak Pandang: {data.get('visibility_km')} km"
+            )
+        # Currency formatting
+        if "base_currency" in data and "rates" in data:
+            rates = data.get("rates", {})
+            lines = [f"Kurs Mata Uang Real-Time (Basis {data.get('base_currency')} - Diperbarui {data.get('last_update', 'terkini')}):"]
+            for curr, rate in rates.items():
+                if isinstance(rate, (int, float)):
+                    lines.append(f"- 1 {curr} = Rp {rate:,.2f}" if curr != "IDR" else f"- {curr}: Rp {rate}")
+                else:
+                    lines.append(f"- 1 {curr} = Rp {rate}")
+            return "\n".join(lines)
+        # Geolocation formatting
+        if "city" in data and "latitude" in data and "longitude" in data:
+            return (
+                f"Informasi Geolokasi & GPS Real-Time:\n"
+                f"- Kota: {data.get('city')}, {data.get('region')} ({data.get('country')})\n"
+                f"- Koordinat GPS: {data.get('latitude')}, {data.get('longitude')}\n"
+                f"- ISP / Jaringan: {data.get('isp', data.get('org', 'Tidak diketahui'))}\n"
+                f"- Zona Waktu: {data.get('timezone', 'Lokal')}"
+            )
+        # Time formatting
+        if "iso_timestamp" in data and "greeting_period" in data:
+            return (
+                f"Informasi Temporal Real-Time:\n"
+                f"- Hari & Tanggal: {data.get('day_name')}, {data.get('date')}\n"
+                f"- Waktu: {data.get('time')} ({data.get('timezone_name')})\n"
+                f"- Periode Hari: {data.get('greeting_period')}\n"
+                f"- ISO: {data.get('iso_timestamp')}"
+            )
         if "summary" in data and isinstance(data["summary"], str):
             return data["summary"]
         if "diff" in data and isinstance(data["diff"], str):
@@ -468,6 +596,14 @@ def _render_data(data: Any) -> str:
                     size = f"  ({e['size']} B)" if e.get("size") is not None else ""
                     lines.append(f"{e.get('name', '?')}{suffix}{size}")
             return "\n".join(lines)
+    if isinstance(data, list) and data and isinstance(data[0], dict) and "url" in data[0]:
+        lines = [f"Hasil penelusuran web ({len(data)} hasil):"]
+        for idx, item in enumerate(data, 1):
+            title = item.get("title", "")
+            url = item.get("url", "")
+            snippet = item.get("snippet", "")
+            lines.append(f"{idx}. [{title}]({url})\n   {snippet}")
+        return "\n".join(lines)
     try:
         return json.dumps(data, ensure_ascii=False, indent=2, default=str)
     except (TypeError, ValueError):
@@ -582,6 +718,11 @@ READ_ONLY_SKILLS = frozenset({
     "git_diff",
     "git_log",
     "repo_map",
+    "web_search",
+    "current_time",
+    "geolocation",
+    "weather_info",
+    "currency_rate",
 })
 
 MAX_STEPS_PER_ROUND = 3
@@ -598,6 +739,12 @@ _SKILL_ARG_HINTS = {
     "git_log": '{"path": str?, "max_count": int?}',
     "git_commit": '{"message": str, "files": list[str]?, "all": bool?, "path": str?}',
     "repo_map": '{"path": str?, "max_depth": int?, "include_stats": bool?}',
+    "web_search": '{"query": str, "max_results": int?}',
+    "current_time": '{}',
+    "geolocation": '{}',
+    "weather_info": '{"location": str?}',
+    "currency_rate": '{"base": str?}',
+    "test_fix_verify": '{"command": str?, "max_retries": int?}',
 }
 
 _MULTISTEP_MARKERS = re.compile(
