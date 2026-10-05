@@ -34,7 +34,10 @@ from src.gateway.confirmations import (
     render_ticket_card,
 )
 from src.gateway.skills.coding_bridge import register_builtin_coding_skills
+from src.gateway.skills.loader import get_skills_dir
 from src.math_foundations.control import BudgetController, loop_health
+from src.memory.palace import MemoryPalace
+from src.gateway.supervisor import OrganSupervisor
 
 log = logging.getLogger("ruka.gateway.server")
 
@@ -63,6 +66,47 @@ class RukaGatewayServer:
         self.budget_ctrl = BudgetController()
         self.brain = brain
 
+        # Inisialisasi Istana Memori (Memory Palace)
+        palace_db = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ruka" / "palace.db"
+        self.memory_palace = MemoryPalace(db_path=palace_db, event_bus=self.event_bus)
+
+        # Inisialisasi Organ Supervisor & Watchdog (0.5 Hz heartbeat)
+        beat_state_file = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ruka" / "supervisor_beat.txt"
+        self.supervisor = OrganSupervisor(event_bus=self.event_bus, state_file=beat_state_file)
+        self.supervisor.register_organ("MemoryPalace", "memory", check_fn=lambda: self.memory_palace is not None)
+
+        # Inisialisasi Organ Noctis (Senses, Hands, Heart, Converse, Presence, OS Companion, Avatar)
+        from src.senses import BloodHearing, EternalVoice, CrimsonEyes
+        from src.hands import ShadowHands
+        from src.heart import CrimsonHeart
+        from src.converse import ConversationLoop
+        from src.presence.engine import LivingPresenceEngine
+        from src.os_companion.ghost_window import GhostWindowManager
+        from src.os_companion.docking import MagneticDockManager
+        from src.os_companion.voice_hud import VoiceHUD
+        from src.avatar.engine import LivingAvatarEngine
+
+        self.hearing = BloodHearing(event_bus=self.event_bus)
+        self.voice = EternalVoice(event_bus=self.event_bus)
+        self.eyes = CrimsonEyes(event_bus=self.event_bus)
+        self.hands = ShadowHands(event_bus=self.event_bus)
+        self.heart = CrimsonHeart(event_bus=self.event_bus, memory_palace=self.memory_palace)
+        self.converse = ConversationLoop(event_bus=self.event_bus, memory_palace=self.memory_palace)
+        self.presence = LivingPresenceEngine(event_bus=self.event_bus)
+        self.avatar = LivingAvatarEngine()
+        self.ghost_window = GhostWindowManager()
+        self.dock_mgr = MagneticDockManager()
+        self.voice_hud = VoiceHUD()
+
+        self.supervisor.register_organ("BloodHearing", "ear", check_fn=lambda: self.hearing is not None)
+        self.supervisor.register_organ("EternalVoice", "voice", check_fn=lambda: self.voice is not None)
+        self.supervisor.register_organ("CrimsonEyes", "eyes", check_fn=lambda: self.eyes is not None)
+        self.supervisor.register_organ("ShadowHands", "hands", check_fn=lambda: self.hands is not None)
+        self.supervisor.register_organ("CrimsonHeart", "heart", check_fn=lambda: self.heart is not None)
+        self.supervisor.register_organ("MultimodalConverse", "converse", check_fn=lambda: self.converse is not None)
+        self.supervisor.register_organ("LivingPresence", "presence", check_fn=lambda: self.presence is not None)
+        self.supervisor.register_organ("LivingAvatar", "presence", check_fn=lambda: self.avatar is not None)
+
         # Subsistem Skills
         self.skill_registry = SkillRegistry()
         self.skills_runtime = SkillsRuntime(
@@ -71,16 +115,7 @@ class RukaGatewayServer:
             event_bus=self.event_bus,
         )
         try:
-            candidates = [
-                Path(sys.executable).parent / "skills",
-                Path(sys.executable).parent / "_internal" / "skills",
-                Path(sys.executable).parent / "resources" / "brain" / "skills",
-                Path(sys.executable).parent / "resources" / "skills",
-                Path(getattr(sys, "_MEIPASS", "")) / "skills",
-                Path.cwd() / "skills",
-                Path(__file__).resolve().parent.parent.parent.parent / "skills",
-            ]
-            skills_dir = next((p for p in candidates if p.exists() and p.is_dir()), candidates[-1])
+            skills_dir = get_skills_dir()
             register_builtin_coding_skills(
                 self.skill_registry,
                 skills_dir=skills_dir,
@@ -117,6 +152,18 @@ class RukaGatewayServer:
             self.brain.skill_registry = self.skill_registry
             self.brain.skills_runtime = self.skills_runtime
             self.brain.confirmations = self.confirmations
+            self.brain.memory_palace = self.memory_palace
+            self.brain.event_bus = self.event_bus
+            self.brain.supervisor = self.supervisor
+            self.brain.hearing = self.hearing
+            self.brain.voice = self.voice
+            self.brain.eyes = self.eyes
+            self.brain.hands = self.hands
+            self.brain.heart = self.heart
+            self.brain.converse = self.converse
+            self.brain.presence = self.presence
+            self.brain.avatar = self.avatar
+            self.supervisor.register_organ("Brain", "heart", check_fn=lambda: self.brain is not None)
 
     def _handle_skill_execute(self, msg: InboundMessage, session_id: str) -> OutboundMessage:
         """Run a skill. Gated skills require a server-issued, single-use confirmation ticket.
@@ -240,7 +287,7 @@ class RukaGatewayServer:
             return self._handle_skill_execute(msg, sess.session_id)
 
         # Status runtime / Health check
-        if ipc_channel == "ruka:runtime-status" or msg.type == "status":
+        if ipc_channel == "ruka:runtime-status" or msg.type == "runtime.status" or (msg.type == "status" and not ipc_channel):
             uptime = time.time() - self.start_time
             health = loop_health(
                 repeated_errors=0,
@@ -263,7 +310,119 @@ class RukaGatewayServer:
                 },
             )
 
-        # Pemrosesan Obrolan Kognitif (Chat / Coding Prompt)
+        # Permintaan status kesehatan organ PROJECT NOCTIS (FR-HE-01, FR-OS-06)
+        if ipc_channel == "ruka:organ-status" or msg.type == "organ.status":
+            return OutboundMessage(
+                type="response",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content=self.supervisor.status(),
+            )
+
+        # Permintaan pose avatar 60 fps (FR-AV-01, FR-AV-10)
+        if ipc_channel == "ruka:avatar-pose" or msg.type == "avatar.pose":
+            pose = self.avatar.get_pose()
+            return OutboundMessage(
+                type="response",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={
+                    "frame_index": pose.frame_index,
+                    "timestamp": pose.timestamp,
+                    "bones": pose.bones.__dict__,
+                    "blendshapes": pose.blendshapes,
+                    "viseme": pose.viseme.__dict__,
+                    "pupil": pose.pupil.__dict__,
+                    "lod_level": pose.lod_level,
+                },
+            )
+
+        # Pengaturan ekspresi blendshape avatar (FR-AV-10)
+        if ipc_channel == "ruka:avatar-expression" or msg.type == "avatar.expression":
+            name = str(msg.content.get("name", ""))
+            weight = float(msg.content.get("weight", 1.0))
+            ok = self.avatar.set_expression(name, weight)
+            return OutboundMessage(
+                type="response" if ok else "error",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={"success": ok, "blendshape": name, "weight": weight},
+            )
+
+        # Pengaturan viseme suara avatar (FR-AV-10)
+        if ipc_channel == "ruka:avatar-viseme" or msg.type == "avatar.viseme":
+            viseme_id = str(msg.content.get("viseme_id", "sil"))
+            weight = float(msg.content.get("weight", 1.0))
+            ok = self.avatar.set_viseme(viseme_id, weight)
+            return OutboundMessage(
+                type="response" if ok else "error",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={"success": ok, "viseme_id": viseme_id, "weight": weight},
+            )
+
+        # Status kehadiran dan mode tidur (FR-PR-01, FR-PR-10)
+        if ipc_channel == "ruka:presence-status" or msg.type == "presence.status":
+            frame = self.presence.latest_frame or self.presence.step_frame(0.016)
+            return OutboundMessage(
+                type="response",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={
+                    "frame_index": frame.frame_index,
+                    "mood": frame.mood.value,
+                    "chest_scale": frame.breathing.chest_scale,
+                    "head_yaw": frame.head_yaw_deg,
+                    "head_pitch": frame.head_pitch_deg,
+                    "degradation": frame.degradation.value,
+                    "sleep_mode": frame.is_sleep_mode,
+                },
+            )
+
+        # Fase sirkadian Lunar Clock (FR-OS-07)
+        if ipc_channel == "ruka:lunar-phase" or msg.type == "lunar.phase":
+            from src.os_companion.lunar_clock import LunarClock
+            phase = LunarClock.get_phase()
+            constraints = LunarClock.get_mood_constraints(phase)
+            return OutboundMessage(
+                type="response",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={
+                    "phase": phase.value,
+                    "voice_allowed": LunarClock.is_voice_allowed(phase),
+                    "constraints": constraints,
+                },
+            )
+
+        # Pencarian Memori Istana (FR-ME / Memory Palace RAG)
+        if ipc_channel == "ruka:memory-search" or msg.type == "memory.search":
+            q = str(msg.content.get("query", ""))
+            limit = int(msg.content.get("limit", 5))
+            results = self.memory_palace.recall(q, top_k=limit)
+            hits = [
+                {
+                    "entry_id": r.entry_id,
+                    "wing": r.wing.value if hasattr(r.wing, "value") else str(r.wing),
+                    "content": r.content,
+                    "score": r.score,
+                    "sources": r.match_sources,
+                }
+                for r in results
+            ]
+            return OutboundMessage(
+                type="response",
+                channel=msg.channel,
+                session_id=sess.session_id,
+                correlation_id=msg.correlation_id,
+                content={"hits": hits, "took_ms": 1.0},
+            )
 
         user_text = msg.content.get("text", "")
         attachment = msg.content.get("attachment")
@@ -323,6 +482,16 @@ class RukaGatewayServer:
         self.running = False
         self.desktop_adapter.stop()
         self.cli_adapter.stop()
+        if hasattr(self, "supervisor") and self.supervisor:
+            try:
+                self.supervisor.stop()
+            except Exception:
+                pass
+        if hasattr(self, "presence") and self.presence:
+            try:
+                self.presence.stop()
+            except Exception:
+                pass
         with self._lock:
             for c in self._clients:
                 try:

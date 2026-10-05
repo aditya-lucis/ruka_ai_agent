@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from src.gateway.skills.models import Skill, SkillExecutionResult
-from src.gateway.skills.loader import SkillLoader, parse_yaml_frontmatter
+from src.gateway.skills.loader import SkillLoader, parse_yaml_frontmatter, get_skills_dir
 from src.gateway.skills.registry import SkillRegistry
 from src.gateway.skills.runtime import SkillsRuntime
 from src.gateway.skills.coding_bridge import register_builtin_coding_skills
@@ -69,6 +69,25 @@ Bad skill
 
         with pytest.raises(ValueError, match="tidak memiliki field wajib"):
             loader.load_skill_from_path(s_dir)
+
+    def test_get_skills_dir_dev_mode(self):
+        skills_dir = get_skills_dir()
+        assert skills_dir.exists()
+        assert skills_dir.is_dir()
+        assert (skills_dir / "code_read").exists()
+
+    def test_get_skills_dir_frozen_mode(self, monkeypatch, tmp_path):
+        import sys
+        fake_meipass = tmp_path / "bundle"
+        fake_skills = fake_meipass / "skills"
+        fake_skills.mkdir(parents=True)
+        (fake_skills / "test_skill").mkdir()
+
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", str(fake_meipass), raising=False)
+
+        res = get_skills_dir()
+        assert res == fake_skills
 
 
 class TestSkillRegistry:

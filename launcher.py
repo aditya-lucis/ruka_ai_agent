@@ -75,11 +75,12 @@ PROTOCOL_VERSION = 2
 
 
 class RukaBrainServer:
-    def __init__(self, host: str = "127.0.0.1"):
+    def __init__(self, host: str = "127.0.0.1", workspace: str | Path | None = None):
         self.host = host
         self.token = secrets.token_hex(16)
         self.running = False
         self.start_time = time.time()
+        self.workspace_root = self._resolve_initial_workspace(workspace)
         
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -92,6 +93,35 @@ class RukaBrainServer:
         
         # Inisialisasi sesi kognisi Ruka
         self._init_cognition()
+
+    @staticmethod
+    def _resolve_initial_workspace(explicit: str | Path | None = None) -> Path:
+        """Menentukan workspace awal yang aman, tidak mengunci user ke folder instalasi."""
+        if explicit:
+            p = Path(explicit).expanduser().resolve()
+            if p.exists() and p.is_dir():
+                return p
+        env_ws = os.environ.get("RUKA_WORKSPACE")
+        if env_ws:
+            p = Path(env_ws).expanduser().resolve()
+            if p.exists() and p.is_dir():
+                return p
+        for i, arg in enumerate(sys.argv[:-1]):
+            if arg in ("--workspace", "-w"):
+                p = Path(sys.argv[i + 1]).expanduser().resolve()
+                if p.exists() and p.is_dir():
+                    return p
+        cwd = Path.cwd().resolve()
+        if getattr(sys, "frozen", False):
+            exe_parent = Path(sys.executable).resolve().parent
+            if cwd == exe_parent or exe_parent in cwd.parents:
+                safe_fallback = Path.home() / "Documents" / "RukaProjects"
+                try:
+                    safe_fallback.mkdir(parents=True, exist_ok=True)
+                    return safe_fallback
+                except Exception:
+                    return Path.home() / "Documents"
+        return cwd
 
     def _init_cognition(self):
         print(f"[BRAIN] Menginisialisasi kesadaran RUKA Marquis of Trendamis...")
@@ -165,8 +195,17 @@ class RukaBrainServer:
 
         try:
             from src.gateway import RukaGatewayServer
-            self.gateway = RukaGatewayServer(host=self.host, token=self.token, brain=self.brain)
-            print("[BRAIN] Ruka Gateway Control Plane (Sessions, Events, Permissions) AKTIF!")
+            self.gateway = RukaGatewayServer(
+                host=self.host,
+                token=self.token,
+                brain=self.brain,
+                workspace_root=self.workspace_root,
+            )
+            if self.gateway and self.brain:
+                self.brain.skill_registry = self.gateway.skill_registry
+                self.brain.skills_runtime = self.gateway.skills_runtime
+                self.brain.confirmations = self.gateway.confirmations
+            print(f"[BRAIN] Ruka Gateway Control Plane AKTIF! Workspace: {self.workspace_root}")
         except Exception as e:
             print(f"[BRAIN] Peringatan: Gateway fallback ({e})")
             self.gateway = None
@@ -191,6 +230,10 @@ class RukaBrainServer:
 
         accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
         accept_thread.start()
+
+        if getattr(self, "gateway", None) is not None and getattr(self.gateway, "supervisor", None) is not None:
+            self.gateway.supervisor.start()
+            print("[BRAIN] Organ Supervisor Heartbeat 0.5 Hz AKTIF!")
 
     def _accept_loop(self):
         while self.running:
@@ -504,6 +547,17 @@ class RukaBrainServer:
                 "ts": time.time(),
             }, None
 
+        # Delegasikan seluruh kanal lanjutan ke Ruka Gateway Control Plane (Noctis Architecture)
+        if getattr(self, "gateway", None) is not None:
+            try:
+                resp, auth_state = self.gateway.desktop_adapter.process_raw_ipc_request(
+                    req, session_id="launcher_desktop"
+                )
+                if resp is not None:
+                    return resp, auth_state
+            except Exception as e_gw:
+                print(f"[BRAIN] Gateway IPC error ({channel}): {e_gw}")
+
         return {
             "type": "error",
             "channel": channel,
@@ -659,6 +713,11 @@ class RukaBrainServer:
     def stop(self):
         print("\n[BRAIN] Menghentikan otak Python secara sopan...")
         self.running = False
+        if getattr(self, "gateway", None) is not None and getattr(self.gateway, "supervisor", None) is not None:
+            try:
+                self.gateway.supervisor.stop()
+            except Exception:
+                pass
         with self._lock:
             for c in self.clients:
                 try:

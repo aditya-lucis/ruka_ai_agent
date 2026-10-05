@@ -757,6 +757,9 @@ class RukaCognitiveBrain:
         self.confirmations = confirmations or ConfirmationManager()
         self.last_pending: list[PendingAction] = []
         self.pending_notes: list[str] = []
+        self.memory_palace: Any = None
+        self.event_bus: Any = None
+        self.supervisor: Any = None
 
     def _is_agentic_request(self, text: str, analysis: IntentAnalysis | None = None) -> bool:
         """Decide whether a request should take the Action-First agentic path."""
@@ -1075,6 +1078,17 @@ class RukaCognitiveBrain:
         context_block = ""
         if retrieved_facts:
             context_block = "FAKTA INGATAN & PREFERENSI (RAG):\n" + "\n".join(f"• {f}" for f in retrieved_facts)
+
+        # 4b. Memory Palace NOCTIS (Hybrid RRF Recall)
+        if getattr(self, "memory_palace", None) is not None:
+            try:
+                palace_mems = self.memory_palace.recall(clean_text, top_k=4)
+                if palace_mems:
+                    palace_lines = [f"• [{m.wing.value.upper()}] {m.content}" for m in palace_mems]
+                    palace_block = "=== MEMORY PALACE NOCTIS (HYBRID RRF RECALL) ===\n" + "\n".join(palace_lines)
+                    context_block = f"{context_block}\n\n{palace_block}".strip()
+            except Exception as e_palace:
+                pass
 
         # 5. Ruang Kerja Kesadaran Global (IIT Phi, Global Workspace Broadcast, FEP, Self-Model)
         consciousness_block = self.consciousness.integrate_and_broadcast(

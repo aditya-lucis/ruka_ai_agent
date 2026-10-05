@@ -143,6 +143,19 @@ class TestPlanner:
         plan = make_simple_plan("tolong jalankan `echo halo` ya", ALL_SKILLS)
         assert [s.args["command"] for s in plan if s.skill == "run_terminal"] == ["echo halo"]
 
+    def test_test_fix_verify_planning(self) -> None:
+        skills = ALL_SKILLS + ["test_fix_verify"]
+        plan = make_simple_plan("tolong jalankan test dan perbaiki jika ada error", skills)
+        assert any(s.skill == "test_fix_verify" for s in plan)
+        tfv = next(s for s in plan if s.skill == "test_fix_verify")
+        assert tfv.args["command"] == "pytest"
+        assert not any(s.skill == "run_terminal" for s in plan)
+
+        plan_npm = make_simple_plan("run npm test and fix", skills)
+        assert any(s.skill == "test_fix_verify" for s in plan_npm)
+        tfv_npm = next(s for s in plan_npm if s.skill == "test_fix_verify")
+        assert tfv_npm.args["command"] == "npm test"
+
 
 class TestExecution:
     def test_read_real_file(self, runtime: SkillsRuntime) -> None:

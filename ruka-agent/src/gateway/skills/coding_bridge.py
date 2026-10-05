@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from src.gateway.skills.models import Skill
-from src.gateway.skills.loader import SkillLoader
+from src.gateway.skills.loader import SkillLoader, get_skills_dir
 from src.gateway.skills.registry import SkillRegistry
 from src.tools.coding import (
     ReadFileTool,
@@ -123,7 +123,7 @@ def register_builtin_coding_skills(
 
     # Coba muat metadata dari SKILL.md jika folder skills tersedia
     loader = SkillLoader()
-    base_skills_dir = Path(skills_dir).resolve() if skills_dir else None
+    base_skills_dir = Path(skills_dir).resolve() if skills_dir else get_skills_dir()
 
     for skill_name, handler_fn in tool_handlers.items():
         loaded_skill: Skill | None = None

@@ -207,3 +207,31 @@ class SkillLoader:
                     log.warning("Gagal memuat skill di %s: %s", child, ex)
 
         return loaded
+
+
+def get_skills_dir() -> Path:
+    """Menentukan lokasi direktori skills dengan dukungan penuh mode development dan frozen (PyInstaller)."""
+    import sys
+    if getattr(sys, "frozen", False):
+        candidates = [
+            Path(getattr(sys, "_MEIPASS", "")) / "skills",
+            Path(sys.executable).resolve().parent / "skills",
+            Path(sys.executable).resolve().parent / "_internal" / "skills",
+            Path(sys.executable).resolve().parent / "resources" / "brain" / "skills",
+            Path(sys.executable).resolve().parent / "resources" / "skills",
+        ]
+    else:
+        file_path = Path(__file__).resolve()
+        # file_path: .../ruka/ruka-agent/src/gateway/skills/loader.py
+        # parent 1: skills, parent 2: gateway, parent 3: src, parent 4: ruka-agent, parent 5: ruka (repo root)
+        repo_root = file_path.parents[4] if len(file_path.parents) > 4 else file_path.parent
+        candidates = [
+            repo_root / "skills",
+            file_path.parents[3] / "skills" if len(file_path.parents) > 3 else repo_root / "skills",
+            Path.cwd() / "skills",
+            Path.cwd().parent / "skills",
+        ]
+    for c in candidates:
+        if c and c.exists() and c.is_dir():
+            return c
+    return candidates[0]

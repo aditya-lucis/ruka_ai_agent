@@ -72,6 +72,10 @@ _AGENTIC_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\b(kurs\s+dollar|kurs\s+usd|kurs\s+rupiah|kurs\s+euro|kurs\s+yen|kurs\s+sgd)\b",
         r"\b(lokasi\s+saya|posisi\s+saya|koordinat|gps|di\s+kota\s+mana\s+saya)\b",
         r"\b(di\s+mana\s+(?:lokasi\s+)?(?:saya|kita))\b",
+        r"\b(test_fix_verify|test[- ]fix[- ]verify)\b",
+        r"\b(?:jalankan|run)\s+(?:test|pengujian|pytest|npm\s+test)\s+(?:dan|lalu|and|then)\s+(?:perbaiki|fix|auto[- ]fix)\b",
+        r"\b(?:perbaiki|fix|resolve)\s+(?:kegagalan\s+|error\s+)?(?:test|pengujian|pytest|unit\s*test)\b",
+        r"\b(?:auto[- ]fix|otomasi\s+perbaikan)\s+(?:test|pengujian)\b",
     )
 )
 
@@ -191,6 +195,13 @@ _WEATHER_QUERY = re.compile(
 _CURRENCY_QUERY = re.compile(
     r"\b(?:kurs|nilai\s+tukar|exchange\s+rate)\s*([A-Za-z]{3})?|"
     r"\b(?:kurs\s+dollar|kurs\s+usd|kurs\s+rupiah|kurs\s+euro|kurs\s+yen|kurs\s+sgd)\b",
+    re.IGNORECASE,
+)
+_TEST_FIX_VERIFY = re.compile(
+    r"\b(test_fix_verify|test[- ]fix[- ]verify)\b|"
+    r"\b(?:jalankan|run)\s+(?:test|pengujian|pytest|npm\s+test)\s+(?:dan|lalu|and|then)\s+(?:perbaiki|fix|auto[- ]fix)\b|"
+    r"\b(?:perbaiki|fix|resolve)\s+(?:kegagalan\s+|error\s+)?(?:test|pengujian|pytest|unit\s*test)\b|"
+    r"\b(?:auto[- ]fix|otomasi\s+perbaikan)\s+(?:test|pengujian)\b",
     re.IGNORECASE,
 )
 
@@ -438,17 +449,32 @@ def make_simple_plan(text: str, available_skills: Iterable[str] | None = None) -
                 )
             )
 
-    # 8. Terminal execution (skipping if covered by dedicated git skills)
+    # 8. Test -> Fix -> Verify autonomous cycle
+    if (available is None or "test_fix_verify" in available) and _TEST_FIX_VERIFY.search(text):
+        cmd = "pytest"
+        cmd_m = re.search(r"\b(npm\s+test|pnpm\s+test|yarn\s+test|cargo\s+test)\b", text, re.IGNORECASE)
+        if cmd_m:
+            cmd = cmd_m.group(1)
+        plan.append(
+            PlanStep(
+                "test_fix_verify",
+                {"command": cmd, "max_retries": 3},
+                f"menjalankan siklus otonom perbaikan pengujian ({cmd})",
+            )
+        )
+
+    # 9. Terminal execution (skipping if covered by dedicated git or test_fix_verify skills)
     command = _extract_command(text)
     if command:
-        is_covered_by_git_skill = any(
+        is_covered = any(
             (s.skill == "git_status" and command.startswith("git status"))
             or (s.skill == "git_diff" and command.startswith("git diff"))
             or (s.skill == "git_log" and command.startswith("git log"))
             or (s.skill == "git_commit" and command.startswith("git commit"))
+            or (s.skill == "test_fix_verify")
             for s in plan
         )
-        if not is_covered_by_git_skill:
+        if not is_covered:
             plan.append(PlanStep("run_terminal", {"command": command}, f"menjalankan perintah: {command}"))
 
     # 9. Web search
