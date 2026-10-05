@@ -289,3 +289,14 @@ class TestHeartDoctorAndHeartbeat:
         bus.drain()
         topics = [e.event_type for e in events]
         assert "heart.beat" in topics
+
+
+class TestBoss6HeartEvalSuite:
+    def test_boss_6_heart_eval_passes_floor(self):
+        from src.heart.heart_eval import HeartEvaluator
+        evaluator = HeartEvaluator()
+        results = evaluator.run_all()
+        passed_count = sum(1 for r in results if r.passed)
+        percentage = (passed_count / len(results)) * 100.0
+        assert percentage >= 85.0, f"Lantai kelulusan Boss 6 tidak terpenuhi: {percentage:.1f}%"
+

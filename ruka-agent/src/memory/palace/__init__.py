@@ -11,15 +11,18 @@ from src.memory.palace.models import (
     RecallResult,
     RelationshipTriple,
 )
+from src.memory.palace.consolidator import ConsolidationReport, SleepConsolidator
 from src.memory.palace.palace import MemoryPalace
 
 __all__ = [
-    "MemoryPalace",
-    "MemoryWing",
-    "RelationshipTriple",
-    "ProjectMemory",
-    "PreferenceMemory",
+    "ConsolidationReport",
     "DailyMemory",
     "DreamMemory",
+    "MemoryPalace",
+    "MemoryWing",
+    "PreferenceMemory",
+    "ProjectMemory",
     "RecallResult",
+    "RelationshipTriple",
+    "SleepConsolidator",
 ]

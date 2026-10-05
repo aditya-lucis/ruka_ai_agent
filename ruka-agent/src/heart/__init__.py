@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """Crimson Heart V3 Organ Package (FR-HE)."""
-from src.heart.blood import BloodPermission, BloodRegistry, BloodTool
+from src.heart.blood import (
+    BloodPermission,
+    BloodRegistry,
+    BloodTool,
+    create_canonical_blood_registry,
+)
 from src.heart.budget import HeartBudget, HeartBudgetExceeded
 from src.heart.checkpoint import HeartCheckpointer
 from src.heart.doctor import HeartDoctor
@@ -33,6 +38,7 @@ __all__ = [
     "BloodPermission",
     "BloodRegistry",
     "BloodTool",
+    "create_canonical_blood_registry",
     "BrowserVentricle",
     "CoderVentricle",
     "CrimsonHeart",

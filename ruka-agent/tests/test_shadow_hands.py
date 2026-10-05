@@ -111,6 +111,25 @@ class TestActionGateFailClosed:
         v4 = broken_gate.evaluate(ClickAction(10, 10))
         assert v4 == PermissionVerdict.DENY
 
+    def test_corrupted_policy_file_rejects_twenty_actions_fail_closed(self, tmp_path):
+        # SAD Boss 5 requirement: 20 aksi saat berkas kebijakan rusak = 20 kali ditolak
+        corrupt_file = tmp_path / "corrupt_policy.json"
+        corrupt_file.write_text("{invalid_json_content: corrupt", encoding="utf-8")
+
+        gate = ActionGate.from_policy_file(corrupt_file)
+        assert gate.policy_healthy is False
+
+        # Uji 20 aksi berturut-turut
+        actions = [
+            ClickAction(i * 10, i * 10) if i % 2 == 0 else TypeAction(f"text_{i}")
+            for i in range(20)
+        ]
+        verdicts = [gate.evaluate(act) for act in actions]
+
+        assert len(verdicts) == 20
+        assert all(v == PermissionVerdict.DENY for v in verdicts)
+
+
 
 class TestConfirmGate:
     def test_confirm_timeout_fail_closed(self):

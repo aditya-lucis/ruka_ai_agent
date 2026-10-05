@@ -33,6 +33,37 @@ class ActionGate:
         self.policy_healthy = policy_healthy
         self.forbidden_zones: list[tuple[int, int, int, int]] = []  # (x1, y1, x2, y2)
 
+    @classmethod
+    def from_policy_file(cls, path: str | Any) -> ActionGate:
+        gate = cls(policy_healthy=False)
+        gate.load_policy_file(path)
+        return gate
+
+    def load_policy_file(self, path: str | Any) -> bool:
+        """Membaca berkas konfigurasi kebijakan. Jika rusak/tidak ada, fail-closed."""
+        import json
+        from pathlib import Path
+        p = Path(path)
+        if not p.exists():
+            self.policy_healthy = False
+            return False
+
+        try:
+            content = p.read_text(encoding="utf-8")
+            data = json.loads(content)
+            if not isinstance(data, dict):
+                self.policy_healthy = False
+                return False
+            # Muat forbidden zones jika ada
+            zones = data.get("forbidden_zones", [])
+            self.forbidden_zones = [tuple(z) for z in zones]
+            self.policy_healthy = True
+            return True
+        except Exception:
+            # Kegagalan parsing apa pun memicu gagal-tertutup mutlak
+            self.policy_healthy = False
+            return False
+
     def add_forbidden_zone(self, x1: int, y1: int, x2: int, y2: int) -> None:
         self.forbidden_zones.append((x1, y1, x2, y2))
 

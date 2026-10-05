@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 import pytest
 
 from src.gateway.events import EventBus
@@ -215,3 +216,58 @@ class TestAmnesiaVerification2020:
             found = p2.recall(text, wings=[MemoryWing.RELATIONSHIP], top_k=1)
             assert len(found) == 1
             assert found[0].entry_id == eid
+
+
+class TestSleepConsolidator:
+    def test_sleep_consolidation_three_stages(self, tmp_path: Path) -> None:
+        from src.memory.palace import SleepConsolidator
+        bus = EventBus()
+        db_file = tmp_path / "palace_sleep.db"
+        palace = MemoryPalace(db_file, event_bus=bus)
+
+        # 1. Masukkan daily digest
+        palace.remember(MemoryWing.DAILY, {"summary": "Diskusi arsitektur dan EventBus V3"})
+        palace.remember(MemoryWing.DAILY, {"summary": "Pengujian 13 alat Blood Contract"})
+
+        # 2. Masukkan konflik preferensi (key sama, value beda)
+        p1 = palace.remember(MemoryWing.PREFERENCE, {"key": "theme", "value": "light"})
+        time.sleep(0.01)
+        p2 = palace.remember(MemoryWing.PREFERENCE, {"key": "theme", "value": "dark"})
+
+        # 3. Masukkan relasi lama dan duplikatnya untuk memicu resolusi konflik stage 2
+        rel_id1 = palace.remember(
+            MemoryWing.RELATIONSHIP,
+            ("Lord", "trusts", "Ruka"),
+            confidence=0.7,
+        )
+        time.sleep(0.01)
+        rel_id2 = palace.remember(
+            MemoryWing.RELATIONSHIP,
+            ("Lord", "trusts", "Ruka"),
+            confidence=1.0,
+        )
+
+        consolidator = SleepConsolidator(palace=palace, event_bus=bus, half_life_days=10.0)
+
+        # Simulasikan waktu 20 hari kemudian
+        now_future = time.time() + (20 * 86400.0)
+        events = []
+        bus.subscribe("palace.*", lambda e: events.append(e))
+
+        report = consolidator.run_consolidation(current_time=now_future)
+        assert report.daily_summaries_processed == 2
+        assert report.dreams_generated == 1
+        assert report.conflicts_resolved >= 1
+        assert report.decayed_memories_count >= 1
+
+        bus.drain()
+        assert any(e.event_type == "palace.consolidate" for e in events)
+
+        # Verifikasi bahwa mimpi baru tercipta di sayap DREAM
+        audit = palace.inspect(wing=MemoryWing.DREAM)
+        assert audit["wings"]["dream"]["total_count"] >= 1
+
+        # Verifikasi bahwa preferensi lama di-soft delete
+        audit_pref = palace.inspect(wing=MemoryWing.PREFERENCE, include_deleted=False)
+        assert audit_pref["wings"]["preference"]["total_count"] == 1
+
