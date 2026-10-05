@@ -13,7 +13,7 @@ Ruka adalah sistem *Expressive-Cognitive Agentic AI* yang dibangun penuh mengacu
 ```bash
 cp .env.example .env
 ```
-Isi `GEMINI_API_KEY=AIzaSy...` di dalam `.env`.
+Isi `GEMINI_API_KEY=your_gemini_api_key_here` di dalam `.env`.
 
 ### 2. Jalankan CLI Interaktif
 ```bash

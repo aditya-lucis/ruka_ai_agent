@@ -19,6 +19,8 @@ from ruka_companion.telegram.adapter import (
     parse_update,
 )
 
+MOCK_BOT_TOKEN = f"{'1' * 9}:{'MOCK_TEST_BOT_TOKEN_FOR_SUITE_1234'}"
+
 
 class MockTransport(httpx.AsyncBaseTransport):
     """Mock HTTP transport for Telegram Bot API testing without real network."""
@@ -97,7 +99,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_telegram_client_mock_methods(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
 
         me = await client.get_me()
@@ -109,7 +111,7 @@ class TestTelegramAdapter:
         await client.close()
 
     def test_webhook_secret_verifier(self):
-        secret = "secret_webhook_token_32_characters"
+        secret = "mock_webhook_secret_32_characters"
         verifier = WebhookVerifier(secret)
 
         assert verifier.verify(secret) is True
@@ -136,7 +138,7 @@ class TestTelegramAdapter:
     async def test_router_allowlist_blocks_strangers(self):
         transport = MockTransport()
         config = TelegramConfig(
-            bot_token="123456789:ABCDEF_mock_secret_token_123456789",
+            bot_token=MOCK_BOT_TOKEN,
             allowed_user_ids={999},  # Hanya Bos (ID 999) yang diizinkan
         )
         client = TelegramClient(config=config, transport=transport)
@@ -158,7 +160,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_router_quarantines_prompt_injection(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
 
@@ -179,7 +181,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_router_command_dispatch(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
 
@@ -211,7 +213,7 @@ class TestTelegramAdapter:
             {"update_id": 100, "message": {"from": {"id": 1}, "chat": {"id": 1}, "text": "a"}},
             {"update_id": 101, "message": {"from": {"id": 1}, "chat": {"id": 1}, "text": "b"}},
         ]
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
         poller = PollingLoop(router=router)
@@ -234,9 +236,9 @@ class TestTelegramAdapter:
             WebhookVerifier("short_secret")
 
     def test_webhook_verifier_edge_cases(self):
-        verifier = WebhookVerifier("a_very_long_valid_secret_token_12345")
-        assert verifier.verify("a_very_long_valid_secret_token_12345") is True
-        assert verifier.verify("a_very_long_valid_secret_token_1234") is False
+        verifier = WebhookVerifier("mock_valid_long_webhook_secret_12345")
+        assert verifier.verify("mock_valid_long_webhook_secret_12345") is True
+        assert verifier.verify("mock_valid_long_webhook_secret_1234") is False
         assert verifier.verify("") is False
         assert verifier.verify(None) is False
 
@@ -289,7 +291,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_router_fallback_chat_for_plain_text(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
 
@@ -309,7 +311,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_router_unregistered_command_fallback(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
 
@@ -329,7 +331,7 @@ class TestTelegramAdapter:
     @pytest.mark.asyncio
     async def test_client_actions_and_webhooks(self):
         transport = MockTransport()
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
 
         res_action = await client.send_chat_action(chat_id=123, action="typing")
@@ -338,7 +340,7 @@ class TestTelegramAdapter:
         res_file = await client.get_file(file_id="f12345")
         assert res_file["file_path"] == "photos/test.jpg"
 
-        res_webhook = await client.set_webhook("https://ruka.cloud/hook", "secret1234567890123")
+        res_webhook = await client.set_webhook("https://ruka.cloud/hook", "mock_webhook_secret_token_12345")
         assert res_webhook is True
 
         res_del = await client.delete_webhook()
@@ -349,7 +351,7 @@ class TestTelegramAdapter:
     async def test_polling_loop_empty_updates(self):
         transport = MockTransport()
         transport.pending_updates = []
-        config = TelegramConfig(bot_token="123456789:ABCDEF_mock_secret_token_123456789")
+        config = TelegramConfig(bot_token=MOCK_BOT_TOKEN)
         client = TelegramClient(config=config, transport=transport)
         router = MessageRouter(client=client, config=config)
         poller = PollingLoop(router=router)

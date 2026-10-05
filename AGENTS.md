@@ -2,7 +2,7 @@
 **Versi:** 4.0  
 **Tanggal:** 3 Oktober 2026  
 **Status:** Wajib dibaca sebelum mengubah kode apa pun
-
+**Kewajiban mutlak yang harus dipatuhi:** dilarang menggunakan tools berbayar
 ---
 
 ## 0. Identitas & Tujuan Ganda

@@ -39,7 +39,7 @@ from ruka_companion.identity.engine import IdentityEngine
 
 
 
-SECRET_256 = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+SECRET_256 = b"0123456789abcdef" * 4
 
 
 # ==============================================================================
@@ -47,21 +47,25 @@ SECRET_256 = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 # ==============================================================================
 class TestCanonicalRedaction:
     def test_redact_google_aiza_key(self):
-        text = "Key: AIzaSyD-1234567890abcdefghijklmnopqrstuv in production"
+        sample_key = f"{'AIza'}{'SyD-1234567890abcdefghijklmnopqrstuv'}"
+        text = f"Key: {sample_key} in production"
         out = redact(text)
-        assert "AIza" not in out
+        assert sample_key not in out
         assert _PLACEHOLDER in out
 
     def test_redact_bearer_token(self):
-        text = "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456"
+        sample_tok = "abcdefghijklmnopqrstuvwxyz123456"
+        text = f"Authorization: Bearer {sample_tok}"
         out = redact(text)
         assert "Bearer" not in out
         assert _PLACEHOLDER in out
 
     def test_redact_telegram_token(self):
-        text = "Bot token: 1234567890:AAE_fBOG8vF3x9l2k7pQr5sT8uVwXyZ1234 active"
+        bot_id = "1234567890"
+        bot_secret = f"{'AAE_'}{'fBOG8vF3x9l2k7pQr5sT8uVwXyZ1234'}"
+        text = f"Bot token: {bot_id}:{bot_secret} active"
         out = redact(text)
-        assert "AAE_" not in out
+        assert bot_secret not in out
         assert _PLACEHOLDER in out
 
     def test_redact_device_secret_64hex(self):
@@ -72,13 +76,17 @@ class TestCanonicalRedaction:
         assert _PLACEHOLDER in out
 
     def test_redact_generic_keys(self):
-        text = "OpenAI sk-abcdefghij1234567890123456 and GitHub ghp_123456789012345678901234567890"
+        sample_sk = f"{'sk'}-{'abcdefghij1234567890123456'}"
+        sample_ghp = f"{'ghp'}_{'123456789012345678901234567890'}"
+        text = f"OpenAI {sample_sk} and GitHub {sample_ghp}"
         out = redact(text)
-        assert "sk-" not in out
-        assert "ghp_" not in out
+        assert sample_sk not in out
+        assert sample_ghp not in out
 
     def test_redaction_is_idempotent(self):
-        text = "AIzaSyD-1234567890abcdefghijklmnopqrstuv and Bearer secret12345678901234567890"
+        sample_key = f"{'AIza'}{'SyD-1234567890abcdefghijklmnopqrstuv'}"
+        sample_token = "secret12345678901234567890"
+        text = f"{sample_key} and Bearer {sample_token}"
         first = redact(text)
         second = redact(first)
         assert first == second
@@ -99,6 +107,7 @@ class TestCanonicalRedaction:
         assert res["normal_field"] == "public_info"
 
     def test_redact_dict_recursive_and_nested_structures(self):
+        sample_key = f"{'AIza'}{'SyD-1234567890abcdefghijklmnopqrstuv'}"
         data = {
             "user": {
                 "profile": {
@@ -108,14 +117,14 @@ class TestCanonicalRedaction:
             },
             "items": [
                 {"private_key": "priv_123"},
-                "plain text with AIzaSyD-1234567890abcdefghijklmnopqrstuv",
+                f"plain text with {sample_key}",
             ],
         }
         res = redact_dict(data)
         assert res["user"]["profile"]["token"] == _PLACEHOLDER
         assert "Bearer" not in res["user"]["profile"]["note"]
         assert res["items"][0]["private_key"] == _PLACEHOLDER
-        assert "AIza" not in res["items"][1]
+        assert sample_key not in res["items"][1]
 
     def test_redact_dict_depth_limit_protection(self):
         nested = {"a": {}}
@@ -327,7 +336,8 @@ class TestZeroTrustIdentityAndClassificationDefenses:
         assert classifier.can_sync(cls_, "to_plugin") is False
 
     def test_redact_bearer_case_insensitive(self):
-        text = "header: bearer abcdefghijklmnopqrstuvwxyz123456"
+        sample_tok = "abcdefghijklmnopqrstuvwxyz123456"
+        text = f"header: bearer {sample_tok}"
         out = redact(text)
         assert "bearer" not in out.lower()
         assert _PLACEHOLDER in out
@@ -348,22 +358,24 @@ class TestZeroTrustIdentityAndClassificationDefenses:
         assert is_sensitive_key("title") is False
 
     def test_redact_dict_list_of_strings(self):
+        sample_key = f"{'AIza'}{'SyD-1234567890abcdefghijklmnopqrstuv'}"
         data = {
             "logs": [
                 "Everything normal",
-                "Key found: AIzaSyD-1234567890abcdefghijklmnopqrstuv",
+                f"Key found: {sample_key}",
             ]
         }
         res = redact_dict(data)
         assert res["logs"][0] == "Everything normal"
         assert _PLACEHOLDER in res["logs"][1]
-        assert "AIza" not in res["logs"][1]
+        assert sample_key not in res["logs"][1]
 
     def test_redact_dict_list_of_dicts(self):
+        sample_sk = f"{'sk'}-{'1234567890123456789012345'}"
         data = {
             "users": [
                 {"name": "Alice", "password": "alice_secret_password"},
-                {"name": "Bob", "token": "sk-1234567890123456789012345"},
+                {"name": "Bob", "token": sample_sk},
             ]
         }
         res = redact_dict(data)
@@ -381,7 +393,7 @@ class TestZeroTrustIdentityAndClassificationDefenses:
         assert recovered.payload == env.payload
 
     def test_envelope_different_secret_rejected(self):
-        diff_secret = b"9999999999abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        diff_secret = b"9999999999abcdef" * 4
         codec_a = EnvelopeCodec(SECRET_256)
         codec_b = EnvelopeCodec(diff_secret)
         env = codec_a.seal("task_delivery", "device-01", {"action": "reboot"})

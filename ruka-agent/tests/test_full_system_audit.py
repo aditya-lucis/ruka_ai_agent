@@ -12,6 +12,7 @@ import time
 import pytest
 
 from src.gateway.protocol import InboundMessage
+import secrets
 from src.gateway.server import RukaGatewayServer
 
 
@@ -23,7 +24,7 @@ class DummyAuditBrain:
 class TestFullSystemGatewayAudit:
     @pytest.fixture
     def server(self, tmp_path):
-        srv = RukaGatewayServer(token="secret-token-123", brain=DummyAuditBrain(), workspace_root=tmp_path)
+        srv = RukaGatewayServer(token=secrets.token_hex(16), brain=DummyAuditBrain(), workspace_root=tmp_path)
         yield srv
         srv.stop()
 

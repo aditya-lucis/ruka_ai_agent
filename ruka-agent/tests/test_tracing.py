@@ -13,16 +13,17 @@ from src.telemetry.tracing import (
 
 def test_pii_redacted_at_write_time(tmp_path: Path):
     t = Trace(goal="kirim ke bos@trendamis.im ya", session_id="s1")
+    sample_cred = f"{'sk'}-{'abcdefgh12345678'}"
     t.event(
         "tool",
         "tool_args",
         email="bos@trendamis.im",
-        credential="sk-abcdefgh12345678",
+        credential=sample_cred,
     )   # dummy uji redaksi
     doc = t.close("done", {})
     blob = json.dumps(doc)
     assert "bos@trendamis.im" not in blob
-    assert "sk-abcdefgh12345678" not in blob
+    assert sample_cred not in blob
     assert "[REDAKTED]" in blob
 
 

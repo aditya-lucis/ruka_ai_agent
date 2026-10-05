@@ -90,7 +90,7 @@ Ruka memanfaatkan kognisi *Gemini 3.5 Flash-Lite* untuk nalar secepat kilat:
 1. Dapatkan API key gratis dari [Google AI Studio](https://aistudio.google.com/apikey).
 2. Di dalam folder Ruka (atau berkas `.env` di `%LOCALAPPDATA%\ruka\.env`), masukkan kunci Anda:
    ```env
-   GEMINI_API_KEY=AIzaSy...kunci_anda_disini...
+   GEMINI_API_KEY=your_gemini_api_key_here
    RUKA_MODEL=gemini-3.5-flash-lite
    ```
 3. Simpan berkas tersebut. Ruka akan langsung mengenali identitas nalarnya.

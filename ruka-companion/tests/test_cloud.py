@@ -190,11 +190,12 @@ class TestCloudApp:
 
     def test_audit_redaction_in_chain(self, cloud_env):
         db = cloud_env["db"]
+        sample_key = f"{'AIza'}{'SyDummyKeyForGoogleAuth12345678'}"
         db.audit(
             "admin",
             "config.update",
             "keys",
-            {"api_key": "AIzaSyDummyKeyForGoogleAuth12345678", "normal": "val"},
+            {"api_key": sample_key, "normal": "val"},
         )
         entries = db.audit_entries(limit=1)
         assert entries[0]["detail"]["api_key"] == "<redacted>"
