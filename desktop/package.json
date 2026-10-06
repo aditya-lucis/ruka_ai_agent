@@ -28,6 +28,11 @@
         "from": "resources/brain",
         "to": "brain",
         "filter": ["**/*"]
+      },
+      {
+        "from": "resources/kernel",
+        "to": "kernel",
+        "filter": ["**/*"]
       }
     ],
     "win": {

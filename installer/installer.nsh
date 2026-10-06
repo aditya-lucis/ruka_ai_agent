@@ -1,7 +1,8 @@
 !macro customInit
-  ; Tutup proses Ruka yang masih berjalan agar tidak ada file lock yang menyebabkan error instalasi / corrupt
+  ; Tutup proses Ruka & Noctis yang masih berjalan agar tidak ada file lock yang menyebabkan error instalasi / corrupt
   nsExec::Exec 'cmd /c taskkill /f /im Ruka.exe /t >nul 2>&1'
   nsExec::Exec 'cmd /c taskkill /f /im ruka-brain.exe /t >nul 2>&1'
+  nsExec::Exec 'cmd /c taskkill /f /im noctis-kernel.exe /t >nul 2>&1'
   nsExec::Exec 'cmd /c taskkill /f /im ruka.exe /t >nul 2>&1'
 !macroend
 
@@ -21,6 +22,7 @@
 !macro customUnInstall
   nsExec::Exec 'cmd /c taskkill /f /im Ruka.exe /t >nul 2>&1'
   nsExec::Exec 'cmd /c taskkill /f /im ruka-brain.exe /t >nul 2>&1'
+  nsExec::Exec 'cmd /c taskkill /f /im noctis-kernel.exe /t >nul 2>&1'
   nsExec::Exec 'cmd /c taskkill /f /im ruka.exe /t >nul 2>&1'
   Delete "$INSTDIR\resources\brain\ruka-gui.cmd"
   SendMessage 65535 26 0 "STR:Environment" $1 /TIMEOUT=2000
