@@ -1,0 +1,24 @@
+{
+  "name": "@noctis/kernel",
+  "version": "3.0.0",
+  "description": "PROJECT NOCTIS — AI Companion Operating System Kernel on Bun Runtime",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "keywords": [
+    "project-noctis",
+    "ruka",
+    "bun",
+    "companion-kernel",
+    "eventbus-v3"
+  ],
+  "author": "Aditya Lucis Caelum",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

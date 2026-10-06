@@ -218,6 +218,89 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (window.ruka.kernel?.onEvent) {
+      window.ruka.kernel.onEvent((event) => {
+        if (!event || !event.topic) return;
+
+        // 1. Lunar Clock & Diurnal Moon Phase
+        if (event.topic.startsWith('lunar.')) {
+          const payload = event.payload || {};
+          const lunarBadge = document.getElementById('lunarBadge');
+          const lunarText = document.getElementById('lunarText');
+          const lunarIcon = document.getElementById('lunarIcon');
+          if (lunarText && payload.phase) {
+            const icons = {
+              new_moon: '🌑',
+              waxing_crescent: '🌒',
+              first_quarter: '🌓',
+              waxing_gibbous: '🌔',
+              full_moon: '🌕',
+              waning_gibbous: '🌖',
+              last_quarter: '🌗',
+              waning_crescent: '🌘',
+            };
+            const names = {
+              new_moon: 'Bulan Baru (Hening)',
+              waxing_crescent: 'Sabit Awal',
+              first_quarter: 'Kuartal Pertama',
+              waxing_gibbous: 'Bulan Cembung',
+              full_moon: 'Purnama (Puncak)',
+              waning_gibbous: 'Cembung Akhir',
+              last_quarter: 'Kuartal Terakhir',
+              waning_crescent: 'Sabit Akhir',
+            };
+            if (lunarIcon) lunarIcon.textContent = icons[payload.phase] || '🌙';
+            lunarText.textContent = names[payload.phase] || payload.phase;
+            if (lunarBadge) lunarBadge.title = `Fase: ${names[payload.phase] || payload.phase} | Jam: ${payload.hour ?? ''} ${payload.isQuietHours ? '(Jam Malam)' : ''}`;
+          }
+        }
+
+        // 2. Avatar Viseme & Pose Animation
+        if (event.topic === 'avatar.viseme' || event.topic === 'avatar.pose') {
+          const coreAura = document.getElementById('coreAura');
+          if (coreAura) {
+            coreAura.classList.add('viseme-pulse');
+            setTimeout(() => coreAura.classList.remove('viseme-pulse'), 150);
+          }
+        }
+
+        // 3. Notification Dosing
+        if (event.topic === 'notification.dosed') {
+          const payload = event.payload || {};
+          appendLog(`[NOTIF DOSING] ${payload.title || 'Pemberitahuan'}: ${payload.body || ''}`);
+        }
+
+        // 4. Kernel Lifecycle
+        if (event.topic === 'noctis.boot' || event.topic === 'noctis.ready') {
+          appendLog(`[KERNEL] EventBus V3: ${event.topic} (Producer: ${event.producer})`);
+        }
+
+        // 5. Organ Telemetry Real-Time Pulse
+        const organPrefix = event.topic.split('.')[0];
+        const organCardMap = {
+          heart: 'organCardHeart',
+          palace: 'organCardPalace',
+          converse: 'organCardConverse',
+          eyes: 'organCardEyes',
+          ear: 'organCardEar',
+          avatar: 'organCardAvatar',
+          hands: 'organCardHands',
+          brain: 'organCardBrain',
+          forge: 'organCardForge',
+          noctis: 'organCardKernel',
+          os: 'organCardKernel',
+        };
+        const cardId = organCardMap[organPrefix];
+        if (cardId) {
+          const card = document.getElementById(cardId);
+          if (card) {
+            card.classList.add('viseme-pulse');
+            setTimeout(() => card.classList.remove('viseme-pulse'), 250);
+          }
+        }
+      });
+    }
+
     refreshMemoryStats();
   } else {
     appendLog('Running in standalone browser preview (window.ruka unavailable).');

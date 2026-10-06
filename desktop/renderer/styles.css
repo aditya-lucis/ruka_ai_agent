@@ -137,6 +137,31 @@ img.brand-avatar-mini {
   box-shadow: 0 0 6px var(--accent-green);
 }
 
+.lunar-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(137, 180, 250, 0.12);
+  border: 1px solid rgba(137, 180, 250, 0.25);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent-blue, #89b4fa);
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+
+.lunar-icon {
+  font-size: 11px;
+}
+
+.viseme-pulse {
+  transform: scale(1.08) !important;
+  box-shadow: 0 0 25px rgba(243, 139, 168, 0.8) !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
 .voice-toggle-btn {
   display: flex;
   align-items: center;
@@ -1668,5 +1693,153 @@ img.ruka-avatar {
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(203, 166, 247, 0.25);
 }
+
+/* ==========================================================================
+   NOCTIS OS — 10 ORGAN MATRIX & TELEMETRY HUD
+   ========================================================================== */
+.organ-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.organ-card {
+  background: rgba(24, 24, 37, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.organ-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--accent-purple);
+  opacity: 0.6;
+}
+
+.organ-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-purple);
+  box-shadow: 0 8px 24px rgba(203, 166, 247, 0.15);
+}
+
+.organ-card.alive::before {
+  background: var(--accent-green);
+}
+
+.organ-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.organ-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.organ-icon {
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(203, 166, 247, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.organ-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.organ-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(166, 227, 161, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(166, 227, 161, 0.3);
+}
+
+.organ-desc {
+  font-size: 11px;
+  color: var(--text-sub);
+  line-height: 1.4;
+}
+
+.organ-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.organ-metrics span strong {
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   NOCTIS OS — MEMORY PALACE 5 SAYAP WINGS
+   ========================================================================== */
+.palace-wings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.wing-card {
+  background: rgba(30, 30, 46, 0.65);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.wing-card:hover {
+  border-color: var(--accent-lavender);
+  background: rgba(30, 30, 46, 0.9);
+}
+
+.wing-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-lavender);
+}
+
+.wing-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 
 

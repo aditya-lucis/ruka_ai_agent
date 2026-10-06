@@ -34,9 +34,11 @@ import {
 } from './ipc-contract';
 import { RuntimeConnector, RuntimeState } from './runtime-connector';
 import { TrayManager } from './tray';
+import { KernelConnector, KernelEvent, KernelState } from './kernel-connector';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: TrayManager | null = null;
+let kernelConnector: KernelConnector | null = null;
 
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -56,6 +58,7 @@ function getLocalAppData(): string {
 
 const localAppData = getLocalAppData();
 const endpointPath = path.join(localAppData, 'ruka', 'runtime', 'ipc-endpoint.json');
+const kernelEndpointPath = path.join(localAppData, 'ruka', 'runtime', 'kernel-endpoint.json');
 
 function isPidAlive(pid: number): boolean {
   try {
@@ -165,6 +168,95 @@ function ensurePythonBrainStarted(): void {
   }
 }
 
+function ensureBunKernelStarted(): void {
+  if (fs.existsSync(kernelEndpointPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(kernelEndpointPath, 'utf-8'));
+      if (data.pid && isPidAlive(data.pid)) {
+        return; // Bun Kernel sudah hidup
+      }
+      try {
+        fs.unlinkSync(kernelEndpointPath);
+      } catch {}
+    } catch {}
+  }
+
+  // 1. PRIORITAS UTAMA: Standalone Self-Contained Noctis Kernel Executable
+  const bundledKernelCandidates = [
+    path.join(process.resourcesPath, 'kernel', 'noctis-kernel.exe'),
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'kernel', 'noctis-kernel.exe'),
+    path.join(app.getAppPath(), '..', 'noctis', 'bin', 'noctis-kernel.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'resources', 'kernel', 'noctis-kernel.exe'),
+    path.resolve(__dirname, '..', '..', '..', 'noctis', 'bin', 'noctis-kernel.exe'),
+    path.resolve(process.cwd(), 'noctis', 'bin', 'noctis-kernel.exe'),
+  ];
+
+  for (const kernelExe of bundledKernelCandidates) {
+    if (fs.existsSync(kernelExe)) {
+      try {
+        const kernelDir = path.dirname(kernelExe);
+        const child = spawn(kernelExe, [], {
+          cwd: kernelDir,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        child.unref();
+        console.log(`[MAIN] Standalone Noctis Bun Kernel spawned successfully: ${kernelExe}`);
+        return;
+      } catch (e) {
+        console.warn('[MAIN] Could not spawn bundled noctis-kernel.exe, falling back to bun run:', e);
+      }
+    }
+  }
+
+  // 2. FALLBACK PENGEMBANGAN: Script src/index.ts dengan Bun lokal
+  const kernelSrcCandidates = [
+    path.resolve(__dirname, '..', '..', '..', 'noctis', 'kernel', 'src', 'index.ts'),
+    path.resolve(process.cwd(), 'noctis', 'kernel', 'src', 'index.ts'),
+    path.resolve(app.getAppPath(), '..', 'noctis', 'kernel', 'src', 'index.ts'),
+  ];
+
+  let kernelSrcPath: string | null = null;
+  for (const cand of kernelSrcCandidates) {
+    if (fs.existsSync(cand)) {
+      kernelSrcPath = cand;
+      break;
+    }
+  }
+
+  if (kernelSrcPath) {
+    const kernelCwd = path.dirname(path.dirname(kernelSrcPath));
+    const bunCandidates = [
+      process.env.BUN_PATH,
+      path.join(process.env.USERPROFILE || '', '.bun', 'bin', 'bun.exe'),
+      'bun',
+      'bun.exe',
+    ];
+
+    let bunExe = 'bun';
+    for (const b of bunCandidates) {
+      if (b && (b === 'bun' || b === 'bun.exe' || fs.existsSync(b))) {
+        bunExe = b;
+        break;
+      }
+    }
+
+    try {
+      const child = spawn(bunExe, ['run', 'src/index.ts'], {
+        cwd: kernelCwd,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      child.unref();
+      console.log(`[MAIN] Noctis Bun Kernel spawned via ${bunExe} in ${kernelCwd}`);
+    } catch (e) {
+      console.warn('[MAIN] Could not auto-spawn Bun Kernel:', e);
+    }
+  }
+}
+
 const connector = new RuntimeConnector({
   endpointFile: endpointPath,
   onState: (s: RuntimeState) => {
@@ -180,6 +272,18 @@ const connector = new RuntimeConnector({
       };
       mainWindow.webContents.send(IPC.RUNTIME_EVENT, stateEnv);
     }
+  },
+});
+
+kernelConnector = new KernelConnector({
+  endpointFile: kernelEndpointPath,
+  onEvent: (event: KernelEvent) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.KERNEL_EVENT, event);
+    }
+  },
+  onState: (state: KernelState) => {
+    console.log(`[MAIN] Bun Kernel state changed: ${state}`);
   },
 });
 
@@ -607,6 +711,17 @@ function registerIpc(): void {
   ipcMain.handle(IPC.SETTINGS_UPDATE, async (_e, patch: object) => {
     return connector.request(IPC.SETTINGS_UPDATE, { patch });
   });
+
+  ipcMain.handle(
+    IPC.KERNEL_PUBLISH,
+    async (_e, arg1: any, arg2?: string, arg3?: any) => {
+      if (!kernelConnector) return false;
+      if (typeof arg1 === 'object' && arg1 !== null && arg1.producer && arg1.topic) {
+        return kernelConnector.publish(arg1.producer, arg1.topic, arg1.payload);
+      }
+      return kernelConnector.publish(String(arg1), String(arg2), arg3);
+    }
+  );
 }
 
 /** Router arus CHAT_STREAM dari Python -> renderer */
@@ -656,8 +771,10 @@ if (!gotTheLock) {
     }
     createWindow();
 
-    // Otak dihubungkan SETELAH tubuh siap memaparkan statusnya
+    // Otak & Kernel dihubungkan SETELAH tubuh siap memaparkan statusnya
+    ensureBunKernelStarted();
     ensurePythonBrainStarted();
+    kernelConnector?.start();
     void connector.start();
   });
 }
@@ -670,6 +787,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  kernelConnector?.stop();
   connector.stop(); // Putus sopan dari socket Python
   tray?.destroy();
 });

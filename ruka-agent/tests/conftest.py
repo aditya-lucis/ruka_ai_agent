@@ -8,8 +8,14 @@ Kontrak ini dijaga test_contracts saat SDK naik versi.
 """
 from __future__ import annotations
 import json
+import os
 from dataclasses import dataclass, field
 import pytest
+
+# Protect against OpenBLAS thread allocation exhaustion under memory pressure
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 
 @dataclass

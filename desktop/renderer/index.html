@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'self';">
-  <title>RUKA — Sovereign Companion</title>
+  <title>PROJECT NOCTIS — Sovereign Companion OS</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
@@ -20,12 +20,16 @@
       <div class="brand">
         <img class="brand-avatar-mini" id="miniAvatar" src="ruka-icon.png" width="22" height="22"
           style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; display: block;" alt="Ruka">
-        <span class="brand-name">RUKA</span>
-        <span class="brand-title">Marquis Trendamis</span>
+        <span class="brand-name">NOCTIS OS</span>
+        <span class="brand-title">Ruka · Marquis of Trendamis</span>
       </div>
       <div class="presence-badge" id="presenceBadge">
         <span class="presence-dot"></span>
-        <span class="presence-text" id="presenceText">Lokal</span>
+        <span class="presence-text" id="presenceText">Local-First · Rp 0</span>
+      </div>
+      <div class="lunar-badge" id="lunarBadge" title="Fase Bulan & Ritme Noctis">
+        <span class="lunar-icon" id="lunarIcon">🌙</span>
+        <span class="lunar-text" id="lunarText">Purnama</span>
       </div>
       <button class="voice-toggle-btn active" id="btnToggleVoice" title="Suara Ruka: Aktif (Klik untuk membisukan)">
         <svg class="icon-speaker" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -64,7 +68,7 @@
         <span class="status-pulse" id="statusPulse"></span>
         <span class="status-label" id="statusLabel">Memeriksa sambungan pikiran…</span>
       </div>
-      <div class="status-mode" id="ipcStatusMode">Loopback IPC</div>
+      <div class="status-mode" id="ipcStatusMode">Noctis OS · EventBus V3</div>
     </div>
 
     <!-- Companion Presence & Core Aura -->
@@ -84,9 +88,9 @@
         <div class="core-info">
           <div class="core-state-row">
             <span class="core-state" id="coreState">Siaga Tenang</span>
-            <span class="core-badge">Aristokrat Otonom</span>
+            <span class="core-badge">Noctis OS V3</span>
           </div>
-          <div class="core-quote" id="coreQuote">"Tenang, Aristokrat, dan Berdaulat Abadi."</div>
+          <div class="core-quote" id="coreQuote">"Tenang, Berdaulat, dan Berakar pada Matematika."</div>
         </div>
       </div>
     </section>
@@ -98,27 +102,35 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
-          <span>Percakapan</span>
+          <span>Percakapan & Kode</span>
+        </button>
+        <button class="tab-btn" data-tab="organs" id="tabOrgans">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>Matriks 10 Organ</span>
         </button>
         <button class="tab-btn" data-tab="memory" id="tabMemory">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
-          <span>Memori</span>
+          <span>Memory Palace</span>
         </button>
         <button class="tab-btn" data-tab="tools" id="tabTools">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path
               d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
           </svg>
-          <span>Alat & Izin</span>
+          <span>Shadow Hands</span>
         </button>
         <button class="tab-btn" data-tab="diagnostic" id="tabDiag">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
           </svg>
-          <span>Diagnostik</span>
+          <span>Kernel & Ritme</span>
         </button>
       </div>
     </nav>
@@ -249,15 +261,218 @@
         </div>
       </section>
 
-      <!-- TAB 2: Memori (Memory) -->
+      <!-- TAB 2: Matriks 10 Organ PROJECT NOCTIS -->
+      <section class="tab-view" id="viewOrgans">
+        <div class="tab-view-container">
+          <div class="view-header">
+            <h3>Matriks 10 Organ PROJECT NOCTIS</h3>
+            <p>Sensus telemetri 10 organ otonom, pengawas watchdog 2s (SLA &lt; 3s), dan batas RAM redline 90%.</p>
+          </div>
+          <div class="organ-grid" id="organGrid">
+            <!-- 1. Heart -->
+            <div class="organ-card alive" id="organCardHeart">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">🫀</span>
+                  <span class="organ-name">Crimson Heart</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Perencana otonom & Bayesian LoopGuard (HeartEval 20/20 lulus).</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>350 MB</strong></span>
+                <span>Watchdog: <strong>2.0s</strong></span>
+                <span>Fail-closed: <strong>Aktif</strong></span>
+              </div>
+            </div>
+
+            <!-- 2. Palace -->
+            <div class="organ-card alive" id="organCardPalace">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">🏛️</span>
+                  <span class="organ-name">Memory Palace</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">5 Sayap ingatan persistensi SQLite WAL & Vector 512-d (Amnesia 20/20).</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>500 MB</strong></span>
+                <span>Recovery: <strong>&lt; 15s</strong></span>
+                <span>Tidur: <strong>Konsolidasi</strong></span>
+              </div>
+            </div>
+
+            <!-- 3. Converse -->
+            <div class="organ-card alive" id="organCardConverse">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">🎭</span>
+                  <span class="organ-name">Multimodal Converse</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Dialog full-duplex, prosodi emosi Marquis, dan perutean intent lokal.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>400 MB</strong></span>
+                <span>Latency p95: <strong>640ms</strong></span>
+                <span>Mood: <strong>8 Emosi</strong></span>
+              </div>
+            </div>
+
+            <!-- 4. Eyes -->
+            <div class="organ-card alive" id="organCardEyes">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">👁️</span>
+                  <span class="organ-name">Crimson Eyes</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Sensor optik lokal YuNet & SFace. Privasi zero-outbound terjamin.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>300 MB</strong></span>
+                <span>SFace: <strong>128-d</strong></span>
+                <span>Sentry: <strong>5-min Idle</strong></span>
+              </div>
+            </div>
+
+            <!-- 5. Ear -->
+            <div class="organ-card alive" id="organCardEar">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">👂</span>
+                  <span class="organ-name">Blood Hearing</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Deteksi wicara Silero VAD & Faster-Whisper. Latensi &lt; 300ms.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>200 MB</strong></span>
+                <span>VAD: <strong>Silero</strong></span>
+                <span>False wake: <strong>0</strong></span>
+              </div>
+            </div>
+
+            <!-- 6. Avatar -->
+            <div class="organ-card alive" id="organCardAvatar">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">👤</span>
+                  <span class="organ-name">Living Avatar</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Three.js WebGL procedural pose, Verlet 120Hz, dan viseme single-writer.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>250 MB</strong></span>
+                <span>FPS: <strong>60</strong></span>
+                <span>Fisika: <strong>Verlet</strong></span>
+              </div>
+            </div>
+
+            <!-- 7. Hands -->
+            <div class="organ-card alive" id="organCardHands">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">✋</span>
+                  <span class="organ-name">Shadow Hands</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">13 Alat Blood Contract (File, Git, Terminal) di balik PathJail ketat.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>200 MB</strong></span>
+                <span>Kill-switch: <strong>&lt; 200ms</strong></span>
+                <span>ActionGate: <strong>Fail-closed</strong></span>
+              </div>
+            </div>
+
+            <!-- 8. Brain -->
+            <div class="organ-card alive" id="organCardBrain">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">🧠</span>
+                  <span class="organ-name">Cognitive Core</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Kognisi otonom, intent router, subagents, dan doktrin Marquis.</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>450 MB</strong></span>
+                <span>Subagents: <strong>Ready</strong></span>
+                <span>Math: <strong>Bayesian</strong></span>
+              </div>
+            </div>
+
+            <!-- 9. Forge -->
+            <div class="organ-card alive" id="organCardForge">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">⚡</span>
+                  <span class="organ-name">Astral Forge</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">Lab simulasi fisika & verifikasi drift &lt; 0.1% (Boss 10 cleared).</div>
+              <div class="organ-metrics">
+                <span>Limit: <strong>300 MB</strong></span>
+                <span>Drift: <strong>&lt; 0.1%</strong></span>
+                <span>Safety: <strong>&gt; 5% Margin</strong></span>
+              </div>
+            </div>
+
+            <!-- 10. Bun Kernel -->
+            <div class="organ-card alive" id="organCardKernel">
+              <div class="organ-header">
+                <div class="organ-title-group">
+                  <span class="organ-icon">🪐</span>
+                  <span class="organ-name">Bun OS Kernel</span>
+                </div>
+                <span class="organ-status-badge">🟢 Siaga</span>
+              </div>
+              <div class="organ-desc">EventBus V3 WebSocket (ws://127.0.0.1:8766) & Organ Supervisor.</div>
+              <div class="organ-metrics">
+                <span>Port: <strong>8766</strong></span>
+                <span>Boot: <strong>1.16ms</strong></span>
+                <span>RingBuffer: <strong>64/tick</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Memori (Memory Palace 5 Sayap) -->
       <section class="tab-view" id="viewMemory">
         <div class="tab-view-container">
           <div class="view-header">
-            <h3>Sensus & Penelusuran Ingatan</h3>
-            <p>Membaca ingatan konsolidasi SQLite & FAISS tanpa merusak integritas state.</p>
+            <h3>Memory Palace — 5 Sayap Persistensi</h3>
+            <p>Arsitektur ingatan 5 sayap SQLite WAL + FTS5 tanpa kebocoran state amnesia.</p>
           </div>
-          <div class="memory-search-bar">
-            <input type="text" id="memorySearchInput" placeholder="Cari ingatan semantik atau episodik..."
+          <div class="palace-wings-grid">
+            <div class="wing-card">
+              <div class="wing-title">🏛️ Relationship Wing</div>
+              <div class="wing-meta">Graf relasi ikatan Young Lord & Marquis</div>
+            </div>
+            <div class="wing-card">
+              <div class="wing-title">📐 Project Wing</div>
+              <div class="wing-meta">Keputusan kode & arsitektur proyek</div>
+            </div>
+            <div class="wing-card">
+              <div class="wing-title">⭐ Preference Wing</div>
+              <div class="wing-meta">Preferensi, batasan aman, & gaya</div>
+            </div>
+            <div class="wing-card">
+              <div class="wing-title">📜 Daily Wing</div>
+              <div class="wing-meta">Ringkasan episode harian & jurnal WAL</div>
+            </div>
+            <div class="wing-card">
+              <div class="wing-title">🌌 Dream Wing</div>
+              <div class="wing-meta">Konsolidasi abstraksi malam hari</div>
+            </div>
+          </div>
+          <div class="memory-search-bar" style="margin-top: 16px;">
+            <input type="text" id="memorySearchInput" placeholder="Cari ingatan di seluruh 5 sayap istana..."
               maxlength="2000">
             <button id="btnMemorySearch" class="action-btn">Cari</button>
           </div>

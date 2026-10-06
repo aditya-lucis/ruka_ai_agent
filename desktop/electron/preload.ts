@@ -116,6 +116,16 @@ const api = {
       return ipcRenderer.invoke(IPC.GOOGLE_SEARCH, { query, max_results: maxResults });
     },
   },
+  kernel: {
+    onEvent(cb: (event: any) => void): () => void {
+      const wrapped = (_e: unknown, event: any) => cb(event);
+      ipcRenderer.on(IPC.KERNEL_EVENT, wrapped);
+      return () => ipcRenderer.removeListener(IPC.KERNEL_EVENT, wrapped);
+    },
+    publish(producer: string, topic: string, payload: any): Promise<boolean> {
+      return ipcRenderer.invoke(IPC.KERNEL_PUBLISH, { producer, topic, payload });
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('ruka', api);

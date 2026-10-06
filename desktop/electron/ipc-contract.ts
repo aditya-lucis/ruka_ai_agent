@@ -37,6 +37,10 @@ export const IPC = {
   VOICE_SYNTHESIZE: 'ruka:voice-synthesize',
   /** Penelusuran web & Google real-time dengan ground facts (req/res). */
   GOOGLE_SEARCH: 'ruka:google-search',
+  /** Event dari Bun Kernel EventBus V3 -> renderer (event). */
+  KERNEL_EVENT: 'noctis:kernel-event',
+  /** Publish event dari UI -> Bun Kernel (req/res). */
+  KERNEL_PUBLISH: 'noctis:kernel-publish',
 } as const;
 
 /** Tipe amplop — cerminan Envelope Python (protokol v2). */
@@ -65,6 +69,7 @@ export const RENDERER_ALLOWED = new Set<string>([
   IPC.VOICE_TRANSCRIBE,
   IPC.VOICE_SYNTHESIZE,
   IPC.GOOGLE_SEARCH,
+  IPC.KERNEL_PUBLISH,
 ]);
 
 /** Validasi kanal — dipanggil handler main utk setiap pesan masuk. */

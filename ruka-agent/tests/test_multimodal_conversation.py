@@ -202,3 +202,13 @@ class TestConversationLoopPipeline:
         topics = [e.event_type for e in events]
         assert "converse.state" in topics
         assert "converse.turn" in topics
+
+
+class TestBoss8ConverseEvalSuite:
+    def test_boss_8_converse_eval_passes_line_seventeen(self):
+        from src.converse.converse_eval import ConverseEvaluator
+        evaluator = ConverseEvaluator()
+        results = evaluator.run_all()
+        passed_count = sum(1 for r in results if r.passed)
+        assert passed_count >= 17, f"Garis kelulusan Boss 8 tidak tercapai: {passed_count}/20"
+
