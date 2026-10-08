@@ -211,10 +211,10 @@ def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tupl
     for entry in reversed(history):
         if isinstance(entry, dict):
             role = entry.get("role", "")
-            content = entry.get("content", "")
+            content = entry.get("text") or entry.get("content", "")
         else:
             role = getattr(entry, "role", "")
-            content = getattr(entry, "content", "")
+            content = getattr(entry, "text", "") or getattr(entry, "content", "")
 
         if not content:
             continue
@@ -232,12 +232,16 @@ def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tupl
                         break
 
         if role == "user" and not found_filename:
-            filename_matches = _FILE_TOKEN.findall(content)
-            if filename_matches:
-                for fn in reversed(filename_matches):
-                    if "." in fn and not fn.startswith("http"):
-                        found_filename = fn
-                        break
+            inferred = detect_target_file(content)
+            if inferred:
+                found_filename = inferred
+            else:
+                filename_matches = _FILE_TOKEN.findall(content)
+                if filename_matches:
+                    for fn in reversed(filename_matches):
+                        if "." in fn and not fn.startswith("http"):
+                            found_filename = fn
+                            break
 
         if code_content and found_filename:
             break
@@ -481,19 +485,22 @@ def make_simple_plan(
         code_content, prev_filename = _extract_last_code_block_and_filename(history)
         target_path = prev_filename
         if not target_path:
+            target_path = detect_target_file(text)
+        if not target_path:
             for token in _extract_file_paths(text):
                 if "." in token:
                     target_path = token
                     break
-        if not target_path:
-            target_path = "invoice.html" if (code_content and "<html" in code_content.lower()) else "output.txt"
-        plan.append(
-            PlanStep(
-                "code_write",
-                {"path": target_path, "content": code_content or ""},
-                f"menulis berkas {target_path}",
+        if not target_path and code_content:
+            target_path = "index.html" if "<html" in code_content.lower() else "app.py" if ("def " in code_content or "import " in code_content) else "index.html"
+        if code_content and target_path:
+            plan.append(
+                PlanStep(
+                    "code_write",
+                    {"path": target_path, "content": code_content},
+                    f"menulis berkas {target_path}",
+                )
             )
-        )
 
     # 3. File reading & inspection (with line range & skill composition)
     has_read_verb = bool(_READ_VERBS.search(text) or _FIX_VERBS.search(text))

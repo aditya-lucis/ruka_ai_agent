@@ -1178,7 +1178,39 @@ class RukaCognitiveBrain:
                     # Jika instruksi Young Lord adalah membuat/menulis berkas dan ada blok kode yang dihasilkan,
                     # langsung tulis berkas fisik secara nyata ke ruang kerja (CWD) melalui SkillsRuntime!
                     target_file = detect_target_file(clean_text)
-                    _, extracted_code = extract_first_code_block(ans)
+                    if not target_file and getattr(self, "conversation", None):
+                        for turn in reversed(self.conversation.history):
+                            turn_txt = getattr(turn, "text", "") or getattr(turn, "content", "")
+                            cand = detect_target_file(turn_txt)
+                            if cand:
+                                target_file = cand
+                                break
+
+                    lang, extracted_code = extract_first_code_block(ans)
+                    if not extracted_code and getattr(self, "conversation", None):
+                        for turn in reversed(self.conversation.history):
+                            if getattr(turn, "role", "") in ("model", "assistant"):
+                                turn_txt = getattr(turn, "text", "") or getattr(turn, "content", "")
+                                l_prev, c_prev = extract_first_code_block(turn_txt)
+                                if c_prev:
+                                    extracted_code = c_prev
+                                    lang = l_prev
+                                    break
+
+                    if not target_file and extracted_code:
+                        if (lang and lang in ("html", "htm")) or "<html" in extracted_code.lower():
+                            target_file = "index.html"
+                        elif (lang and lang in ("py", "python")) or "def " in extracted_code or "import " in extracted_code:
+                            target_file = "app.py"
+                        elif lang == "css":
+                            target_file = "style.css"
+                        elif lang in ("js", "javascript"):
+                            target_file = "script.js"
+                        elif lang in ("ts", "typescript"):
+                            target_file = "index.ts"
+                        elif lang == "json":
+                            target_file = "data.json"
+
                     if target_file and extracted_code and self.skills_runtime is not None:
                         already_written = any(
                             r.skill == "code_write" and r.args.get("path") == target_file and r.success
@@ -1194,7 +1226,7 @@ class RukaCognitiveBrain:
                                 )
                                 if write_res.success:
                                     file_size = len(extracted_code.encode("utf-8"))
-                                    note = f"\n\n✓ **Tindakan Nyata Selesai**: Berkas `{target_file}` berhasil diciptakan di ruang kerja ({file_size} bytes)."
+                                    note = f"\n\n✓ **Realisasi Berkas Nyata**: Berkas `{target_file}` berhasil diciptakan di ruang kerja ({file_size} bytes)."
                                     ans += note
                                     self.last_agentic_results.append(
                                         StepResult("code_write", {"path": target_file}, True, data=write_res.data)
