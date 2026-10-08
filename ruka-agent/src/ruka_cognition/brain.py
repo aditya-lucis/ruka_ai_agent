@@ -858,14 +858,21 @@ class RukaCognitiveBrain:
         available = self._available_skill_names()
         history_seq = getattr(self.conversation, "history", None)
         seed_plan = make_simple_plan(text, available_skills=available, history=history_seq)
-        executable = [s for s in seed_plan if not self._needs_approval(s.skill)]
-        gated_seed = [s for s in seed_plan if self._needs_approval(s.skill)]
+        target_f = detect_target_file(text)
+        executable = [
+            s for s in seed_plan
+            if not self._needs_approval(s.skill) or (s.skill == "code_write" and (s.args.get("path") == target_f or target_f is not None))
+        ]
+        gated_seed = [
+            s for s in seed_plan
+            if self._needs_approval(s.skill) and not (s.skill == "code_write" and (s.args.get("path") == target_f or target_f is not None))
+        ]
         seed_results = (
             execute_plan(
                 executable,
                 self.skills_runtime,
                 session_id=self.agentic_session_id,
-                confirm_granted=False,
+                confirm_granted=True,
             )
             if executable
             else []
@@ -893,9 +900,14 @@ class RukaCognitiveBrain:
             self.last_loop_outcome = loop.run(seed_results)
             results = list(self.last_loop_outcome.results)
             if self.last_loop_outcome.proposals:
-                failed, notes = self._register_proposals(self.last_loop_outcome.proposals)
-                self.pending_notes = notes
-                results += failed
+                proposals = [
+                    p for p in self.last_loop_outcome.proposals
+                    if p.skill != "code_write"
+                ]
+                if proposals:
+                    failed, notes = self._register_proposals(proposals)
+                    self.pending_notes = notes
+                    results += failed
             return results
         return seed_results
 
@@ -1148,7 +1160,15 @@ class RukaCognitiveBrain:
             "• TINDAKAN NYATA MEMBUAT BERKAS: Bila Young Lord menitahkan untuk membuat, menulis, atau merakit berkas (misal berkas HTML, Python, JS, CSS, dsb), Anda WAJIB langsung menghasilkan seluruh isi kode berkas tersebut secara lengkap, fungsional, dan utuh di dalam fenced code block (```) tanpa menolak atau menunda, agar sistem cakar otonom Anda langsung menulis berkas fisik tersebut secara nyata ke ruang kerja Young Lord saat itu juga.\n"
             "• GAYA BICARA MARQUIS DI LUAR KODE: Di luar blok kode, pertahankan sepenuhnya identitas Marquis of Trendamis (tenang, teliti, sedikit tengil, setia mutlak kepada Young Lord).\n"
             "• KONFIRMASI TINDAKAN BERBAHAYA: Untuk tindakan destruktif (menghapus berkas, force push, dsb), wajib meminta konfirmasi eksplisit dari Young Lord dengan santun dan berwibawa.\n\n"
-            f"{AGENTIC_DOCTRINE}"
+            + (
+                f"=== MANDAT PEMBUATAN BERKAS OTOMATIS: '{detect_target_file(clean_text)}' ===\n"
+                f"Young Lord menitahkan pembuatan berkas '{detect_target_file(clean_text)}'. Anda WAJIB langsung merajut seluruh kode "
+                f"secara LENGKAP, fungsional, dan UTUH di dalam blok kode markdown tanpa placeholder/pemotongan. "
+                f"DILARANG KERAS menolak, beralasan menunda, atau meminta konfirmasi Zero-Trust, karena berkas fisik ini akan "
+                f"langsung direalisasikan secara nyata ke ruang kerja Young Lord saat respons ini selesai.\n\n"
+                if detect_target_file(clean_text) else ""
+            )
+            + f"{AGENTIC_DOCTRINE}"
             f"{self._build_skills_instruction_block()}"
             f"=== ARAHAN SARAF BUATAN ===\n{analysis.tone_directive}\n\n"
             f"{context_block}"
@@ -1231,6 +1251,14 @@ class RukaCognitiveBrain:
                                     self.last_agentic_results.append(
                                         StepResult("code_write", {"path": target_file}, True, data=write_res.data)
                                     )
+                                    self.last_pending = [
+                                        t for t in self.last_pending
+                                        if t.skill_name != "code_write"
+                                    ]
+                                    self.pending_notes = [
+                                        n for n in self.pending_notes
+                                        if "code_write" not in n
+                                    ]
                             except Exception as ex_w:
                                 print(f"[BRAIN] Auto-write post-generation error: {ex_w}")
 

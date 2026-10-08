@@ -139,7 +139,7 @@ _EDIT_REPLACE = re.compile(
     re.IGNORECASE,
 )
 _WRITE_FILE = re.compile(
-    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|rakit)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)?[:\s]+([\s\S]+)",
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|rakit)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)\s*[:=]?\s*([\s\S]+)",
     re.IGNORECASE,
 )
 _CREATE_FILE_SIMPLE = re.compile(
@@ -200,6 +200,26 @@ def extract_first_code_block(text: str) -> tuple[str | None, str | None]:
         return lang, code
     return None, None
 
+_KNOWN_CODE_EXTENSIONS = frozenset({
+    "html", "htm", "css", "js", "ts", "jsx", "tsx", "py", "json", "md",
+    "markdown", "txt", "yaml", "yml", "toml", "sql", "sh", "bat", "ps1",
+    "c", "cpp", "h", "cs", "java", "go", "rs", "php", "rb", "env", "lock"
+})
+
+def _is_valid_code_filename(fn: str) -> bool:
+    if not fn or "." not in fn or fn.startswith("http") or "/" in fn and fn.startswith("/"):
+        return False
+    name = fn.split("/")[-1].split("\\")[-1]
+    if "." not in name:
+        return False
+    ext = name.rsplit(".", 1)[-1].lower()
+    if ext not in _KNOWN_CODE_EXTENSIONS:
+        return False
+    base = name.rsplit(".", 1)[0].lower()
+    if base in ("young", "lord", "sir", "marquis", "ruka", "trendamis"):
+        return False
+    return True
+
 def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tuple[str | None, str | None]:
     """Helper to inspect recent conversation history for code blocks and target filenames."""
     if not history:
@@ -227,24 +247,35 @@ def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tupl
             filename_matches = _FILE_TOKEN.findall(content)
             if filename_matches and not found_filename:
                 for fn in reversed(filename_matches):
-                    if "." in fn and not fn.startswith("http"):
+                    if _is_valid_code_filename(fn):
                         found_filename = fn
                         break
 
         if role == "user" and not found_filename:
             inferred = detect_target_file(content)
-            if inferred:
+            if inferred and _is_valid_code_filename(inferred):
                 found_filename = inferred
             else:
                 filename_matches = _FILE_TOKEN.findall(content)
                 if filename_matches:
                     for fn in reversed(filename_matches):
-                        if "." in fn and not fn.startswith("http"):
+                        if _is_valid_code_filename(fn):
                             found_filename = fn
                             break
 
         if code_content and found_filename:
             break
+
+    if code_content and (not found_filename or not _is_valid_code_filename(found_filename)):
+        c_lower = code_content.lower()
+        if "<!doctype html" in c_lower or "<html" in c_lower:
+            found_filename = "index.html"
+        elif "def " in code_content or "import " in code_content:
+            found_filename = "app.py"
+        elif "body {" in code_content or "@tailwind" in code_content:
+            found_filename = "style.css"
+        elif "const " in code_content or "function " in code_content:
+            found_filename = "script.js"
 
     return code_content, found_filename
 _GIT_STATUS = re.compile(
@@ -945,9 +976,13 @@ _MULTISTEP_MARKERS = re.compile(
 
 def needs_multistep(text: str, seed_plan: list[PlanStep]) -> bool:
     """Heuristic: explore iteratively when nothing concrete matched or the task implies several steps."""
+    if _MULTISTEP_MARKERS.search(text):
+        return True
+    if detect_target_file(text):
+        return False
     if not seed_plan:
         return True
-    return bool(_MULTISTEP_MARKERS.search(text))
+    return False
 
 
 def build_decision_prompt(
