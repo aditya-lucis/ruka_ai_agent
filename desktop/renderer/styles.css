@@ -700,33 +700,7 @@ img.ruka-avatar {
   font-size: 13px;
 }
 
-.quick-chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 6px 2px 10px;
-  margin-bottom: 4px;
-}
-
-.chip {
-  background: rgba(30, 30, 46, 0.85);
-  border: 1px solid var(--border-color);
-  color: var(--text-sub);
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: var(--transition-fast);
-}
-
-.chip:hover {
-  background: rgba(203, 166, 247, 0.15);
-  border-color: var(--accent-purple);
-  color: var(--accent-purple);
-  transform: translateY(-1px);
-}
+/* Quick chips removed as requested by Young Lord */
 
 /* Attachment Bar */
 .attachment-bar {
@@ -823,89 +797,231 @@ img.ruka-avatar {
 }
 
 /* Chat Composer */
-.chat-composer {
+/* Modern Noctis OS Rich Editor Card (TipTap / CKEditor inspired) */
+.noctis-editor-card {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(24, 24, 37, 0.94) 0%, rgba(17, 17, 27, 0.98) 100%);
+  border: 1px solid rgba(137, 180, 250, 0.22);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 1px rgba(203, 166, 247, 0.2);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal), transform var(--transition-fast);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.noctis-editor-card:focus-within {
+  border-color: rgba(203, 166, 247, 0.7);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 22px rgba(203, 166, 247, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.noctis-editor-card.expanded #chatInput {
+  min-height: 140px;
+  max-height: 360px;
+}
+
+/* Editor Toolbar */
+.editor-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(17, 17, 27, 0.75);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.toolbar-group.right {
   gap: 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 6px 10px;
-  transition: border-color var(--transition-fast);
 }
 
-.chat-composer:focus-within {
-  border-color: var(--accent-purple);
-  box-shadow: 0 0 10px var(--accent-glow);
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 4px;
 }
 
-.composer-tools,
-.composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.tool-icon-btn {
+.fmt-btn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-muted);
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: var(--transition-fast);
+  padding: 0;
 }
 
-.tool-icon-btn:hover {
-  color: var(--accent-purple);
+.fmt-btn:hover {
+  color: var(--accent-lavender);
   background: rgba(203, 166, 247, 0.15);
+  border-color: rgba(203, 166, 247, 0.25);
+}
+
+.fmt-btn:active {
+  transform: scale(0.92);
+}
+
+.fmt-btn.icon-only {
+  width: 24px;
+  height: 24px;
+}
+
+.editor-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(166, 227, 161, 0.1);
+  border: 1px solid rgba(166, 227, 161, 0.3);
+  color: var(--accent-green);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.mode-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  animation: mode-glow 2s infinite ease-in-out;
+}
+
+@keyframes mode-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.char-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Editor Input Area */
+.editor-input-wrapper {
+  padding: 8px 12px 4px;
+}
+
+#chatInput {
+  width: 100%;
+  min-height: 48px;
+  max-height: 200px;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: min-height var(--transition-normal);
+}
+
+#chatInput::placeholder {
+  color: rgba(166, 173, 200, 0.45);
+  font-style: italic;
+}
+
+/* Bottom Action Bar */
+.editor-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 8px;
+  background: rgba(17, 17, 27, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.bottom-tools-left,
+.bottom-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(30, 30, 46, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-sub);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.tool-chip-btn:hover {
+  color: var(--text-main);
+  background: rgba(203, 166, 247, 0.15);
+  border-color: rgba(203, 166, 247, 0.4);
+  transform: translateY(-1px);
 }
 
 .mic-btn.recording {
   color: #ffffff !important;
   background: var(--accent-red) !important;
-  box-shadow: 0 0 10px rgba(243, 139, 168, 0.6) !important;
+  box-shadow: 0 0 12px rgba(243, 139, 168, 0.7) !important;
+  border-color: var(--accent-red) !important;
   animation: mic-pulse 1s infinite alternate ease-in-out;
 }
 
 @keyframes mic-pulse {
   from { transform: scale(1); box-shadow: 0 0 6px rgba(243, 139, 168, 0.4); }
-  to { transform: scale(1.1); box-shadow: 0 0 14px rgba(243, 139, 168, 0.8); }
+  to { transform: scale(1.06); box-shadow: 0 0 16px rgba(243, 139, 168, 0.85); }
 }
 
-#chatInput {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text-main);
-  font-family: inherit;
-  font-size: 12px;
-  resize: none;
-  outline: none;
-  max-height: 80px;
+.shortcut-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  user-select: none;
 }
 
-.send-btn {
-  background: var(--accent-purple);
+.noctis-send-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #cba6f7 0%, #b4befe 100%);
   border: none;
   color: #11111b;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  box-shadow: 0 4px 14px rgba(203, 166, 247, 0.35);
   transition: var(--transition-fast);
 }
 
-.send-btn:hover {
-  background: var(--accent-lavender);
-  transform: scale(1.05);
+.noctis-send-btn:hover {
+  background: linear-gradient(135deg, #d8bdfa 0%, #c4ceff 100%);
+  box-shadow: 0 6px 20px rgba(203, 166, 247, 0.55);
+  transform: translateY(-1px);
+}
+
+.noctis-send-btn:active {
+  transform: translateY(1px);
 }
 
 /* Message footer and speak button */

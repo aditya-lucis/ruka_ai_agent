@@ -20,7 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatFeed = document.getElementById('chatFeed');
   const chatInput = document.getElementById('chatInput');
   const btnSend = document.getElementById('btnSend');
-  const quickChips = document.querySelectorAll('.chip');
+  const editorCard = document.getElementById('editorCard');
+  const editorCharCount = document.getElementById('editorCharCount');
+  const btnToggleExpandEditor = document.getElementById('btnToggleExpandEditor');
+  const fmtButtons = document.querySelectorAll('.fmt-btn[data-fmt]');
   const logConsole = document.getElementById('logConsole');
   const memorySearchInput = document.getElementById('memorySearchInput');
   const btnMemorySearch = document.getElementById('btnMemorySearch');
@@ -1089,18 +1092,115 @@ document.addEventListener('DOMContentLoaded', () => {
     sendMessage(chatInput.value);
   });
 
+  function updateCharCount() {
+    if (!editorCharCount || !chatInput) return;
+    const count = chatInput.value.length;
+    editorCharCount.textContent = `${count} / 8000`;
+    if (count > 7500) {
+      editorCharCount.style.color = 'var(--accent-red)';
+    } else {
+      editorCharCount.style.color = 'var(--text-muted)';
+    }
+  }
+
+  function applyFormatting(fmt) {
+    if (!chatInput) return;
+    const start = chatInput.selectionStart;
+    const end = chatInput.selectionEnd;
+    const text = chatInput.value;
+    const selected = text.substring(start, end);
+    let replacement = '';
+    let cursorOffset = 0;
+
+    switch (fmt) {
+      case 'bold':
+        replacement = `**${selected || 'teks'}**`;
+        cursorOffset = selected ? replacement.length : 2;
+        break;
+      case 'italic':
+        replacement = `*${selected || 'teks'}*`;
+        cursorOffset = selected ? replacement.length : 1;
+        break;
+      case 'strike':
+        replacement = `~~${selected || 'teks'}~~`;
+        cursorOffset = selected ? replacement.length : 2;
+        break;
+      case 'code':
+        replacement = `\`${selected || 'kode'}\``;
+        cursorOffset = selected ? replacement.length : 1;
+        break;
+      case 'codeblock':
+        replacement = `\`\`\`\n${selected || '// tulis kode di sini'}\n\`\`\``;
+        cursorOffset = selected ? replacement.length : 4;
+        break;
+      case 'quote':
+        if (selected.includes('\n')) {
+          replacement = selected.split('\n').map(l => `> ${l}`).join('\n');
+        } else {
+          replacement = `> ${selected || 'kutipan'}\n`;
+        }
+        cursorOffset = replacement.length;
+        break;
+      case 'list':
+        if (selected.includes('\n')) {
+          replacement = selected.split('\n').map(l => `- ${l}`).join('\n');
+        } else {
+          replacement = `- ${selected || 'butir'}\n`;
+        }
+        cursorOffset = replacement.length;
+        break;
+      default:
+        return;
+    }
+
+    chatInput.setRangeText(replacement, start, end, 'end');
+    chatInput.focus();
+    if (!selected) {
+      chatInput.setSelectionRange(start + cursorOffset, start + cursorOffset + (fmt === 'codeblock' ? 22 : 4));
+    }
+    updateCharCount();
+  }
+
+  // Formatting Toolbar Buttons
+  fmtButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const fmt = btn.dataset.fmt;
+      if (fmt) applyFormatting(fmt);
+    });
+  });
+
+  // Toggle Editor Height
+  btnToggleExpandEditor?.addEventListener('click', () => {
+    editorCard?.classList.toggle('expanded');
+    const isExpanded = editorCard?.classList.contains('expanded');
+    btnToggleExpandEditor.title = isExpanded ? 'Perkecil Tinggi Editor' : 'Perbesar Tinggi Editor';
+  });
+
+  // Input & Keyboard Shortcuts
+  chatInput?.addEventListener('input', () => {
+    updateCharCount();
+  });
+
   chatInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage(chatInput.value);
+      updateCharCount();
+      return;
     }
-  });
 
-  quickChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const text = chip.dataset.text;
-      sendMessage(text);
-    });
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        applyFormatting('bold');
+      } else if (e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        applyFormatting('italic');
+      } else if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        applyFormatting('code');
+      }
+    }
   });
 
   // 5. Memory Search Handling
