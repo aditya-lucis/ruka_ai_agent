@@ -766,10 +766,8 @@ class RukaCognitiveBrain:
         if is_agentic_request(text):
             return True
         if analysis is not None:
-            if analysis.intent == "command" and analysis.is_technical:
+            if analysis.intent in ("command", "code_help"):
                 return True
-            if analysis.intent == "code_help":
-                return is_agentic_request(text)
         return False
 
     def _available_skill_names(self) -> list[str]:
@@ -849,21 +847,15 @@ class RukaCognitiveBrain:
         return failed, notes
 
     def _agentic_execute(self, text: str) -> list[StepResult]:
-        """Plan and execute real skills through SkillsRuntime (PathJail and confirmation enforced).
-
-        1. A deterministic rule-based seed plan runs first (fast, no LLM). Steps whose skill
-           needs approval are never executed here; the first becomes a pending ticket.
-        2. For multi-step or unmatched agentic requests, a guarded loop (budget, loop-health,
-           duplicate and repeated-failure guards) continues the investigation. Gated skills
-           proposed by the planner become tickets; they are never auto-confirmed.
-        """
+        """Plan and execute real skills through SkillsRuntime (PathJail and confirmation enforced)."""
         self.last_loop_outcome = None
         self.last_pending = []
         self.pending_notes: list[str] = []
         if self.skills_runtime is None:
             return []
         available = self._available_skill_names()
-        seed_plan = make_simple_plan(text, available_skills=available)
+        history_seq = getattr(self.conversation, "history", None)
+        seed_plan = make_simple_plan(text, available_skills=available, history=history_seq)
         executable = [s for s in seed_plan if not self._needs_approval(s.skill)]
         gated_seed = [s for s in seed_plan if self._needs_approval(s.skill)]
         seed_results = (

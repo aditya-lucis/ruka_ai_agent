@@ -50,6 +50,8 @@ _AGENTIC_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\b(read|open|show|list)\s+(the\s+)?(file|files|folder|directory|dir)\b",
         r"\b(edit|ubah|modifikasi|ganti|refactor|perbaiki|fix)\s+(file|berkas|kode|fungsi|baris)\b",
         r"\b(buatkan|buat|tulis|create|write)\s+(file|berkas)\b",
+        r"\b(buatkan|buat|tulis|create|write|simpan|save|generate|scaffold)\s*(file|berkas|kode)?\s*(nya|filenya|kodenya|nya\s+ruka)?\b",
+        r"\b(langsung\s+)?(buatkan|buat|simpan|tulis|write|create|save)\s*(file|berkas|kode|filenya|kodenya)?\b",
         r"\b(hapus|delete|remove)\s+(file|berkas|folder)\b",
         r"\b(jalankan|run|execute|eksekusi)\s+\S+",
         r"\bgit\s+(status|diff|log|commit|push|pull|branch|add)\b",
@@ -145,6 +147,59 @@ _WRITE_FILE = re.compile(
     r"\b(?:buatkan|buat|create|tulis|write)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)?[:\s]+([\s\S]+)",
     re.IGNORECASE,
 )
+_CREATE_FILE_SIMPLE = re.compile(
+    r"\b(?:buatkan|buat|create|tulis|write|generate|scaffold|simpan|save)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?",
+    re.IGNORECASE,
+)
+_CREATE_FILE_FOLLOWUP = re.compile(
+    r"\b(?:langsung\s+)?(?:buatkan|buat|simpan|write|create|save)\s+(?:file\s*nya|filenya|berkasnya|kode\s*nya|kodenya|halamannya)\b|"
+    r"\b(?:buatkan|buat|create|write|simpan|save)\s+(?:di\s+folder\s+ini|di\s+sini|disini|file\s+ini)\b",
+    re.IGNORECASE,
+)
+
+def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tuple[str | None, str | None]:
+    """Helper to inspect recent conversation history for code blocks and target filenames."""
+    if not history:
+        return None, None
+
+    code_content = None
+    found_filename = None
+
+    for entry in reversed(history):
+        if isinstance(entry, dict):
+            role = entry.get("role", "")
+            content = entry.get("content", "")
+        else:
+            role = getattr(entry, "role", "")
+            content = getattr(entry, "content", "")
+
+        if not content:
+            continue
+
+        if role in ("model", "assistant") and not code_content:
+            code_matches = re.findall(r"```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```", content)
+            if code_matches:
+                code_content = code_matches[-1].strip()
+
+            filename_matches = _FILE_TOKEN.findall(content)
+            if filename_matches and not found_filename:
+                for fn in reversed(filename_matches):
+                    if "." in fn and not fn.startswith("http"):
+                        found_filename = fn
+                        break
+
+        if role == "user" and not found_filename:
+            filename_matches = _FILE_TOKEN.findall(content)
+            if filename_matches:
+                for fn in reversed(filename_matches):
+                    if "." in fn and not fn.startswith("http"):
+                        found_filename = fn
+                        break
+
+        if code_content and found_filename:
+            break
+
+    return code_content, found_filename
 _GIT_STATUS = re.compile(
     r"\bgit\s+status\b|\b(?:status\s+git|cek\s+status\s+git|periksa\s+status\s+git)\b",
     re.IGNORECASE,
@@ -299,7 +354,11 @@ def _extract_command(text: str) -> str | None:
     return None
 
 
-def make_simple_plan(text: str, available_skills: Iterable[str] | None = None) -> list[PlanStep]:
+def make_simple_plan(
+    text: str,
+    available_skills: Iterable[str] | None = None,
+    history: Sequence[Any] | None = None,
+) -> list[PlanStep]:
     """Build a deterministic, rule-based plan of skill calls for a request.
 
     Only skills present in ``available_skills`` are planned (when provided).
@@ -324,17 +383,52 @@ def make_simple_plan(text: str, available_skills: Iterable[str] | None = None) -
             )
         )
 
-    # 2. Concrete write file
+    # 2. Concrete write file (explicit with content or simple request or followup)
     write_match = _WRITE_FILE.search(text)
+    simple_write = _CREATE_FILE_SIMPLE.search(text)
+    followup_write = _CREATE_FILE_FOLLOWUP.search(text)
+
     if write_match:
         target_path = write_match.group(1)
         content = write_match.group(2).strip()
         if content.startswith("```") and content.endswith("```"):
-            content = content.strip("`\n").strip()
+            content = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", content)
+            content = re.sub(r"\n?```$", "", content).strip()
         plan.append(
             PlanStep(
                 "code_write",
                 {"path": target_path, "content": content},
+                f"menulis berkas {target_path}",
+            )
+        )
+    elif simple_write:
+        target_path = simple_write.group(1)
+        code_content, _ = _extract_last_code_block_and_filename(history)
+        if not code_content:
+            code_matches = re.findall(r"```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```", text)
+            if code_matches:
+                code_content = code_matches[-1].strip()
+        plan.append(
+            PlanStep(
+                "code_write",
+                {"path": target_path, "content": code_content or ""},
+                f"menulis berkas {target_path}",
+            )
+        )
+    elif followup_write:
+        code_content, prev_filename = _extract_last_code_block_and_filename(history)
+        target_path = prev_filename
+        if not target_path:
+            for token in _extract_file_paths(text):
+                if "." in token:
+                    target_path = token
+                    break
+        if not target_path:
+            target_path = "invoice.html" if (code_content and "<html" in code_content.lower()) else "output.txt"
+        plan.append(
+            PlanStep(
+                "code_write",
+                {"path": target_path, "content": code_content or ""},
                 f"menulis berkas {target_path}",
             )
         )
