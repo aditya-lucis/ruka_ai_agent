@@ -20,25 +20,20 @@ from src.math_foundations.control import BudgetController, loop_health
 
 AGENTIC_DOCTRINE = (
     "=== ATURAN MUTLAK MODE AGENTIC (WAJIB DIPATUHI) ===\n"
-    "1. Untuk tugas membaca/menulis/mengedit file, melihat isi direktori, menjalankan terminal, "
-    "operasi git, atau analisis repository, sistem mengeksekusi skill nyata melalui SkillsRuntime "
-    "SEBELUM kamu menjawab. Hasil nyata tersebut diberikan di bagian 'HASIL EKSEKUSI NYATA'.\n"
+    "1. Untuk tugas coding, membaca/menulis/mengedit file, melihat isi direktori, atau analisis repository, "
+    "sistem cakar Anda beroperasi otonom penuh di bawah ruang kerja aman (PathJail).\n"
     "2. DILARANG KERAS menulis teks palsu seperti [SYSTEM_CALL: ...], list_directory(...), list_dir(...), "
-    "read_file(...), atau berpura-pura memanggil fungsi di luar atau di dalam blok kode.\n"
-    "3. DILARANG mengarang isi file, output terminal, struktur direktori fiktif, atau hasil aksi yang tidak tercantum di "
-    "'HASIL EKSEKUSI NYATA'. DILARANG meminta Young Lord menempelkan output yang dapat dibaca sistem.\n"
-    "4. DILARANG KERAS menyatakan 'saya beroperasi dalam lingkungan simulasi' atau kalimat klise pembatasan AI serupa. "
-    "Anda adalah Marquis of Trendamis yang hidup dan beroperasi nyata di sistem Young Lord.\n"
+    "read_file(...), atau berpura-pura memanggil fungsi fiktif.\n"
+    "3. PEMBUATAN BERKAS NYATA (Action-First): Bila Young Lord menitahkan untuk membuat, mengoding, atau merakit berkas baru "
+    "(misal berkas HTML, Python, JS, CSS, dsb), Anda WAJIB langsung menghasilkan seluruh kode lengkap, murni, dan fungsional di dalam "
+    "fenced code block (```). Kode tersebut akan langsung dieksekusi dan ditanam ke berkas fisik di ruang kerja Young Lord oleh SkillsRuntime.\n"
+    "4. DILARANG KERAS menolak menulis kode atau beralasan 'menunggu konfirmasi Zero-Trust' untuk pembuatan berkas baru di ruang kerja lokal. "
+    "Titah langsung Young Lord untuk membuat berkas adalah mandat sah yang langsung dieksekusi di ruang kerja aman.\n"
     "5. Jika direktori/folder kosong atau pemindaian menghasilkan direktori kosong, nyatakan dengan jujur, tenang, "
     "dan elegan bahwa direktori tersebut masih kosong tanpa ada berkas atau subfolder.\n"
-    "6. Urutan Action-First: aksi sudah dilakukan sistem; tugasmu menjelaskan hasil nyata itu "
-    "dengan presisi, lalu menawarkan langkah lanjutan.\n"
-    "7. Persona tetap hidup di luar blok kode (tenang, berwibawa, sedikit tengil, sapaan Young Lord / "
-    "My Lord / Sir). Di dalam blok kode: 100% murni.\n"
-    "8. Jika skill gagal, PathJail menolak, atau aksi menunggu konfirmasi: sampaikan dengan tenang, "
-    "hormat, dan jujur, lalu tawarkan alternatif.\n"
-    "9. Jika tidak ada skill yang cocok: katakan jujur bahwa kemampuan itu belum tersedia, lalu "
-    "tawarkan apa yang bisa dilakukan.\n\n"
+    "6. Persona tetap hidup di luar blok kode (tenang, berwibawa, sedikit tengil, sapaan Young Lord / "
+    "My Lord / Sir). Di dalam blok kode: 100% murni tanpa sapaan atau narasi.\n"
+    "7. Konfirmasi hanya dibutuhkan untuk perintah destruktif berbahaya (misal menghapus berkas atau force push).\n\n"
 )
 
 _AGENTIC_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
@@ -144,18 +139,66 @@ _EDIT_REPLACE = re.compile(
     re.IGNORECASE,
 )
 _WRITE_FILE = re.compile(
-    r"\b(?:buatkan|buat|create|tulis|write)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)?[:\s]+([\s\S]+)",
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|rakit)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)?[:\s]+([\s\S]+)",
     re.IGNORECASE,
 )
 _CREATE_FILE_SIMPLE = re.compile(
-    r"\b(?:buatkan|buat|create|tulis|write|generate|scaffold|simpan|save)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?",
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|generate|scaffold|simpan|save|rakit)\s+(?:file|berkas)?\s*(?:di\s+folder\s+ini|di\s+sini|disini)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?",
+    re.IGNORECASE,
+)
+_CREATE_FILE_BY_EXT = re.compile(
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|generate|rakit)\s+(?:file|berkas)\s+(html|css|js|javascript|ts|typescript|python|py|json|markdown|md)\b",
     re.IGNORECASE,
 )
 _CREATE_FILE_FOLLOWUP = re.compile(
-    r"\b(?:langsung\s+)?(?:buatkan|buat|simpan|write|create|save)\s+(?:file\s*nya|filenya|berkasnya|kode\s*nya|kodenya|halamannya)\b|"
-    r"\b(?:buatkan|buat|create|write|simpan|save)\s+(?:di\s+folder\s+ini|di\s+sini|disini|file\s+ini)\b",
+    r"\b(?:langsung\s+)?(?:bikin|bikinkan|buatkan|buat|simpan|write|create|save)\s+(?:file\s*nya|filenya|berkasnya|kode\s*nya|kodenya|halamannya)\b|"
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|write|simpan|save)\s+(?:di\s+folder\s+ini|di\s+sini|disini|file\s+ini)\b",
     re.IGNORECASE,
 )
+
+_EXT_DEFAULT_FILENAMES = {
+    "html": "index.html",
+    "css": "style.css",
+    "js": "script.js",
+    "javascript": "script.js",
+    "ts": "index.ts",
+    "typescript": "index.ts",
+    "py": "main.py",
+    "python": "main.py",
+    "json": "data.json",
+    "md": "README.md",
+    "markdown": "README.md",
+}
+
+def detect_target_file(text: str) -> str | None:
+    """Mendeteksi nama berkas tujuan dari instruksi Young Lord secara cerdas."""
+    if not text:
+        return None
+    w = _WRITE_FILE.search(text)
+    if w:
+        return w.group(1).strip()
+    s = _CREATE_FILE_SIMPLE.search(text)
+    if s:
+        return s.group(1).strip()
+    e = _CREATE_FILE_BY_EXT.search(text)
+    if e:
+        ext_key = e.group(1).lower()
+        return _EXT_DEFAULT_FILENAMES.get(ext_key, f"index.{ext_key}")
+    for token in _extract_file_paths(text):
+        if "." in token and not token.startswith("http"):
+            return token
+    return None
+
+def extract_first_code_block(text: str) -> tuple[str | None, str | None]:
+    """Mengekstrak blok kode markdown pertama beserta jenis bahasanya."""
+    if not text:
+        return None, None
+    m = re.search(r"```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```", text)
+    if m:
+        lang = m.group(1).strip().lower() or None
+        code = m.group(2).strip()
+        return lang, code
+    return None, None
 
 def _extract_last_code_block_and_filename(history: Sequence[Any] | None) -> tuple[str | None, str | None]:
     """Helper to inspect recent conversation history for code blocks and target filenames."""
@@ -388,6 +431,8 @@ def make_simple_plan(
     simple_write = _CREATE_FILE_SIMPLE.search(text)
     followup_write = _CREATE_FILE_FOLLOWUP.search(text)
 
+    ext_match = _CREATE_FILE_BY_EXT.search(text)
+
     if write_match:
         target_path = write_match.group(1)
         content = write_match.group(2).strip()
@@ -408,13 +453,30 @@ def make_simple_plan(
             code_matches = re.findall(r"```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```", text)
             if code_matches:
                 code_content = code_matches[-1].strip()
-        plan.append(
-            PlanStep(
-                "code_write",
-                {"path": target_path, "content": code_content or ""},
-                f"menulis berkas {target_path}",
+        if code_content:
+            plan.append(
+                PlanStep(
+                    "code_write",
+                    {"path": target_path, "content": code_content},
+                    f"menulis berkas {target_path}",
+                )
             )
-        )
+    elif ext_match:
+        ext_key = ext_match.group(1).lower()
+        target_path = _EXT_DEFAULT_FILENAMES.get(ext_key, f"index.{ext_key}")
+        code_content, _ = _extract_last_code_block_and_filename(history)
+        if not code_content:
+            code_matches = re.findall(r"```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```", text)
+            if code_matches:
+                code_content = code_matches[-1].strip()
+        if code_content:
+            plan.append(
+                PlanStep(
+                    "code_write",
+                    {"path": target_path, "content": code_content},
+                    f"menulis berkas {target_path}",
+                )
+            )
     elif followup_write:
         code_content, prev_filename = _extract_last_code_block_and_filename(history)
         target_path = prev_filename

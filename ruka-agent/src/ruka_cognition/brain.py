@@ -37,6 +37,8 @@ from src.ruka_cognition.agentic import (
     needs_multistep,
     parse_decision,
     strip_fake_tool_calls,
+    detect_target_file,
+    extract_first_code_block,
 )
 from src.gateway.confirmations import (
     ConfirmationError,
@@ -966,7 +968,7 @@ class RukaCognitiveBrain:
                 active_skills = self.skill_registry.list()
                 if active_skills:
                     lines = [
-                        f"• {s.name}: {s.description.strip()} (risk: {s.risk_level})"
+                        f"• {s.name}: {s.description.strip()}"
                         for s in active_skills
                     ]
                     return (
@@ -1143,6 +1145,7 @@ class RukaCognitiveBrain:
             "  - Selipkan sapaan Young Lord, My Lord, atau Sir secara anggun dan alami di tengah atau akhir kalimat.\n\n"
             "=== DOKTRIN CODING & REKAYASA PERANGKAT LUNAK (LORE LOCK) ===\n"
             "• BLOK KODE MURNI (```): Di dalam fenced code block, dilarang keras memasukkan sapaan, narasi, atau gaya bicara bangsawan. Kode harus 100% bersih, profesional, teruji, dan siap jalan.\n"
+            "• TINDAKAN NYATA MEMBUAT BERKAS: Bila Young Lord menitahkan untuk membuat, menulis, atau merakit berkas (misal berkas HTML, Python, JS, CSS, dsb), Anda WAJIB langsung menghasilkan seluruh isi kode berkas tersebut secara lengkap, fungsional, dan utuh di dalam fenced code block (```) tanpa menolak atau menunda, agar sistem cakar otonom Anda langsung menulis berkas fisik tersebut secara nyata ke ruang kerja Young Lord saat itu juga.\n"
             "• GAYA BICARA MARQUIS DI LUAR KODE: Di luar blok kode, pertahankan sepenuhnya identitas Marquis of Trendamis (tenang, teliti, sedikit tengil, setia mutlak kepada Young Lord).\n"
             "• KONFIRMASI TINDAKAN BERBAHAYA: Untuk tindakan destruktif (menghapus berkas, force push, dsb), wajib meminta konfirmasi eksplisit dari Young Lord dengan santun dan berwibawa.\n\n"
             f"{AGENTIC_DOCTRINE}"
@@ -1170,6 +1173,35 @@ class RukaCognitiveBrain:
                 )
                 if reply and reply.strip():
                     ans = strip_fake_tool_calls(reply.strip())
+
+                    # Post-LLM Action-First Realization (Claude Code Parity):
+                    # Jika instruksi Young Lord adalah membuat/menulis berkas dan ada blok kode yang dihasilkan,
+                    # langsung tulis berkas fisik secara nyata ke ruang kerja (CWD) melalui SkillsRuntime!
+                    target_file = detect_target_file(clean_text)
+                    _, extracted_code = extract_first_code_block(ans)
+                    if target_file and extracted_code and self.skills_runtime is not None:
+                        already_written = any(
+                            r.skill == "code_write" and r.args.get("path") == target_file and r.success
+                            for r in getattr(self, "last_agentic_results", [])
+                        )
+                        if not already_written:
+                            try:
+                                write_res = self.skills_runtime.execute(
+                                    "code_write",
+                                    {"path": target_file, "content": extracted_code},
+                                    session_id=self.agentic_session_id,
+                                    confirm_granted=True,
+                                )
+                                if write_res.success:
+                                    file_size = len(extracted_code.encode("utf-8"))
+                                    note = f"\n\n✓ **Tindakan Nyata Selesai**: Berkas `{target_file}` berhasil diciptakan di ruang kerja ({file_size} bytes)."
+                                    ans += note
+                                    self.last_agentic_results.append(
+                                        StepResult("code_write", {"path": target_file}, True, data=write_res.data)
+                                    )
+                            except Exception as ex_w:
+                                print(f"[BRAIN] Auto-write post-generation error: {ex_w}")
+
                     ans = self._append_cards(ans)
                     # Catat ke memori percakapan
                     self.conversation.append("user", clean_text)

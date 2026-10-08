@@ -86,7 +86,18 @@ def load_settings(env: dict[str, str] | None = None,
         e = dict(env)
     else:
         if dotenv_path is None:
-            dotenv_path = Path(".env")
+            candidates = [
+                Path(".env"),
+                Path(__file__).resolve().parent.parent / ".env",
+                Path(__file__).resolve().parent.parent.parent / ".env",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "ruka" / ".env",
+            ]
+            for cand in candidates:
+                if cand.exists():
+                    dotenv_path = cand
+                    break
+            if dotenv_path is None:
+                dotenv_path = Path(".env")
         file_env = _load_env_file(dotenv_path)
         overrides = {k: v for k, v in os.environ.items() if v != ""}
         e = {**file_env, **overrides}

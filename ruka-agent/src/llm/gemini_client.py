@@ -31,13 +31,11 @@ class GeminiClient:
 
         configured_model = getattr(self.cfg, "model", "")
         raw_candidates = [
-            "gemma-4-26b-a4b-it",
-            "gemma-4-31b-it",
-            "gemini-3.5-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-flash-lite-latest",
-            "gemini-flash-latest",
             configured_model,
+            "gemini-3.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-2.5-flash-lite",
         ]
         model_candidates = []
         for m in raw_candidates:
