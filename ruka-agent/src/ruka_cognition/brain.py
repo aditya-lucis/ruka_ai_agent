@@ -766,7 +766,7 @@ class RukaCognitiveBrain:
         if is_agentic_request(text):
             return True
         if analysis is not None:
-            if analysis.intent in ("command", "code_help"):
+            if analysis.intent == "command":
                 return True
         return False
 
