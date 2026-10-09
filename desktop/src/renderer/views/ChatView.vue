@@ -1,9 +1,9 @@
 <template>
-  <div class="w-full h-full flex flex-col justify-between px-6 pt-3 pb-5 overflow-hidden">
+  <div class="w-full h-full flex flex-col justify-between px-6 pt-3 pb-3 overflow-hidden">
     <!-- Chat Messages Feed -->
     <div
       ref="feedRef"
-      class="flex-1 overflow-y-auto pr-2 space-y-4 mb-4 select-text"
+      class="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 mb-2 select-text"
     >
       <div
         v-for="msg in messages"
@@ -11,12 +11,12 @@
         class="w-full flex"
         :class="msg.sender === 'user' ? 'justify-end' : 'justify-start'"
       >
-        <!-- System Message -->
+        <!-- System Announcement Message -->
         <div
           v-if="msg.sender === 'system'"
-          class="w-full text-center my-2"
+          class="w-full text-center my-1"
         >
-          <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs bg-purple-950/40 border border-purple-800/30 text-purple-300">
+          <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs bg-purple-950/60 border border-purple-800/40 text-purple-300 shadow-sm">
             <span>✦</span>
             <span>{{ msg.text }}</span>
           </span>
@@ -25,16 +25,16 @@
         <!-- User Message Bubble -->
         <div
           v-else-if="msg.sender === 'user'"
-          class="max-w-[75%] flex items-start gap-2.5 flex-row-reverse"
+          class="max-w-[78%] flex items-start gap-2.5 flex-row-reverse"
         >
-          <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-700 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0">
+          <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-700 via-fuchsia-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0">
             YL
           </div>
-          <div class="p-3.5 rounded-2xl rounded-tr-none bg-gradient-to-r from-purple-900/60 to-indigo-950/70 border border-purple-500/30 text-slate-100 text-sm shadow-md space-y-2">
+          <div class="p-3.5 rounded-2xl rounded-tr-none bg-gradient-to-r from-purple-900/70 to-indigo-950/80 border border-purple-500/40 text-slate-100 text-sm shadow-md space-y-2">
             <!-- Attachment preview if any -->
             <div
               v-if="msg.attachment"
-              class="rounded-lg overflow-hidden border border-purple-400/30 bg-black/40 p-1.5"
+              class="rounded-lg overflow-hidden border border-purple-400/30 bg-black/50 p-1.5"
             >
               <img
                 v-if="msg.attachment.isImage"
@@ -44,12 +44,12 @@
               />
               <div v-else class="text-xs text-purple-200 flex items-center gap-2 p-1">
                 <span>📎</span>
-                <span>{{ msg.attachment.name }}</span>
+                <span class="truncate">{{ msg.attachment.name }}</span>
               </div>
             </div>
 
             <div class="leading-relaxed whitespace-pre-wrap">{{ msg.text }}</div>
-            <div class="text-[10px] text-purple-300/60 text-right">{{ msg.time }}</div>
+            <div class="text-[10px] text-purple-300/60 text-right font-mono">{{ msg.time }}</div>
           </div>
         </div>
 
@@ -66,12 +66,12 @@
             />
           </div>
 
-          <div class="flex-1 p-4 rounded-2xl rounded-tl-none bg-[#120d28]/85 border border-purple-800/40 text-slate-100 text-sm shadow-xl space-y-3">
+          <div class="flex-1 p-4 rounded-2xl rounded-tl-none bg-[#120d28]/90 border border-purple-800/40 text-slate-100 text-sm shadow-xl space-y-3">
             <!-- Header row -->
             <div class="flex items-center justify-between pb-1.5 border-b border-purple-900/30">
               <div class="flex items-center gap-2">
                 <span class="font-bold text-slate-100 text-xs tracking-wider">Ruka</span>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-900/50 text-purple-300 border border-purple-700/40">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-900/60 text-purple-300 border border-purple-700/50">
                   Marquis Trendamis
                 </span>
               </div>
@@ -100,7 +100,7 @@
                 <button
                   type="button"
                   @click="copyText(msg.text, $event)"
-                  class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 hover:text-purple-100 transition-colors"
+                  class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-950/50 hover:bg-purple-900/60 text-purple-300 hover:text-purple-100 transition-colors cursor-pointer"
                   title="Salin Seluruh Teks"
                 >
                   <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -114,7 +114,7 @@
                 <button
                   type="button"
                   @click="$emit('speak-message', msg.text)"
-                  class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 hover:text-purple-100 transition-colors"
+                  class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-950/50 hover:bg-purple-900/60 text-purple-300 hover:text-purple-100 transition-colors cursor-pointer"
                   title="Dengarkan Suara Ruka"
                 >
                   <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -132,8 +132,8 @@
       </div>
     </div>
 
-    <!-- Bottom Input Dock -->
-    <div class="w-full max-w-4xl mx-auto">
+    <!-- Bottom Word / TipTap AI Rich Composer Dock -->
+    <div class="w-full max-w-4xl mx-auto shrink-0 pt-1">
       <OrnateInputDock
         :model-value="promptText"
         :is-recording="isRecording"
@@ -207,7 +207,7 @@ function renderMarkdown(raw: string): string {
 
   const codeBlocks: string[] = [];
 
-  // 1. Code blocks
+  // Code blocks
   let processed = raw.replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (_m, lang, code) => {
     const idx = codeBlocks.length;
     const cleanCode = code.replace(/\r\n/g, '\n').replace(/\n$/, '');
@@ -235,7 +235,7 @@ function renderMarkdown(raw: string): string {
           <div class="flex items-center gap-2">
             <span class="text-purple-400 font-mono font-bold">${label}</span>
           </div>
-          <button class="code-copy-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 text-xs transition-colors cursor-pointer" data-code="${escapeHtml(cleanCode)}">
+          <button class="code-copy-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-900/50 hover:bg-purple-800/70 text-purple-200 text-xs transition-colors cursor-pointer" data-code="${escapeHtml(cleanCode)}">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -259,7 +259,7 @@ function renderMarkdown(raw: string): string {
   // Inline code with click-to-copy
   processed = processed.replace(/`([^`]+)`/g, (_m, c) => {
     const unesc = c.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
-    return `<code class="chat-inline-code px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/30 text-purple-200 font-mono text-xs cursor-pointer hover:border-purple-400 transition-colors" data-inline="${escapeHtml(unesc)}" title="Klik untuk menyalin">${c} 📋</code>`;
+    return `<code class="chat-inline-code px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/40 text-purple-200 font-mono text-xs cursor-pointer hover:border-purple-400 transition-colors" data-inline="${escapeHtml(unesc)}" title="Klik untuk menyalin">${c} 📋</code>`;
   });
 
   // Blockquotes
@@ -296,7 +296,6 @@ async function copyText(text: string, e: MouseEvent) {
 async function handleContentClick(e: MouseEvent) {
   const target = e.target as HTMLElement;
 
-  // Code block copy button
   const copyBtn = target.closest('.code-copy-btn');
   if (copyBtn) {
     const code = copyBtn.getAttribute('data-code');
@@ -314,7 +313,6 @@ async function handleContentClick(e: MouseEvent) {
     return;
   }
 
-  // Inline code copy
   const inlineCode = target.closest('.chat-inline-code');
   if (inlineCode) {
     const raw = inlineCode.getAttribute('data-inline');

@@ -42,11 +42,11 @@
     </div>
 
     <!-- Bottom Quote / Philosophy -->
-    <div class="px-3 py-3 rounded-xl bg-purple-950/20 border border-purple-900/30 text-center">
+    <div class="mt-auto p-2.5 rounded-xl bg-purple-950/30 border border-purple-900/30 text-center shrink-0">
       <div class="text-[11px] leading-relaxed text-purple-300/80 italic font-serif">
         "Pengetahuan adalah cahaya, Ruka adalah penuntunnya."
       </div>
-      <div class="mt-1 text-[10px] text-purple-400/50 tracking-widest uppercase font-semibold">
+      <div class="mt-1 text-[9px] text-purple-400/50 tracking-widest uppercase font-semibold">
         ✦ Trendamis Doctrine ✦
       </div>
     </div>
