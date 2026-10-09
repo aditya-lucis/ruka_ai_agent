@@ -8,6 +8,7 @@
 ## 0. Identitas & Tujuan Ganda
 
 **Ruka** adalah *Local-First Expressive Agentic Companion*.
+Jarvis = metafora internal saja; dilarang di UI Noctis/Ruka
 
 Tujuan pengembangan saat ini bersifat **ganda dan selaras**:
 

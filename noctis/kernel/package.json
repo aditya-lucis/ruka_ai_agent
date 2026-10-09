@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
+    "build": "bun build ./src/index.ts --compile --outfile ../bin/noctis-kernel.exe",
     "test": "bun test",
     "dev": "bun run --watch src/index.ts"
   },

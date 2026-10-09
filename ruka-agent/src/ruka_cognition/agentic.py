@@ -119,7 +119,7 @@ _FAKE_CALL = re.compile(
     r"^\s*HASIL EKSEKUSI NYATA:?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
-_DIR_STOPWORDS = frozenset({"ini", "itu", "this", "that", "saat", "sekarang", "kerja", "proyek", "project"})
+_DIR_STOPWORDS = frozenset({"ini", "itu", "this", "that", "saat", "sekarang", "kerja", "proyek", "project", "lalu", "dan", "kemudian", "setelah", "terus", "kembali"})
 
 _FIX_VERBS = re.compile(
     r"\b(perbaiki|fix|refactor|modifikasi|ubah|edit|analisis|analisa|review|inspeksi)\b",

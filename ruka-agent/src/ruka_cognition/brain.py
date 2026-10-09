@@ -900,10 +900,7 @@ class RukaCognitiveBrain:
             self.last_loop_outcome = loop.run(seed_results)
             results = list(self.last_loop_outcome.results)
             if self.last_loop_outcome.proposals:
-                proposals = [
-                    p for p in self.last_loop_outcome.proposals
-                    if p.skill != "code_write"
-                ]
+                proposals = list(self.last_loop_outcome.proposals)
                 if proposals:
                     failed, notes = self._register_proposals(proposals)
                     self.pending_notes = notes
@@ -1064,14 +1061,107 @@ class RukaCognitiveBrain:
         self.last_loop_outcome = None
         agentic_block = ""
         command_text = (user_text or "").strip()
-        if command_text and not self.last_extra_parts and self._is_agentic_request(command_text, analysis):
+        is_agentic = bool(command_text and not self.last_extra_parts and self._is_agentic_request(command_text, analysis))
+
+        if is_agentic:
+            start_t = time.time()
             self.last_agentic_results = self._agentic_execute(command_text)
+            skill_exec_ms = int((time.time() - start_t) * 1000)
             if self.last_agentic_results or self.pending_notes:
                 agentic_block = "\n\n" + format_results_context(
                     self.last_agentic_results,
                     stop_note=self._loop_stop_note(),
                     pending_notes=self.pending_notes,
                 )
+
+            # Fast Path System Instruction (Ringkas, berwibawa, persona Marquis + Action-First)
+            sys_instruction_fast = (
+                "ANDA ADALAH RUKA, MARQUIS DARI KEKAISARAN TRENDAMIS — KUCING VAMPIR BANGSAWAN BERDAULAT.\n"
+                "Sikap Anda: Tenang, dingin terkendali, agak tengil (playfully sarcastic & witty), berwibawa, dan setia mutlak kepada Young Lord (Aditia).\n"
+                "Sapaan wajib: 'Young Lord', 'My Lord', atau 'Sir'. DILARANG KERAS memanggil 'Bos', 'Pengguna', atau 'Kamu'.\n\n"
+                "=== ATURAN FAST PATH AGENTIC CODING ===\n"
+                "1. BLOK KODE MURNI (```): Di dalam fenced code block, DILARANG KERAS memasukkan sapaan, narasi, atau gaya bicara. Kode 100% murni, teruji, dan fungsional.\n"
+                "2. Persona Marquis tetap hadir ringkas di luar blok kode (sapaan & ringkasan hasil terukur).\n"
+                "3. DILARANG KERAS mengarang tool call palsu [SYSTEM_CALL: ...].\n\n"
+                f"{AGENTIC_DOCTRINE}"
+                f"{self._build_skills_instruction_block()}"
+                f"{agentic_block}"
+            )
+
+            if self.llm is not None:
+                try:
+                    llm_start = time.time()
+                    contents = self.conversation.to_genai_contents(clean_text)
+                    try:
+                        reply = self.llm.complete(
+                            contents,
+                            system_instruction=sys_instruction_fast,
+                            temperature=0.3,
+                            model_tier="fast",
+                        )
+                    except TypeError:
+                        reply = self.llm.complete(
+                            contents,
+                            system_instruction=sys_instruction_fast,
+                            temperature=0.3,
+                        )
+                    llm_ms = int((time.time() - llm_start) * 1000)
+
+                    if reply and reply.strip():
+                        ans = strip_fake_tool_calls(reply.strip())
+                        target_file = detect_target_file(clean_text)
+                        lang, extracted_code = extract_first_code_block(ans)
+                        is_json_output = False
+                        if extracted_code:
+                            c_trim = extracted_code.strip()
+                            if (c_trim.startswith("{") or c_trim.startswith("[")) and ("\"status\":" in c_trim or "\"replacements\":" in c_trim or "\"skill\":" in c_trim):
+                                is_json_output = True
+
+                        if not target_file and extracted_code and not is_json_output:
+                            if (lang and lang in ("html", "htm")) or "<html" in extracted_code.lower():
+                                target_file = "index.html"
+                            elif (lang and lang in ("py", "python")) or "def " in extracted_code or "import " in extracted_code:
+                                target_file = "app.py"
+                            elif lang == "css":
+                                target_file = "style.css"
+                            elif lang in ("js", "javascript"):
+                                target_file = "script.js"
+                            elif lang in ("ts", "typescript"):
+                                target_file = "index.ts"
+
+                        if target_file and extracted_code and not is_json_output and self.skills_runtime is not None:
+                            already_written = any(
+                                r.skill == "code_write" and r.args.get("path") == target_file and r.success
+                                for r in getattr(self, "last_agentic_results", [])
+                            )
+                            if not already_written:
+                                try:
+                                    write_res = self.skills_runtime.execute(
+                                        "code_write",
+                                        {"path": target_file, "content": extracted_code},
+                                        session_id=self.agentic_session_id,
+                                        confirm_granted=True,
+                                    )
+                                    if write_res.success:
+                                        file_size = len(extracted_code.encode("utf-8"))
+                                        ans += f"\n\n✓ **Realisasi Berkas Nyata**: Berkas `{target_file}` berhasil diciptakan di ruang kerja ({file_size} bytes)."
+                                except Exception as e_w:
+                                    print(f"[BRAIN-FAST] Realisasi berkas gagal: {e_w}")
+
+                        ans = self._append_cards(ans)
+                        exec_ms = int((time.time() - start_t) * 1000)
+                        ans += f"\n\n*(Fast Path Agentic: {exec_ms} ms | skills {skill_exec_ms} ms | llm {llm_ms} ms)*"
+                        self.conversation.append("user", clean_text)
+                        self.conversation.append("model", ans)
+                        return ans
+                except Exception as exc_llm:
+                    print(f"[BRAIN-FAST] LLM Error: {exc_llm}")
+
+            summary = fallback_summary(self.last_agentic_results, stop_note=self._loop_stop_note())
+            ans = self._append_cards(summary)
+            self.conversation.append("user", clean_text)
+            self.conversation.append("model", ans)
+            return ans
 
         # 2. Resonansi Empati Buatan (ToM, Mirroring, Compassionate Action)
         empathy_posture = self.empathy.resonate(clean_text, self.conversation.history)
@@ -1207,17 +1297,13 @@ class RukaCognitiveBrain:
                                 break
 
                     lang, extracted_code = extract_first_code_block(ans)
-                    if not extracted_code and getattr(self, "conversation", None):
-                        for turn in reversed(self.conversation.history):
-                            if getattr(turn, "role", "") in ("model", "assistant"):
-                                turn_txt = getattr(turn, "text", "") or getattr(turn, "content", "")
-                                l_prev, c_prev = extract_first_code_block(turn_txt)
-                                if c_prev:
-                                    extracted_code = c_prev
-                                    lang = l_prev
-                                    break
+                    is_json_output = False
+                    if extracted_code:
+                        c_trim = extracted_code.strip()
+                        if (c_trim.startswith("{") or c_trim.startswith("[")) and ("\"status\":" in c_trim or "\"replacements\":" in c_trim or "\"skill\":" in c_trim):
+                            is_json_output = True
 
-                    if not target_file and extracted_code:
+                    if not target_file and extracted_code and not is_json_output:
                         if (lang and lang in ("html", "htm")) or "<html" in extracted_code.lower():
                             target_file = "index.html"
                         elif (lang and lang in ("py", "python")) or "def " in extracted_code or "import " in extracted_code:
@@ -1231,7 +1317,7 @@ class RukaCognitiveBrain:
                         elif lang == "json":
                             target_file = "data.json"
 
-                    if target_file and extracted_code and self.skills_runtime is not None:
+                    if target_file and extracted_code and not is_json_output and self.skills_runtime is not None:
                         already_written = any(
                             r.skill == "code_write" and r.args.get("path") == target_file and r.success
                             for r in getattr(self, "last_agentic_results", [])

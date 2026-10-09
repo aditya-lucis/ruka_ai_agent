@@ -21,8 +21,9 @@ class GeminiClient:
         *,
         system_instruction: str = "",
         temperature: float | None = None,
+        model_tier: str | None = None,
     ) -> str:
-        """Generate teks (single-turn atau multi-turn) dengan latensi rendah real-time."""
+        """Generate teks (single-turn atau multi-turn) dengan latensi rendah real-time dan model routing."""
         temp = temperature if temperature is not None else getattr(self.cfg, "temperature", 0.7)
         config = types.GenerateContentConfig(
             system_instruction=system_instruction or None,
@@ -30,13 +31,37 @@ class GeminiClient:
         )
 
         configured_model = getattr(self.cfg, "model", "")
-        raw_candidates = [
-            configured_model,
-            "gemini-3.5-flash-lite",
-            "gemini-flash-latest",
-            "gemini-flash-lite-latest",
-            "gemini-2.5-flash-lite",
-        ]
+        if model_tier == "fast":
+            raw_candidates = [
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-flash-latest",
+                "gemini-flash-lite-latest",
+                configured_model,
+            ]
+        elif model_tier == "strong":
+            raw_candidates = [
+                configured_model,
+                "gemini-3.6-flash-medium",
+                "gemini-2.5-pro",
+                "gemini-1.5-pro",
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-flash-latest",
+            ]
+        else:
+            raw_candidates = [
+                configured_model,
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-flash-latest",
+                "gemini-flash-lite-latest",
+            ]
+
         model_candidates = []
         for m in raw_candidates:
             if m and m not in model_candidates:

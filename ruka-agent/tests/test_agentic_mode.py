@@ -557,3 +557,11 @@ class TestBrainLoopIntegration:
         brain = self._brain(tmp_path, runtime, llm=None)
         brain.think_and_reply("cek isi folder lalu analisis strukturnya")
         assert brain.last_loop_outcome is None
+
+    def test_fast_path_agentic_executes_with_telemetry(self, tmp_path: Path, runtime: SkillsRuntime) -> None:
+        llm = FakeLLM("Tentu, Young Lord. Berkas package.json telah hamba baca.")
+        brain = self._brain(tmp_path, runtime, llm)
+        reply = brain.think_and_reply("Ruka, baca package.json")
+        assert "Fast Path Agentic:" in reply
+        assert "ATURAN FAST PATH AGENTIC CODING" in llm.calls[0]["system_instruction"]
+

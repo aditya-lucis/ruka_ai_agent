@@ -263,6 +263,8 @@ class RukaBrainServer:
                 if not data:
                     break
                 buf += data.decode("utf-8", errors="ignore")
+                if len(buf) > 10485760:  # 10MB safety cap
+                    buf = ""
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
                     line = line.strip()
