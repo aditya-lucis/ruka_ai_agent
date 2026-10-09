@@ -90,11 +90,13 @@
     </div>
 
     <!-- Bottom Footer Bar -->
-    <footer class="h-6 w-full flex items-center justify-between px-4 bg-[#06040c] border-t border-purple-950/40 text-[10px] text-purple-400/60 font-mono select-none z-30 shrink-0">
+    <footer class="h-6 w-full flex items-center justify-between px-6 bg-[#05030a] border-t border-purple-950/50 text-[10px] text-purple-400/60 font-mono select-none z-30 shrink-0">
       <div class="flex items-center gap-2">
-        <span>NOCTIS OS v3.0 · RUKA AI Companion</span>
+        <span class="text-purple-300/90 font-semibold">NOCTIS OS v3.0</span>
+        <span>·</span>
+        <span>RUKA AI Companion</span>
         <span>•</span>
-        <span class="text-purple-300/80">Marquis of Trendamis</span>
+        <span class="text-purple-400/70">Marquis of Trendamis</span>
       </div>
       <div class="flex items-center gap-3">
         <span>Uptime: aktif</span>

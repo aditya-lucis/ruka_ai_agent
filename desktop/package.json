@@ -1,6 +1,6 @@
 {
   "name": "ruka-desktop",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "RUKA — The Persistent Mind & Companion Desktop Body",
   "main": "out/electron/main.js",
   "scripts": {
@@ -10,11 +10,12 @@
     "start": "tsc && vite build && electron .",
     "dev": "tsc -w",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "node scripts/build-dist.js"
   },
   "build": {
     "appId": "trendamis.ruka.persistentmind",
     "productName": "Ruka",
+    "compression": "normal",
     "directories": {
       "output": "release"
     },
@@ -51,6 +52,7 @@
       "icon": "assets/icon.png"
     },
     "nsis": {
+      "differentialPackage": false,
       "include": "../installer/installer.nsh",
       "oneClick": false,
       "perMachine": false,

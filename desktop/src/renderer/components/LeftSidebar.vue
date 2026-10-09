@@ -42,7 +42,7 @@
     </div>
 
     <!-- Bottom Quote / Philosophy -->
-    <div class="mt-auto p-2.5 rounded-xl bg-purple-950/30 border border-purple-900/30 text-center shrink-0">
+    <div class="mt-auto mb-2 p-2.5 rounded-xl bg-purple-950/30 border border-purple-900/30 text-center shrink-0">
       <div class="text-[11px] leading-relaxed text-purple-300/80 italic font-serif">
         "Pengetahuan adalah cahaya, Ruka adalah penuntunnya."
       </div>
