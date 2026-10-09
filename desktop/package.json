@@ -5,9 +5,9 @@
   "main": "out/electron/main.js",
   "scripts": {
     "build:ts": "tsc",
-    "build:renderer": "node scripts/copy-renderer.js",
-    "build": "tsc && node scripts/copy-renderer.js",
-    "start": "tsc && node scripts/copy-renderer.js && electron .",
+    "build:renderer": "vite build",
+    "build": "tsc && vite build",
+    "start": "tsc && vite build && electron .",
     "dev": "tsc -w",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
@@ -27,19 +27,25 @@
       {
         "from": "resources/brain",
         "to": "brain",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/kernel",
         "to": "kernel",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.png"
@@ -54,16 +60,34 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Ruka",
       "runAfterFinish": true,
-      "installerLanguages": ["id-ID", "en-US"]
+      "installerLanguages": [
+        "id-ID",
+        "en-US"
+      ]
     }
   },
-  "keywords": ["ruka", "companion", "ai-agent", "electron", "desktop"],
+  "keywords": [
+    "ruka",
+    "companion",
+    "ai-agent",
+    "electron",
+    "desktop"
+  ],
   "author": "Aditya & Ruka Team",
   "license": "MIT",
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.10.2",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-vue": "^6.0.9",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2",
-    "@types/node": "^22.10.2"
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "three": "^0.186.1",
+    "vue": "^3.5.43"
   }
 }

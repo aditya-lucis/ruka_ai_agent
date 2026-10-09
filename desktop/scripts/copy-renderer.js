@@ -19,7 +19,6 @@ function copyDir(src, dest) {
 const rootDir = path.resolve(__dirname, '..');
 const outDir = path.join(rootDir, 'out');
 
-copyDir(path.join(rootDir, 'renderer'), path.join(outDir, 'renderer'));
 copyDir(path.join(rootDir, 'assets'), path.join(outDir, 'assets'));
 
-console.log('[BUILD] Assets & renderer files copied to out/');
+console.log('[BUILD] Assets synchronized to out/assets');
