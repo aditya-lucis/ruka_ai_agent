@@ -74,22 +74,49 @@ class TerminalSpinner:
         sys.stdout.flush()
 
 
-def get_git_info() -> str:
+def resolve_workspace(explicit_path: str | None = None) -> Path:
+    """Menentukan workspace PathJail secara deterministik.
+
+    Aturan Mutlak:
+    - Jika --workspace/-w diberikan secara eksplisit: gunakan direktori tersebut.
+    - Jika tidak: gunakan CWD saat ini (tidak ada silent redirect ke Documents\\RukaProjects).
+    """
+    if explicit_path:
+        p = Path(explicit_path).expanduser().resolve()
+        if not p.exists():
+            print(f"{YELLOW}[!] Peringatan: Workspace '{p}' belum ada, membuat direktori...{RESET}")
+            p.mkdir(parents=True, exist_ok=True)
+        elif not p.is_dir():
+            print(f"{RED}[!] Error: Workspace '{p}' bukan sebuah direktori!{RESET}")
+            sys.exit(1)
+        return p
+
+    raw_cwd = os.environ.get("PWD") or os.getcwd()
+    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
+        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
+    return Path(raw_cwd).resolve()
+
+
+def get_git_info(workspace: Path | None = None) -> str:
     """Mendeteksi branch git aktif dan kebersihan status repositori."""
+    cwd = str(workspace) if workspace else str(resolve_workspace())
     try:
         branch = subprocess.check_output(
             ["git", "branch", "--show-current"],
+            cwd=cwd,
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
         if not branch:
             branch = subprocess.check_output(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=cwd,
                 stderr=subprocess.DEVNULL,
                 text=True,
             ).strip()
         status = subprocess.check_output(
             ["git", "status", "--porcelain=v1"],
+            cwd=cwd,
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
@@ -99,17 +126,15 @@ def get_git_info() -> str:
         return f"{DIM}non-git workspace{RESET}"
 
 
-def print_banner():
-    raw_cwd = os.environ.get("PWD") or os.getcwd()
-    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
-        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
-    git_info = get_git_info()
+def print_banner(workspace: Path | None = None):
+    ws = workspace or resolve_workspace()
+    git_info = get_git_info(ws)
 
     banner = f"""
 {MAGENTA}{BOLD}╭─────────────────────────────────────────────────────────────────────────────╮
 │ 🐾 RUKA (ルカ) — Marquis of Trendamis · Aristocratic Coding Agent v0.3.1    │
 ├─────────────────────────────────────────────────────────────────────────────┤{RESET}
-  {BOLD}📂 Workspace{RESET} : {CYAN}{raw_cwd}{RESET}
+  {BOLD}📂 Workspace{RESET} : {CYAN}{ws}{RESET}
   {BOLD}🌿 Git State{RESET} : {git_info}
   {BOLD}🧠 Mind Core{RESET} : {MAGENTA}Gemini 3.5 Flash-Lite & Multi-Turn Cognitive Brain{RESET}
   {BOLD}🛡️  Security{RESET}  : {GREEN}Zero-Trust PathJail & CodeEvaluator Active{RESET}
@@ -158,19 +183,18 @@ def get_ipc_connection(timeout: float = 4.0) -> tuple[socket.socket, dict] | Non
     return None
 
 
-def ensure_brain_running() -> tuple[socket.socket, dict] | None:
+def ensure_brain_running(workspace: Path | None = None) -> tuple[socket.socket, dict] | None:
     """Memastikan Otak Ruka aktif, atau menyalakannya jika belum berjalan."""
     conn = get_ipc_connection(timeout=1.5)
     if conn:
         return conn
 
+    ws = workspace or resolve_workspace()
     print(f"{YELLOW}[RUKA CLI] Otak Ruka belum terhubung. Membangunkan Ruka...{RESET}")
     exe_dir = Path(sys.executable).resolve().parent
     root_dir = Path(__file__).resolve().parent
 
-    raw_cwd = os.environ.get("PWD") or os.getcwd()
-    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
-        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
+    raw_cwd = str(ws)
 
     if not getattr(sys, "frozen", False) and (root_dir / "launcher.py").exists():
         brain_candidates = [
@@ -232,12 +256,16 @@ def render_formatted_output(text: str):
                 print(part.strip())
 
 
-def handle_chat(sock: socket.socket, prompt: str, inline_confirm: bool = True, attachment: dict | None = None) -> bool:
+def handle_chat(
+    sock: socket.socket,
+    prompt: str,
+    inline_confirm: bool = True,
+    attachment: dict | None = None,
+    workspace: Path | None = None,
+) -> bool:
     """Mengirim obrolan ke Ruka dan mengalirkan respons aristokrat secara live dengan spinner & inline approval."""
-    raw_cwd = os.environ.get("PWD") or os.getcwd()
-    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
-        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
-    payload_data = {"text": prompt, "cwd": raw_cwd}
+    ws = workspace or resolve_workspace()
+    payload_data = {"text": prompt, "cwd": str(ws)}
     if attachment:
         payload_data["attachment"] = attachment
 
@@ -349,14 +377,15 @@ def handle_status(sock: socket.socket):
             print(f"{RED}Gagal membaca status: {e}{RESET}")
 
 
-def handle_diff(target_file: str | None = None):
+def handle_diff(target_file: str | None = None, workspace: Path | None = None):
     """Menampilkan git diff berwarna di terminal dengan format aristokrat."""
+    cwd = str(workspace or resolve_workspace())
     cmd = ["git", "diff"]
     if target_file:
         cmd.extend(["--", target_file])
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
         if proc.returncode != 0:
             print(f"{RED}Gagal membaca git diff: {proc.stderr.strip()}{RESET}")
             return
@@ -383,11 +412,12 @@ def handle_diff(target_file: str | None = None):
         print(f"{RED}Error saat menjalankan git diff: {e}{RESET}")
 
 
-def handle_git_status():
+def handle_git_status(workspace: Path | None = None):
     """Menampilkan git status secara ringkas dan rapi."""
+    cwd = str(workspace or resolve_workspace())
     try:
-        proc = subprocess.run(["git", "status", "--porcelain=v1", "-uall"], capture_output=True, text=True)
-        branch_proc = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+        proc = subprocess.run(["git", "status", "--porcelain=v1", "-uall"], cwd=cwd, capture_output=True, text=True)
+        branch_proc = subprocess.run(["git", "branch", "--show-current"], cwd=cwd, capture_output=True, text=True)
         branch = branch_proc.stdout.strip() or "HEAD"
 
         print(f"\n{CYAN}{BOLD}=== Git Status: Branch {branch} ==={RESET}")
@@ -412,9 +442,13 @@ def handle_git_status():
         print(f"{RED}Error git status: {e}{RESET}")
 
 
-def handle_review(sock: socket.socket, target_path: str):
+def handle_review(sock: socket.socket, target_path: str, workspace: Path | None = None):
     """Menjalankan code review pada berkas/folder yang ditentukan."""
+    ws = workspace or resolve_workspace()
     p = Path(target_path)
+    if not p.is_absolute():
+        p = ws / p
+
     if not p.exists():
         print(f"{RED}[!] Path target tidak ditemukan: {target_path}{RESET}")
         return
@@ -431,7 +465,7 @@ def handle_review(sock: socket.socket, target_path: str):
         f"Berikut isi berkas:\n```\n{content_preview}\n```\n"
         "Analisis dengan saksama: potensi bug, arsitektur, efisiensi waktu dan memori, serta standar keamanan koding."
     )
-    handle_chat(sock, prompt)
+    handle_chat(sock, prompt, workspace=ws)
 
 
 def build_image_attachment(img_path: str) -> dict | None:
@@ -490,9 +524,10 @@ def handle_search(sock: socket.socket, query: str):
             print(f"{RED}Gagal melakukan pencarian: {e}{RESET}")
 
 
-def interactive_repl(sock: socket.socket):
+def interactive_repl(sock: socket.socket, workspace: Path | None = None):
     """Mode REPL Interaktif terminal dengan estetika dan responsivitas setara Claude Code."""
-    print_banner()
+    ws = workspace or resolve_workspace()
+    print_banner(ws)
     print(f"{DIM}Ketik perintah coding, '/help' untuk bantuan, atau '/clear' untuk menyegarkan layar.{RESET}\n")
     while True:
         try:
@@ -504,20 +539,20 @@ def interactive_repl(sock: socket.socket):
                 break
             if prompt.lower() in ("/clear", "clear", "cls"):
                 os.system("cls" if os.name == "nt" else "clear")
-                print_banner()
+                print_banner(ws)
                 continue
             if prompt.lower() in ("/help", "help"):
-                print_help()
+                print_help(ws)
                 continue
             if prompt.lower() in ("/status", "status"):
                 handle_status(sock)
             elif prompt.lower() in ("/diff", "diff"):
-                handle_diff()
+                handle_diff(workspace=ws)
             elif prompt.lower() in ("/git-status", "/gs", "git-status", "gs"):
-                handle_git_status()
+                handle_git_status(workspace=ws)
             elif prompt.lower().startswith("/review ") or prompt.lower().startswith("review "):
                 path = prompt.split(None, 1)[1].strip()
-                handle_review(sock, path)
+                handle_review(sock, path, workspace=ws)
             elif prompt.lower().startswith("/search ") or prompt.lower().startswith("search "):
                 q = prompt.split(None, 1)[1].strip()
                 handle_search(sock, q)
@@ -528,11 +563,11 @@ def interactive_repl(sock: socket.socket):
                     user_q = parts[2].strip() if len(parts) > 2 else "Ruka, periksa dan analisis citra visual ini secara saksama."
                     att = build_image_attachment(img_p)
                     if att:
-                        handle_chat(sock, user_q, attachment=att)
+                        handle_chat(sock, user_q, attachment=att, workspace=ws)
                 else:
                     print(f"{YELLOW}Gunakan: /image <path-ke-gambar> [instruksi]{RESET}")
             else:
-                ok = handle_chat(sock, prompt)
+                ok = handle_chat(sock, prompt, workspace=ws)
                 if not ok:
                     reconnected = get_ipc_connection(timeout=3.0)
                     if reconnected:
@@ -556,18 +591,23 @@ def interactive_repl(sock: socket.socket):
                 sock, _ = reconnected
 
 
-def print_help():
-    print_banner()
+def print_help(workspace: Path | None = None):
+    print_banner(workspace)
     print(f"""{BOLD}PENGGUNAAN CLI RUKA CODING AGENT:{RESET}
-  {CYAN}ruka{RESET}                        Buka sesi REPL interaktif terminal
-  {CYAN}ruka "pesan / perintah"{RESET}    Kirim instruksi coding/tugas ke Ruka
-  {CYAN}ruka review <path>{RESET}          Review berkas/kode dengan analisis mendalam
-  {CYAN}ruka diff [path]{RESET}            Tampilkan perbedaan kode git diff berwarna
-  {CYAN}ruka git-status{RESET}             Periksa ringkasan status git repositori
-  {CYAN}ruka status{RESET}                 Cek kesehatan runtime Otak Ruka & PID
-  {CYAN}ruka search "query"{RESET}         Cari berita/informasi terkini di Google & Web
-  {CYAN}ruka --image <file> "tanya"{RESET} Analisis citra visual/mockup arsitektur (Vision)
-  {CYAN}ruka help{RESET}                   Tampilkan bantuan ini
+  {CYAN}ruka [-w|--workspace <dir>]{RESET}                Buka sesi REPL (default: CWD saat ini)
+  {CYAN}ruka [-w|--workspace <dir>] "perintah"{RESET}    Kirim instruksi coding/tugas ke Ruka
+  {CYAN}ruka review <path>{RESET}                          Review berkas/kode dengan analisis mendalam
+  {CYAN}ruka diff [path]{RESET}                            Tampilkan perbedaan kode git diff berwarna
+  {CYAN}ruka git-status{RESET}                             Periksa ringkasan status git repositori
+  {CYAN}ruka status{RESET}                                 Cek kesehatan runtime Otak Ruka & PID
+  {CYAN}ruka search "query"{RESET}                         Cari berita/informasi terkini di Google & Web
+  {CYAN}ruka --image <file> "tanya"{RESET}                 Analisis citra visual/mockup arsitektur (Vision)
+  {CYAN}ruka help{RESET}                                   Tampilkan bantuan ini
+
+{BOLD}PERILAKU WORKSPACE & PATHJAIL:{RESET}
+  • Secara baku ({BOLD}default{RESET}), Ruka mengunci PathJail pada folder terminal aktif ({CYAN}CWD{RESET}).
+  • Gunakan {CYAN}-w <dir>{RESET} atau {CYAN}--workspace <dir>{RESET} untuk menetapkan ruang kerja secara eksplisit.
+  • Tidak ada pengalihan tersembunyi ke folder lain.
 
 {BOLD}PERINTAH SLASH DI DALAM REPL:{RESET}
   {CYAN}/search <query>{RESET}             Telusuri web/berita real-time
@@ -579,7 +619,8 @@ def print_help():
 
 {BOLD}CONTOH CODING:{RESET}
   ruka "Perbaiki race condition di modul auth.py"
-  ruka --image screenshot.png "Implementasikan tampilan ini dengan Bootstrap 5"
+  ruka -w C:\\ProyekKu "baca package.json lalu ringkas isinya"
+  ruka --image screenshot.png "Implementasikan tampilan ini dengan HTML/CSS"
   ruka search "Dokumentasi Go Fiber terbaru"
   ruka review src/agent/orchestrator.py
   ruka diff
@@ -587,18 +628,45 @@ def print_help():
 
 
 def main():
-    args = sys.argv[1:]
+    raw_args = sys.argv[1:]
+
+    # Ekstraksi opsi workspace jika ada (--workspace <path> atau -w <path>)
+    explicit_ws = None
+    i = 0
+    args = []
+    while i < len(raw_args):
+        arg = raw_args[i]
+        if arg in ("--workspace", "-w"):
+            if i + 1 < len(raw_args):
+                explicit_ws = raw_args[i + 1]
+                i += 2
+                continue
+            else:
+                print(f"{RED}[!] Opsi {arg} membutuhkan argumen path direktori.{RESET}")
+                sys.exit(1)
+        elif arg.startswith("--workspace="):
+            explicit_ws = arg.split("=", 1)[1]
+            i += 1
+            continue
+        elif arg.startswith("-w="):
+            explicit_ws = arg.split("=", 1)[1]
+            i += 1
+            continue
+        args.append(arg)
+        i += 1
+
+    active_ws = resolve_workspace(explicit_ws)
 
     if args and args[0] in ("-h", "--help", "help"):
-        print_help()
+        print_help(active_ws)
         return
 
     if args and args[0] == "diff":
-        handle_diff(args[1] if len(args) > 1 else None)
+        handle_diff(args[1] if len(args) > 1 else None, workspace=active_ws)
         return
 
     if args and args[0] in ("git-status", "gs"):
-        handle_git_status()
+        handle_git_status(workspace=active_ws)
         return
 
     # Ekstraksi opsi gambar multimodal jika ada
@@ -611,25 +679,25 @@ def main():
             img_attachment = build_image_attachment(img_path)
             args = args[:idx] + args[idx + 2:]
 
-    res = ensure_brain_running()
+    res = ensure_brain_running(workspace=active_ws)
     if not res:
         sys.exit(1)
     sock, info = res
 
     try:
         if not args:
-            interactive_repl(sock)
+            interactive_repl(sock, workspace=active_ws)
         elif args[0] == "status":
             handle_status(sock)
         elif args[0] == "review" and len(args) > 1:
-            handle_review(sock, args[1])
+            handle_review(sock, args[1], workspace=active_ws)
         elif args[0] == "search" and len(args) > 1:
             handle_search(sock, " ".join(args[1:]))
         else:
             prompt = " ".join(args)
             if not prompt and img_attachment:
                 prompt = "Ruka, periksa dan analisis citra visual ini secara saksama."
-            handle_chat(sock, prompt, attachment=img_attachment)
+            handle_chat(sock, prompt, attachment=img_attachment, workspace=active_ws)
     finally:
         try:
             sock.close()
