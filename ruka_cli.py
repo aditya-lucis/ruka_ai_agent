@@ -168,13 +168,26 @@ def ensure_brain_running() -> tuple[socket.socket, dict] | None:
     exe_dir = Path(sys.executable).resolve().parent
     root_dir = Path(__file__).resolve().parent
 
-    brain_candidates = [
-        exe_dir / "resources" / "brain" / "ruka-brain.exe",
-        exe_dir / "brain" / "ruka-brain.exe",
-        exe_dir / "ruka-brain.exe",
-        root_dir / "desktop" / "resources" / "brain" / "ruka-brain.exe",
-        root_dir / "launcher.py",
-    ]
+    raw_cwd = os.environ.get("PWD") or os.getcwd()
+    if os.name == "nt" and re.match(r"^/[a-zA-Z]/", raw_cwd):
+        raw_cwd = re.sub(r"^/([a-zA-Z])/", r"\1:/", raw_cwd)
+
+    if not getattr(sys, "frozen", False) and (root_dir / "launcher.py").exists():
+        brain_candidates = [
+            root_dir / "launcher.py",
+            exe_dir / "resources" / "brain" / "ruka-brain.exe",
+            exe_dir / "brain" / "ruka-brain.exe",
+            exe_dir / "ruka-brain.exe",
+            root_dir / "desktop" / "resources" / "brain" / "ruka-brain.exe",
+        ]
+    else:
+        brain_candidates = [
+            exe_dir / "resources" / "brain" / "ruka-brain.exe",
+            exe_dir / "brain" / "ruka-brain.exe",
+            exe_dir / "ruka-brain.exe",
+            root_dir / "desktop" / "resources" / "brain" / "ruka-brain.exe",
+            root_dir / "launcher.py",
+        ]
 
     spawned = False
     for cand in brain_candidates:
@@ -182,9 +195,13 @@ def ensure_brain_running() -> tuple[socket.socket, dict] | None:
             try:
                 creation_flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
                 if cand.suffix == ".py":
-                    subprocess.Popen([sys.executable, str(cand)], cwd=str(cand.parent), creationflags=creation_flags)
+                    subprocess.Popen(
+                        [sys.executable, str(cand), "--workspace", str(raw_cwd)],
+                        cwd=str(raw_cwd),
+                        creationflags=creation_flags,
+                    )
                 else:
-                    subprocess.Popen([str(cand)], cwd=str(cand.parent), creationflags=creation_flags)
+                    subprocess.Popen([str(cand), "--workspace", str(raw_cwd)], cwd=str(raw_cwd), creationflags=creation_flags)
                 spawned = True
                 break
             except Exception:

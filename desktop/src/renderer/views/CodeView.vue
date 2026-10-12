@@ -110,28 +110,52 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
-const defaultTerminalOutput = `[RUKA-AGENT] Action-First Environment Active
-[GIT] Working tree clean, branch: master
-[SYSTEM] Zero-Trust PathJail: c:\\Traine\\ruka
-[READY] Siap menerima titah kompilasi atau refaktor, Young Lord.`;
+const defaultTerminalOutput = `[RUKA-AGENT] Action-First Environment
+[GATEWAY] Jalur kognisi coding terhubung ke SkillsRuntime & PathJail
+Ketik titah berkas, git, atau perintah terminal untuk dieksekusi secara nyata oleh Ruka.`;
 
 const terminalOutput = ref(defaultTerminalOutput);
 const customCommand = ref('');
+const isExecuting = ref(false);
 
 const quickCommands = [
   { label: 'Cek Status Git', code: 'git status --short' },
-  { label: 'Uji Klinis Otak Python', code: 'pytest ruka-agent/tests/ -q' },
-  { label: 'Uji Bun OS Kernel', code: 'bun test' },
-  { label: 'Sensus Proses Ruka', code: 'Get-Process *ruka*' },
+  { label: 'Uji Klinis Otak Python', code: 'pytest ruka-agent/tests/test_agentic_mode.py -q' },
+  { label: 'Daftar Berkas Proyek', code: 'lihat isi folder ini' },
+  { label: 'Sensus Ringkas Repositori', code: 'repo_map' },
 ];
 
-function runCommand(cmd: string) {
-  terminalOutput.value += `\n\n$ ${cmd}\n[EKSEKUSI] Memproses titah "${cmd}"... Berhasil dieksekusi dengan aman.`;
+async function runCommand(cmd: string) {
+  const trimmed = cmd.trim();
+  if (!trimmed || isExecuting.value) return;
+
+  isExecuting.value = true;
+  terminalOutput.value += `\n\n$ ${trimmed}\n[MEMPROSES] Menghubungi nalar Ruka & SkillsRuntime...`;
+
+  if (window.ruka?.chat?.send) {
+    try {
+      const resp = await window.ruka.chat.send(trimmed);
+      if (resp?.type === 'error') {
+        const errMsg = resp?.payload?.delta || resp?.payload?.error || 'Gagal memproses titah coding.';
+        terminalOutput.value += `\n[ERROR] ${errMsg}`;
+      } else {
+        const delta = resp?.payload?.delta || resp?.payload?.reply || 'Titah selesai dieksekusi.';
+        terminalOutput.value += `\n${delta}`;
+      }
+    } catch (err: any) {
+      terminalOutput.value += `\n[GAGAL IPC] ${err?.message || err}`;
+    }
+  } else {
+    terminalOutput.value += '\n[ERROR LINGKUNGAN] Antarmuka window.ruka.chat.send tidak terdeteksi. Pastikan desktop berjalan di dalam Electron.';
+  }
+
+  isExecuting.value = false;
 }
 
 function executeCustomCommand() {
   if (!customCommand.value.trim()) return;
-  runCommand(customCommand.value.trim());
+  const cmd = customCommand.value.trim();
   customCommand.value = '';
+  runCommand(cmd);
 }
 </script>

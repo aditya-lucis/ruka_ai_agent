@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from google import genai
+from google.genai import types
 
 from src.config import Config
 
-from google.genai import types
+logger = logging.getLogger(__name__)
 
 class GeminiClient:
     """Pembungkus di atas SDK resmi Google GenAI.
@@ -14,6 +16,7 @@ class GeminiClient:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.client = genai.Client(api_key=cfg.api_key)
+        self.last_used_model: str | None = None
 
     def complete(
         self,
@@ -31,8 +34,10 @@ class GeminiClient:
         )
 
         configured_model = getattr(self.cfg, "model", "")
+        cached_model = getattr(self, "last_used_model", None)
         if model_tier == "fast":
             raw_candidates = [
+                cached_model,
                 "gemini-2.5-flash",
                 "gemini-2.0-flash",
                 "gemini-1.5-flash",
@@ -43,6 +48,7 @@ class GeminiClient:
             ]
         elif model_tier == "strong":
             raw_candidates = [
+                cached_model,
                 configured_model,
                 "gemini-3.6-flash-medium",
                 "gemini-2.5-pro",
@@ -53,6 +59,7 @@ class GeminiClient:
             ]
         else:
             raw_candidates = [
+                cached_model,
                 configured_model,
                 "gemini-2.5-flash",
                 "gemini-2.0-flash",
@@ -76,6 +83,11 @@ class GeminiClient:
                     config=config,
                 )
                 if res and res.text:
+                    self.last_used_model = m
+                    tier_label = model_tier or "default"
+                    log_msg = f"[LLM] Model terpilih: {m} (tier: {tier_label})"
+                    logger.info(log_msg)
+                    print(log_msg, flush=True)
                     return res.text.strip()
             except Exception as e:
                 # print(f"[DEBUG-MODEL] {m} failed: {e}")
@@ -90,6 +102,12 @@ class GeminiClient:
                     input=prompt,
                     system_instruction=system_instruction or None,
                 )
+                used_model = getattr(self.cfg, "model", "fallback")
+                self.last_used_model = used_model
+                tier_label = model_tier or "default"
+                log_msg = f"[LLM] Model terpilih: {used_model} (tier: {tier_label}, fallback interaction)"
+                logger.info(log_msg)
+                print(log_msg, flush=True)
                 return interaction.output_text
             except Exception:
                 pass

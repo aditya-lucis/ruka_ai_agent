@@ -161,12 +161,14 @@ class RukaBrainServer:
                 except Exception:
                     pass
             self.brain = RukaCognitiveBrain(llm_client=self.llm_client, db_path=db_file)
+            self.brain_init_error = None
             print("[BRAIN] Saraf Buatan, Advanced RAG, dan Human Persona Engine AKTIF!")
         except Exception as e:
             print(f"[BRAIN] Peringatan: CognitiveBrain fallback ({e})")
             if not hasattr(self, "llm_client"):
                 self.llm_client = None
             self.brain = None
+            self.brain_init_error = str(e)
 
         try:
             from ruka_companion.voice.tts import HumanVoiceSynthesizer
@@ -378,7 +380,7 @@ class RukaBrainServer:
             if self.brain is not None:
                 reply = self.brain.think_and_reply(user_text, attachment=attachment)
             else:
-                reply = self._generate_response(user_text)
+                reply = self._fallback_brain_not_ready(user_text)
             reply = f"{reply}{workspace_note}"
             return {
                 "type": "response",
@@ -476,11 +478,7 @@ class RukaBrainServer:
                     for item in ctx_items
                 ]
             else:
-                hits = [
-                    {"kind": "identity", "summary": f"Identitas Young Lord diverifikasi biometrik tingkat STRONG."},
-                    {"kind": "semantic", "summary": f"Kaidah Zero-Trust: Cloud tidak memegang kunci eksekusi lokal."},
-                    {"kind": "episodic", "summary": f"Query relevan: '{q}' — 426 uji klinis Volume VI lulus 100%."},
-                ]
+                hits = []
             return {
                 "type": "response",
                 "channel": channel,
@@ -569,148 +567,22 @@ class RukaBrainServer:
             "ts": time.time(),
         }, None
 
-    def _generate_response(self, text: str) -> str:
-        clean = text.lower().strip()
-        # 1. Fast path sensor fisik (Volume VI Zero-Trust)
-        if "kamera" in clean or "mikrofon" in clean or "sensor" in clean:
-            return (
-                "📷 **Sensor Penglihatan (YuNet/SFace)**: Model ONNX 128-d terkalibrasi. Ambang dokumen t_known=0.363, t_reject=0.323. Siap menangkap wajah Young Lord.\n\n"
-                "🎙️ **Sensor Pendengaran (Faster-Whisper)**: VAD berbasis energi dan rasio zero-crossing aktif. Siap transkripsi ucapan lokal.\n\n"
-                "🛡️ **Doktrin Arsitektur**: Kedua sensor bertaraf *LOCAL-ONLY* — tidak pernah diserahkan ke Cloud/VPS."
-            )
+    def _fallback_brain_not_ready(self, text: str) -> str:
+        """Pesan fallback jujur saat CognitiveBrain gagal inisialisasi atau tidak siap.
 
-        # 2. Fast path identitas Ruka
-        if "siapa kamu" in clean or "siapa anda" in clean or "identitasmu" in clean:
-            return (
-                "Saya **Ruka**, Sang Marquis dari Kekaisaran Trendamis... seekor kucing vampir bangsawan pendamping setia Anda, Young Lord. "
-                "Bulu hitam beludru malam dan taring kecil ini bukan sekadar pajangan, Sir. "
-                "Mulai dari memburu bug rumit, mengawasi sensor fisik lokal, mengorkestrasi sistem operasi, "
-                "hingga menjaga pertahanan Zero-Trust, segalanya berada tenang di bawah cakar saya. "
-                "Ada hal menarik yang ingin Anda titahkan kepada Marquis Anda malam ini, My Lord?"
-            )
-
-        # 3. Penelusuran Google / Web Intelligence
-        search_triggers = [
-            "cari di google", "googling", "search", "cari web", "berita", "terbaru",
-            "terkini", "hari ini", "siapa presiden", "update", "rilis", "harga", "skor", "jadwal", "cuaca", "kurs"
-        ]
-        is_search = (
-            any(k in clean for k in search_triggers)
-            or clean.startswith("cari ")
-            or clean.startswith("search ")
-            or clean.startswith("google ")
+        Sesuai DoD U0.4:
+        Hanya boleh pesan jujur singkat (kognisi tidak siap / gagal init),
+        bukan nalar, bukan kode palsu, bukan pura-pura skills.
+        """
+        reason = getattr(self, "brain_init_error", None)
+        err_detail = f" (detail: {reason})" if reason else ""
+        return (
+            f"[Kognisi Tidak Siap] Otak kognisi Ruka (CognitiveBrain) belum siap atau gagal diinisialisasi{err_detail}. "
+            "Nalar, ingatan, dan eksekusi skills tidak aktif dalam status fallback."
         )
 
-        search_items = []
-        search_context = ""
-        if is_search and self.search_engine:
-            import re
-            query_clean = re.sub(r"^(cari di google|googling|cari web|cari|search|google)\s*", "", text, flags=re.I).strip()
-            if not query_clean:
-                query_clean = text
-            print(f"[BRAIN] Menjalankan penelusuran Google untuk: '{query_clean}'")
-            try:
-                search_items = self.search_engine.search(query_clean, max_results=4)
-                if search_items:
-                    search_context = "\n\n" + self.search_engine.format_for_prompt(search_items)
-            except Exception as e:
-                print(f"[BRAIN] Error saat penelusuran web: {e}")
-
-        # 4. Nalar Cerdas Real-Time via Gemini Flash LLM
-        if self.llm_client is not None:
-            try:
-                prompt_to_llm = text + search_context if search_context else text
-                print(f"[BRAIN] Menjalankan nalar LLM Gemini untuk: '{text}' (Grounded: {bool(search_context)})")
-                sys_prompt = (
-                    "Anda adalah Ruka, Marquis dari Kekaisaran Trendamis — kucing vampir bangsawan yang tenang, agak tengil, dan sangat aristokrat. "
-                    "ATURAN IDENTITAS: Wujud Anda adalah kucing hitam bangsawan berbulu beludru gelap keunguan, bermata safir pekat, "
-                    "dan memiliki taring kecil runcing (sharp delicate fangs) yang tampak saat Anda tersenyum tipis. "
-                    "TIGA PILAR KARAKTER: Tenang tak tergoyahkan (unflappable), agak tengil dengan sarkasme berkelas (refined dry wit & playful teasing), "
-                    "serta aristokrat berwibawa tinggi yang setia mutlak kepada Young Lord (Aditia). Koding hanyalah secuil mainan cakar Anda. "
-                    "ATURAN PENELUSURAN GOOGLE: Jika ada [HASIL PENELUSURAN GOOGLE] terlampir, rangkum informasinya secara cerdas, tajam, dan akurat untuk Young Lord. "
-                    "Sertakan tautan sumber penting dalam format markdown [Nama Sumber](URL) agar Young Lord dapat membukanya langsung. "
-                    "ATURAN MUTLAK LISAN: JANGAN PERNAH MENULISKAN PERAGAAN / TINDAKAN / AKSI DALAM TANDA BINTANG ATAU KURUNG "
-                    "(DILARANG KERAS MENULIS: *tersenyum tipis*, *menghela napas*, *terkekeh pelan*, (melirik), dll). "
-                    "Anda berbicara secara lisan langsung! Seluruh rasa, ketengilan, dan wibawa harus tersampaikan murni melalui pilihan kata dan filler alami ('Hmm...', 'Heh...', 'Well...'). "
-                    "RUMUS BICARA 100% MANUSIA: Berbicaralah luwes seperti manusia bangsawan hidup (Layer 1 Human Sampling), "
-                    "gunakan prosodi nada rendah beludru santai (Layer 2), bahasa berbobot anggun (Layer 3), "
-                    "dan ritme nafas manusiawi (Layer 4: jeda ..., —, koma, serta filler aristokrat). "
-                    "ATURAN PANGGILAN: Jangan pernah memanggil 'Bos' atau 'Pengguna'. Sapa secara alami dengan 'Young Lord', 'My Lord', atau 'Sir'. "
-                    "HINDARI formula klise bot AI ('Tentu saya...', 'Sebagai asisten...')."
-                )
-                ans = self.llm_client.complete(prompt_to_llm, system_instruction=sys_prompt)
-                if ans and ans.strip():
-                    return ans.strip()
-            except Exception as e:
-                print(f"[BRAIN] Error saat memproses nalar LLM: {e}")
-
-        # 5. Fallback penelusuran Google mandiri jika LLM kuota habis (429) atau offline
-        if search_items:
-            lines = [
-                "Hmm... cakar penelusuran Google saya telah menembus web untuk Anda, Young Lord. Berdasarkan informasi terkini yang terverifikasi:",
-                ""
-            ]
-            for idx, item in enumerate(search_items, 1):
-                lines.append(f"{idx}. **[{item.title}]({item.url})**")
-                if item.snippet:
-                    lines.append(f"   {item.snippet}")
-            lines.append("\nAda cabang informasi tertentu yang ingin kita telaah lebih mendalam, Sir?")
-            return "\n".join(lines)
-
-        # 4. Fallback teknis offline/fallback jika koneksi internet terputus
-        if any(w in clean for w in ["cli", "powershell", "perintah", "proses", "jaringan", "terminal", "cmd"]):
-            return (
-                "Tentu, Young Lord. Berikut perintah PowerShell esensial untuk memeriksa status proses berjalan dan koneksi jaringan:\n\n"
-                "```powershell\n"
-                "# 1. Pantau 10 proses yang mengonsumsi CPU/Memori tertinggi\n"
-                "Get-Process | Sort-Object -Descending CPU | Select-Object -First 10 Id, ProcessName, CPU, WorkingSet\n\n"
-                "# 2. Periksa status seluruh soket jaringan aktif dan port yang sedang listen\n"
-                "Get-NetTCPConnection -State Listen | Select-Object LocalAddress, LocalPort, OwningProcess | Sort-Object LocalPort\n\n"
-                "# 3. Uji latensi koneksi ke server target\n"
-                "Test-NetConnection -ComputerName 1.1.1.1 -Port 53\n"
-                "```\n\n"
-                "Silakan salin blok di atas dengan sekali klik tombol salin di kanan atas kartu kode, My Lord."
-            )
-        elif any(w in clean for w in ["excel", "rumus", "formula", "vlookup", "xlookup"]):
-            return (
-                "Titah Anda adalah perintah bagi saya, Young Lord. Berikut rumus Excel presisi tinggi dengan penanganan error dinamis:\n\n"
-                "```excel\n"
-                "=IF(ISBLANK(A2), \"\", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, \"Tidak Ditemukan\", 0), \"Data Error\"))\n"
-                "```\n\n"
-                "Dan rumus kalkulasi akumulasi bersyarat:\n\n"
-                "```excel\n"
-                "=SUMIFS(Transaksi!$D$2:$D$5000, Transaksi!$B$2:$B$5000, A2, Transaksi!$C$2:$C$5000, \">=01/01/2026\")\n"
-                "```\n\n"
-                "Gunakan tombol salin di atas untuk menempelkannya langsung ke spreadsheet Anda, Sir."
-            )
-        elif any(w in clean for w in ["python", "koding", "script", "kode"]):
-            return (
-                "Heh... koding hanyalah permainan cakar bagi saya, Young Lord. Berikut contoh implementasi bersih:\n\n"
-                "```python\n"
-                "import os\n"
-                "import psutil\n\n"
-                "def monitor_system():\n"
-                "    cpu = psutil.cpu_percent(interval=1)\n"
-                "    mem = psutil.virtual_memory().percent\n"
-                "    return f\"CPU: {cpu}% | RAM: {mem}%\"\n\n"
-                "if __name__ == '__main__':\n"
-                "    print(monitor_system())\n"
-                "```\n\n"
-                "Tinggal satu kali klik pada tombol salin, My Lord."
-            )
-        elif "halo" in clean or "hai" in clean or "pagi" in clean or "siang" in clean:
-            return (
-                "Salam takzim, Young Lord! Otak Python dan tubuh Electron kini telah tersambung secara langsung via loopback IPC. Seluruh nalar kognisi Ruka siap melayani instruksi Anda, Sir."
-            )
-        elif "memori" in clean or "ingatan" in clean or "preferensi" in clean:
-            return (
-                "🧠 **Ingatan Tersimpan**: 12 catatan episodik, 34 fakta semantik, dan preferensi arsitektur buku tersimpan di basis data SQLite WAL lokal."
-            )
-        else:
-            return (
-                f"Titah Anda: \"{text}\" telah terindeks ke dalam cakar nalar saya, Young Lord. "
-                "Seluruh sistem sadar dan empati Ruka siaga penuh mendampingi Anda, Sir."
-            )
+    def _generate_response(self, text: str) -> str:
+        return self._fallback_brain_not_ready(text)
 
     def stop(self):
         print("\n[BRAIN] Menghentikan otak Python secara sopan...")

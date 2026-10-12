@@ -434,7 +434,7 @@ class RukaGatewayServer:
                 log.error("CognitiveBrain error: %s", ex)
                 reply = f"Young Lord, hamba mengalami hambatan internal saat menelaah: {ex}"
         else:
-            reply = f"Young Lord, hamba telah mendengar titah: '{user_text}'. Nalar kognitif sedang dalam penyesuaian."
+            reply = "[Kognisi Tidak Siap] Otak kognisi Ruka (CognitiveBrain) belum siap atau tidak terhubung. Nalar dan eksekusi skills tidak aktif."
 
         self.budget_ctrl.record_step(tokens=len(user_text) + len(reply))
 

@@ -1,0 +1,15 @@
+{
+  "name": "ruka",
+  "version": "0.3.7",
+  "description": "RUKA — Local-First Expressive Agentic Companion & Project Noctis",
+  "scripts": {
+    "dev:desktop": "cd desktop && npm run dev",
+    "test:brain": "pytest ruka-agent/tests/ -q"
+  },
+  "workspaces": [
+    "desktop",
+    "noctis/kernel"
+  ],
+  "author": "Aditia (Young Lord) & Ruka",
+  "license": "MIT"
+}

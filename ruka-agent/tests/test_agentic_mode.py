@@ -58,8 +58,19 @@ class FakeLLM:
         self.reply = reply
         self.calls: list[dict[str, Any]] = []
 
-    def complete(self, contents: Any, *, system_instruction: str = "", temperature: float | None = None) -> str:
-        self.calls.append({"system_instruction": system_instruction, "temperature": temperature})
+    def complete(
+        self,
+        contents: Any,
+        *,
+        system_instruction: str = "",
+        temperature: float | None = None,
+        model_tier: str | None = None,
+    ) -> str:
+        self.calls.append({
+            "system_instruction": system_instruction,
+            "temperature": temperature,
+            "model_tier": model_tier,
+        })
         return self.reply
 
 
@@ -564,4 +575,23 @@ class TestBrainLoopIntegration:
         reply = brain.think_and_reply("Ruka, baca package.json")
         assert "Fast Path Agentic:" in reply
         assert "ATURAN FAST PATH AGENTIC CODING" in llm.calls[0]["system_instruction"]
+        assert llm.calls[0].get("model_tier") == "fast"
+
+    def test_gemini_client_fast_tier_logs_selected_model(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from unittest.mock import MagicMock
+        from src.config import Config
+        from src.llm.gemini_client import GeminiClient
+
+        cfg = MagicMock(api_key="test-key", model="gemini-default")
+        client = GeminiClient(cfg)
+        mock_response = MagicMock()
+        mock_response.text = "Respon cepat"
+        client.client.models.generate_content = MagicMock(return_value=mock_response)
+
+        ans = client.complete("Uji perintah ringan", model_tier="fast")
+        captured = capsys.readouterr()
+
+        assert ans == "Respon cepat"
+        assert client.last_used_model == "gemini-2.5-flash"
+        assert "[LLM] Model terpilih: gemini-2.5-flash (tier: fast)" in captured.out
 

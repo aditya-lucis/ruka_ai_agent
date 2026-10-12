@@ -117,6 +117,18 @@ const api = {
     },
   },
   kernel: {
+    status(): Promise<Envelope> {
+      return ipcRenderer.invoke(IPC.KERNEL_STATUS);
+    },
+    onStateChange(cb: (state: string) => void): () => void {
+      const wrapped = (_e: unknown, event: any) => {
+        if (event && event.payload && event.payload.topic === 'kernel.state' && event.payload.state) {
+          cb(event.payload.state);
+        }
+      };
+      ipcRenderer.on(IPC.KERNEL_EVENT, wrapped);
+      return () => ipcRenderer.removeListener(IPC.KERNEL_EVENT, wrapped);
+    },
     onEvent(cb: (event: any) => void): () => void {
       const wrapped = (_e: unknown, event: any) => cb(event);
       ipcRenderer.on(IPC.KERNEL_EVENT, wrapped);

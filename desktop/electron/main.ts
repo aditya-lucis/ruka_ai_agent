@@ -177,8 +177,8 @@ function ensureBunKernelStarted(): void {
       }
       try {
         fs.unlinkSync(kernelEndpointPath);
-      } catch {}
-    } catch {}
+      } catch { }
+    } catch { }
   }
 
   // 1. PRIORITAS UTAMA: Standalone Self-Contained Noctis Kernel Executable
@@ -284,6 +284,17 @@ kernelConnector = new KernelConnector({
   },
   onState: (state: KernelState) => {
     console.log(`[MAIN] Bun Kernel state changed: ${state}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const kernelStateEnv: Envelope = {
+        type: 'event',
+        channel: IPC.KERNEL_EVENT,
+        correlationId: `kst-${Date.now()}`,
+        protocolVersion: PROTOCOL_VERSION,
+        payload: { state, topic: 'kernel.state' },
+        ts: Date.now() / 1000,
+      };
+      mainWindow.webContents.send(IPC.KERNEL_EVENT, kernelStateEnv);
+    }
   },
 });
 
@@ -408,130 +419,38 @@ function registerIpc(): void {
     }
     const clean = String(text).trim();
 
-    // Bila koneksi loopback ke Python aktif, coba kirim ke Python dengan timeout 45s
+    // Bila koneksi loopback ke Python aktif, kirim ke Python dengan timeout 45s
     if (connector.getState() === 'connected') {
       try {
         return await connector.request(
           IPC.CHAT_SEND,
-          { text: clean.slice(0, 8000), attachment },
+          { text: clean.slice(0, 8000), attachment, cwd: process.cwd() },
           45000
         );
       } catch (err: any) {
-        // Fallback respons di bawah
+        return {
+          type: 'error',
+          channel: IPC.CHAT_SEND,
+          correlationId: `err-${Date.now()}`,
+          protocolVersion: PROTOCOL_VERSION,
+          payload: {
+            error: err.message,
+            delta: `[Gagal Komunikasi Otak] Permintaan ke ruka-brain gagal: ${err.message}`,
+            done: true,
+          },
+          ts: Date.now() / 1000,
+        } as Envelope;
       }
     }
 
-    // Respon Real-Time Pendamping (Companion Intelligence Volume VI)
-    let reply = '';
-    const lower = clean.toLowerCase();
-
-    if (
-      lower.includes('excel') ||
-      lower.includes('rumus') ||
-      lower.includes('formula') ||
-      lower.includes('vlookup') ||
-      lower.includes('xlookup')
-    ) {
-      reply =
-        'Tentu, Young Lord. Berikut rumus Excel terstruktur untuk pencarian data dinamis dengan penanganan kondisi kosong:\n\n' +
-        '```excel\n' +
-        '=IF(ISBLANK(A2), "", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, "Tidak Ditemukan", 0), "Data Error"))\n' +
-        '```\n\n' +
-        'Dan berikut rumus untuk kalkulasi total akumulasi bersyarat:\n\n' +
-        '```excel\n' +
-        '=SUMIFS(Transaksi!$D$2:$D$5000, Transaksi!$B$2:$B$5000, ">=2026-01-01", Transaksi!$C$2:$C$5000, "Approved")\n' +
-        '```\n\n' +
-        '> Anda dapat menyalin rumus di atas hanya dengan **satu kali klik** pada tombol salin di sudut kartu formula.';
-    } else if (
-      lower.includes('cli') ||
-      lower.includes('terminal') ||
-      lower.includes('powershell') ||
-      lower.includes('perintah') ||
-      lower.includes('bash') ||
-      lower.includes('cmd')
-    ) {
-      reply =
-        'Siap, Young Lord. Berikut perintah CLI untuk memanggil Ruka secara global dari terminal mana pun:\n\n' +
-        '```bash\n' +
-        'ruka chat --voice "Salam, Marquis Trendamis"\n' +
-        '```\n\n' +
-        'Dan untuk memeriksa proses kognisi otak Ruka di PowerShell:\n\n' +
-        '```powershell\n' +
-        'Get-Process -Name "*ruka*" | Select-Object Id, ProcessName, CPU, WorkingSet64\n' +
-        '```\n\n' +
-        '> Cukup klik tombol **Salin Perintah** untuk menyalin ke clipboard seketika.';
-    } else if (
-      lower.includes('python') ||
-      lower.includes('kode') ||
-      lower.includes('coding')
-    ) {
-      reply =
-        'Heh... titah yang elok, Young Lord. Berikut arsitektur bersih entitas Ruka dalam Python:\n\n' +
-        '```python\n' +
-        'from dataclasses import dataclass\n\n' +
-        '@dataclass(frozen=True)\n' +
-        'class NobleAgent:\n' +
-        '    name: str = "Ruka"\n' +
-        '    title: str = "Marquis of Trendamis"\n' +
-        '    is_loyal: bool = True\n\n' +
-        '    def greet(self, lord: str = "Young Lord") -> str:\n' +
-        '        return f"Salam malam yang abadi, {lord}. Titah Anda adalah amanah mutlak."\n\n' +
-        'if __name__ == "__main__":\n' +
-        '    agent = NobleAgent()\n' +
-        '    print(agent.greet())\n' +
-        '```\n\n' +
-        '> Klik tombol **Salin Kode** di atas untuk menyalin seluruh blok kode dalam satu klik.';
-    } else if (
-      lower.includes('kamera') ||
-      lower.includes('mikrofon') ||
-      lower.includes('sensor')
-    ) {
-      reply =
-        '📷 **Kamera (YuNet/SFace)**: Terkalibrasi & siap di mode lokal (`t_known=0.363`, SFace 128-d).\n' +
-        '🎙️ **Mikrofon (Whisper/ASR)**: VAD aktif dengan ambang energi siap menangkap suara Young Lord.\n' +
-        '🛡️ **Kebijakan**: `LOCAL-ONLY` (Haram dirutekan remote demi privasi mutlak).';
-    } else if (
-      lower.includes('siapa') ||
-      lower.includes('identitas') ||
-      lower.includes('profil')
-    ) {
-      reply =
-        '👤 **Profil Aktif**: Young Lord (Marquis Kekaisaran Trendamis).\n' +
-        '🦇 **Entitas**: Ruka, Sang Marquis dari Kekaisaran Trendamis (Kucing Vampir Aristokrat).\n' +
-        '🔐 **Kekuatan Autentikasi**: `STRONG` (Biometrik Wajah + Suara terkonfirmasi).\n' +
-        '✨ **Status**: Terpercaya Penuh — Satu Identitas, Banyak Kehadiran.';
-    } else if (
-      lower.includes('memori') ||
-      lower.includes('ingatan') ||
-      lower.includes('preferensi')
-    ) {
-      reply =
-        '🧠 **Sensus Ingatan**:\n' +
-        '• 12 ingatan episodik tersimpan di database lokal.\n' +
-        '• 34 fakta semantik terindeks FAISS/SQLite.\n' +
-        '• Preferensi: Kepatuhan mutlak pada buku, Zero-Trust Cloud, dan 426 uji klinis hijau.';
-    } else if (
-      lower.includes('halo') ||
-      lower.includes('hai') ||
-      lower.includes('pagi') ||
-      lower.includes('siang') ||
-      lower.includes('malam') ||
-      lower.includes('ruka')
-    ) {
-      reply =
-        'Salam takzim, Young Lord! Ruka hadir mendampingi Anda di desktop ini seluas layar kerja Anda. Semua subsistem kognisi, penglihatan, pendengaran, dan perkakas eksekusi siap menerima titah Anda secara real-time, Sir.';
-    } else {
-      reply = `Instruksi Anda: "${clean}" telah diterima dan diproses dengan setia oleh Ruka, Young Lord. Mode kehadiran aktif: Standby Mandiri (Volume VI).`;
-    }
-
     return {
-      type: 'response',
+      type: 'error',
       channel: IPC.CHAT_SEND,
-      correlationId: `resp-${Date.now()}`,
+      correlationId: `err-${Date.now()}`,
       protocolVersion: PROTOCOL_VERSION,
       payload: {
-        seq: 1,
-        delta: reply,
+        error: `Otak belum terhubung (status: ${connector.getState()})`,
+        delta: `[Otak Terputus] Tubuh desktop belum tersambung ke proses kognisi ruka-brain (status: ${connector.getState()}). Pastikan background service ruka-brain aktif.`,
         done: true,
       },
       ts: Date.now() / 1000,
@@ -565,7 +484,7 @@ function registerIpc(): void {
       channel: IPC.VOICE_TRANSCRIBE,
       correlationId: `err-${Date.now()}`,
       protocolVersion: PROTOCOL_VERSION,
-      payload: { error: 'Otak Python belum tersambung' },
+      payload: { error: 'Otak belum tersambung' },
       ts: Date.now() / 1000,
     } as Envelope;
   });
@@ -593,7 +512,7 @@ function registerIpc(): void {
       channel: IPC.VOICE_SYNTHESIZE,
       correlationId: `err-${Date.now()}`,
       protocolVersion: PROTOCOL_VERSION,
-      payload: { error: 'Otak Python belum tersambung', audioUrl: null },
+      payload: { error: 'Otak belum tersambung', audioUrl: null },
       ts: Date.now() / 1000,
     } as Envelope;
   });
@@ -722,6 +641,19 @@ function registerIpc(): void {
       return kernelConnector.publish(String(arg1), String(arg2), arg3);
     }
   );
+
+  ipcMain.handle(IPC.KERNEL_STATUS, async () => {
+    return {
+      type: 'response',
+      channel: IPC.KERNEL_STATUS,
+      correlationId: `kst-req-${Date.now()}`,
+      protocolVersion: PROTOCOL_VERSION,
+      payload: {
+        state: kernelConnector ? kernelConnector.getState() : 'disconnected',
+      },
+      ts: Date.now() / 1000,
+    } as Envelope;
+  });
 }
 
 /** Router arus CHAT_STREAM dari Python -> renderer */

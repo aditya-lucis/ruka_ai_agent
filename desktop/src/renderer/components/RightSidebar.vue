@@ -12,7 +12,11 @@
               alt="Ruka Portrait"
               class="w-full h-full rounded-xl object-cover bg-black"
             />
-            <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-black"></span>
+            <span
+              class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-black transition-colors"
+              :class="connState === 'connected' ? 'bg-emerald-500' : (connState === 'connecting' || connState === 'reconnecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-500')"
+              :title="`Status Kognisi: ${connState}`"
+            ></span>
           </div>
           <div>
             <h3 class="text-sm font-bold text-slate-100 tracking-wider">RUKA</h3>
@@ -33,14 +37,52 @@
         <div class="text-xs font-semibold text-purple-300/80 uppercase tracking-wider">Status Sistem</div>
         
         <div class="space-y-2 text-xs">
+          <!-- Otak Python -->
+          <div class="flex items-center justify-between py-1 border-b border-purple-900/20 cursor-pointer hover:text-purple-200" @click="$emit('select-tab', 'kernel')">
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+              Otak (Brain)
+            </span>
+            <span
+              class="font-medium flex items-center gap-1 text-[11px] font-mono"
+              :class="connState === 'connected' ? 'text-emerald-400' : (connState === 'connecting' || connState === 'reconnecting' ? 'text-amber-400' : 'text-rose-400')"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full"
+                :class="connState === 'connected' ? 'bg-emerald-400 animate-pulse' : (connState === 'connecting' || connState === 'reconnecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-500')"
+              ></span>
+              {{ connState }}
+            </span>
+          </div>
+
+          <!-- Bun Kernel -->
+          <div class="flex items-center justify-between py-1 border-b border-purple-900/20 cursor-pointer hover:text-purple-200" @click="$emit('select-tab', 'kernel')">
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+              Bun Kernel
+            </span>
+            <span
+              class="font-medium flex items-center gap-1 text-[11px] font-mono"
+              :class="kernelConnState === 'connected' ? 'text-emerald-400' : (kernelConnState === 'connecting' || kernelConnState === 'reconnecting' ? 'text-amber-400' : 'text-rose-400')"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full"
+                :class="kernelConnState === 'connected' ? 'bg-emerald-400 animate-pulse' : (kernelConnState === 'connecting' || kernelConnState === 'reconnecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-500')"
+              ></span>
+              {{ kernelConnState }}
+            </span>
+          </div>
+
           <!-- Mode AI -->
           <div class="flex items-center justify-between py-1 border-b border-purple-900/20">
             <span class="text-slate-400 flex items-center gap-1.5">
               <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
               Mode AI
             </span>
-            <span class="font-medium text-emerald-400 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span
+              class="font-medium flex items-center gap-1"
+              :class="connState === 'connected' ? 'text-emerald-400' : 'text-amber-300'"
+            >
               {{ presenceModeText }}
             </span>
           </div>
@@ -111,12 +153,16 @@ withDefaults(
     lunarPhaseName?: string;
     lunarIcon?: string;
     voiceEnabled?: boolean;
+    connState?: string;
+    kernelConnState?: string;
   }>(),
   {
     presenceModeText: 'Hibrida (Mode B)',
     lunarPhaseName: 'Purnama',
     lunarIcon: '🌙',
     voiceEnabled: true,
+    connState: 'disconnected',
+    kernelConnState: 'disconnected',
   }
 );
 

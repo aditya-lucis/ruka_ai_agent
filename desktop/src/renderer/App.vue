@@ -68,6 +68,7 @@
         <KernelView
           v-else-if="activeTab === 'kernel'"
           :conn-state="connState"
+          :kernel-conn-state="kernelConnState"
           :lunar-phase-name="lunarPhaseName"
           :lunar-icon="lunarIcon"
           :presence-mode="presenceModeText"
@@ -85,6 +86,8 @@
         :lunar-phase-name="lunarPhaseName"
         :lunar-icon="lunarIcon"
         :voice-enabled="voiceEnabled"
+        :conn-state="connState"
+        :kernel-conn-state="kernelConnState"
         @select-tab="handleSelectTab"
       />
     </div>
@@ -100,9 +103,15 @@
       </div>
       <div class="flex items-center gap-3">
         <span>Uptime: aktif</span>
-        <span class="flex items-center gap-1 text-emerald-400 font-semibold">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          RUKA Mode: Online
+        <span
+          class="flex items-center gap-1 font-semibold transition-colors"
+          :class="connState === 'connected' ? 'text-emerald-400' : (connState === 'connecting' || connState === 'reconnecting' ? 'text-amber-400' : 'text-rose-400')"
+        >
+          <span
+            class="w-1.5 h-1.5 rounded-full"
+            :class="connState === 'connected' ? 'bg-emerald-400 animate-pulse' : (connState === 'connecting' || connState === 'reconnecting' ? 'bg-amber-400 animate-ping' : 'bg-rose-500')"
+          ></span>
+          RUKA: {{ connState === 'connected' ? 'Online' : (connState === 'connecting' || connState === 'reconnecting' ? 'Mencari...' : 'Offline') }}
         </span>
       </div>
     </footer>
@@ -140,18 +149,15 @@ const voiceEnabled = ref(true);
 const isSpeaking = ref(false);
 const isRecording = ref(false);
 const isCameraOpen = ref(false);
-const connState = ref('connected');
+const connState = ref('disconnected');
+const kernelConnState = ref('disconnected');
 const presenceModeText = ref('Hibrida (Mode B)');
 const lunarPhaseName = ref('Purnama');
 const lunarIcon = ref('🌙');
 const currentAttachment = ref<any>(null);
 
 // Telemetry Event Logs
-const telemetryLogs = ref<Array<{ ts: string; text: string; type?: string }>>([
-  { ts: getCurrentTime(), text: '[SYS] Desktop renderer loaded with Vue 3 + Tailwind 4 + Three.js.', type: 'sys' },
-  { ts: getCurrentTime(), text: '[KERNEL] Bun OS Kernel EventBus V3 ready on ws://127.0.0.1:8766.', type: 'kernel' },
-  { ts: getCurrentTime(), text: '[PRESENCE] Sovereign Companion Model B (Hibrida) activated.', type: 'presence' },
-]);
+const telemetryLogs = ref<Array<{ ts: string; text: string; type?: string }>>([]);
 
 // Chat History Messages
 const messages = ref<ChatMessage[]>([
@@ -438,23 +444,20 @@ function sendCurrentPrompt() {
   if (window.ruka?.chat?.send) {
     window.ruka.chat.send(text, attachment)
       .then((resp: any) => {
-        const delta = resp?.payload?.delta || 'Perintah telah diproses.';
+        if (resp?.type === 'error') {
+          const errMsg = resp?.payload?.delta || resp?.payload?.error || 'Terjadi kegagalan komunikasi nalar.';
+          onReplyReceived(errMsg);
+          return;
+        }
+        const delta = resp?.payload?.delta || resp?.payload?.reply || 'Perintah telah diproses oleh nalar Ruka.';
         onReplyReceived(delta);
       })
       .catch((err: any) => {
-        onReplyReceived(`[Gagal Komunikasi Otak] ${err.message}`);
+        onReplyReceived(`[Gagal Komunikasi Otak] ${err?.message || err}`);
       });
   } else {
-    // Local noble fallback
-    setTimeout(() => {
-      let reply = `Heh... titah Anda: "${text}" telah diterima dan diproses dengan setia oleh Ruka, Young Lord. Semua subsistem kognisi dan Shadow Hands siap mengeksekusi langkah berikutnya.`;
-      if (text.toLowerCase().includes('excel') || text.toLowerCase().includes('rumus')) {
-        reply = 'Tentu, Young Lord. Berikut rumus Excel terstruktur untuk kalkulasi dinamis:\n\n```excel\n=IF(ISBLANK(A2), "", IFERROR(XLOOKUP(A2, MasterData!$A$2:$A$1000, MasterData!$B$2:$E$1000, "Tidak Ditemukan", 0), "Data Error"))\n```\n\n> Klik tombol **Salin Rumus** untuk menyalin ke clipboard seketika.';
-      } else if (text.toLowerCase().includes('python') || text.toLowerCase().includes('kode')) {
-        reply = 'Titah yang elok, Young Lord. Berikut arsitektur bersih entitas Ruka:\n\n```python\nfrom dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass NobleAgent:\n    name: str = "Ruka"\n    title: str = "Marquis of Trendamis"\n    is_loyal: bool = True\n```';
-      }
-      onReplyReceived(reply);
-    }, 350);
+    // Tanpa jembatan IPC window.ruka (mis. dibuka di browser luar electron), jangan tampilkan balasan palsu
+    onReplyReceived('[Koneksi IPC Tidak Tersedia] Antarmuka window.ruka.chat.send tidak terdeteksi. Pastikan desktop dijalankan di dalam runtime Electron.');
   }
 }
 
@@ -462,6 +465,24 @@ function sendCurrentPrompt() {
 // LIFECYCLE & KERNEL EVENTBUS INTEGRATION
 // =========================================================================
 onMounted(() => {
+  // 1. Initial State Poll: Otak Python
+  if (window.ruka?.runtime?.status) {
+    window.ruka.runtime.status()
+      .then((env: any) => {
+        const s = env?.payload?.state || 'disconnected';
+        connState.value = s;
+        telemetryLogs.value.push({
+          ts: getCurrentTime(),
+          text: `[RUNTIME] Initial brain state: ${s}`,
+          type: 'runtime',
+        });
+      })
+      .catch(() => {
+        connState.value = 'disconnected';
+      });
+  }
+
+  // 2. Real-time Event Listener: Otak Python
   if (window.ruka?.runtime?.onStateChange) {
     window.ruka.runtime.onStateChange((state: string) => {
       connState.value = state;
@@ -473,6 +494,36 @@ onMounted(() => {
     });
   }
 
+  // 3. Initial State Poll: Bun Kernel
+  if (window.ruka?.kernel?.status) {
+    window.ruka.kernel.status()
+      .then((env: any) => {
+        const ks = env?.payload?.state || 'disconnected';
+        kernelConnState.value = ks;
+        telemetryLogs.value.push({
+          ts: getCurrentTime(),
+          text: `[KERNEL] Initial kernel state: ${ks}`,
+          type: 'kernel',
+        });
+      })
+      .catch(() => {
+        kernelConnState.value = 'disconnected';
+      });
+  }
+
+  // 4. Real-time Event Listener: Bun Kernel State
+  if (window.ruka?.kernel?.onStateChange) {
+    window.ruka.kernel.onStateChange((state: string) => {
+      kernelConnState.value = state;
+      telemetryLogs.value.push({
+        ts: getCurrentTime(),
+        text: `[KERNEL] Kernel state changed to: ${state}`,
+        type: 'kernel',
+      });
+    });
+  }
+
+  // 5. Real-time EventBus V3 Event Stream
   if (window.ruka?.kernel?.onEvent) {
     window.ruka.kernel.onEvent((ev: any) => {
       if (!ev || !ev.topic) return;

@@ -791,11 +791,19 @@ class RukaCognitiveBrain:
         if self.llm is None:
             return []
         prompt = build_decision_prompt(text, results, allowed, gated or ())
-        reply = self.llm.complete(
-            prompt,
-            system_instruction="Kamu adalah perencana langkah deterministik. Balas hanya JSON valid.",
-            temperature=0.1,
-        )
+        try:
+            reply = self.llm.complete(
+                prompt,
+                system_instruction="Kamu adalah perencana langkah deterministik. Balas hanya JSON valid.",
+                temperature=0.1,
+                model_tier="fast",
+            )
+        except TypeError:
+            reply = self.llm.complete(
+                prompt,
+                system_instruction="Kamu adalah perencana langkah deterministik. Balas hanya JSON valid.",
+                temperature=0.1,
+            )
         return parse_decision(reply)
 
     def _needs_approval(self, skill_name: str) -> bool:
@@ -1129,7 +1137,11 @@ class RukaCognitiveBrain:
                             elif lang in ("ts", "typescript"):
                                 target_file = "index.ts"
 
-                        if target_file and extracted_code and not is_json_output and self.skills_runtime is not None:
+                        was_read_op = any(
+                            r.skill == "code_read" and r.args.get("path") == target_file
+                            for r in getattr(self, "last_agentic_results", [])
+                        )
+                        if target_file and extracted_code and not is_json_output and not was_read_op and self.skills_runtime is not None:
                             already_written = any(
                                 r.skill == "code_write" and r.args.get("path") == target_file and r.success
                                 for r in getattr(self, "last_agentic_results", [])

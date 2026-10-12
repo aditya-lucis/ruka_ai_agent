@@ -41,6 +41,8 @@ export const IPC = {
   KERNEL_EVENT: 'noctis:kernel-event',
   /** Publish event dari UI -> Bun Kernel (req/res). */
   KERNEL_PUBLISH: 'noctis:kernel-publish',
+  /** UI -> tray/health: status Bun Kernel (req/res). */
+  KERNEL_STATUS: 'noctis:kernel-status',
 } as const;
 
 /** Tipe amplop — cerminan Envelope Python (protokol v2). */
@@ -70,6 +72,7 @@ export const RENDERER_ALLOWED = new Set<string>([
   IPC.VOICE_SYNTHESIZE,
   IPC.GOOGLE_SEARCH,
   IPC.KERNEL_PUBLISH,
+  IPC.KERNEL_STATUS,
 ]);
 
 /** Validasi kanal — dipanggil handler main utk setiap pesan masuk. */

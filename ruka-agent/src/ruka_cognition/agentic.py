@@ -139,7 +139,7 @@ _EDIT_REPLACE = re.compile(
     re.IGNORECASE,
 )
 _WRITE_FILE = re.compile(
-    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|rakit)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|content|with\s+content)\s*[:=]?\s*([\s\S]+)",
+    r"\b(?:bikin|bikinkan|buatkan|buat|create|tulis|tuliskan|write|rakit)\s+(?:file|berkas)?\s*[\"'`]?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)[\"'`]?\s*(?:dengan\s+isi|isinya|berisi|content|with\s+content)\s*[:=]?\s*([\s\S]+)",
     re.IGNORECASE,
 )
 _CREATE_FILE_SIMPLE = re.compile(
@@ -974,8 +974,27 @@ _MULTISTEP_MARKERS = re.compile(
 )
 
 
+_SYNTHESIS_DIRECTIVES = re.compile(
+    r"\b(?:ringkas|rangkum|simpulkan|jelaskan|sebutkan|terangkan|uraikan|poin|points?|summary|summarize|explain)\b",
+    re.IGNORECASE,
+)
+_TOOL_FOLLOWUP_ACTIONS = re.compile(
+    r"\b(?:cari|search|grep|temukan|find|edit|ubah|ganti|tulis|buat|write|jalankan|run|execute|test|pytest|npm|git)\b",
+    re.IGNORECASE,
+)
+
+
 def needs_multistep(text: str, seed_plan: list[PlanStep]) -> bool:
     """Heuristic: explore iteratively when nothing concrete matched or the task implies several steps."""
+    # Fast path: jika seed plan sudah membaca berkas (code_read) dan instruksi lanjutan
+    # hanya berupa sintesis/ringkasan tanpa aksi alat lanjutan, hindari putaran perencana tambahan.
+    if seed_plan and all(s.skill == "code_read" for s in seed_plan):
+        after_marker = re.split(r"\b(?:lalu|kemudian|setelah itu|then)\b", text, maxsplit=1, flags=re.IGNORECASE)
+        if len(after_marker) > 1:
+            tail = after_marker[1]
+            if not _TOOL_FOLLOWUP_ACTIONS.search(tail) and _SYNTHESIS_DIRECTIVES.search(tail):
+                return False
+
     if _MULTISTEP_MARKERS.search(text):
         return True
     if detect_target_file(text):
